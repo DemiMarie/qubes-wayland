@@ -1,0 +1,3 @@
+[submodule "smithay"]
+	path = smithay
+	url = git+ssh://git@github.com/Smithay/smithay.git
