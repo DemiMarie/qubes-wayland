@@ -1,3 +1,6 @@
+[submodule "gui-rust"]
+	path = gui-rust
+	url = git+ssh://git@github.com/QubesOS/gui-rust.git
 [submodule "smithay"]
 	path = smithay
 	url = git+ssh://git@github.com/Smithay/smithay.git
