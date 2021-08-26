@@ -10,15 +10,12 @@ use std::{
 use smithay::{
     reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
-        wayland_server::{protocol::wl_surface::WlSurface, Display},
+        wayland_server::Display,
     },
-    utils::{Logical, Point},
     wayland::{
-        data_device::{
-            default_action_chooser, init_data_device, set_data_device_focus, DataDeviceEvent,
-        },
+        data_device::set_data_device_focus,
         output::xdg::init_xdg_output_manager,
-        seat::{CursorImageStatus, KeyboardHandle, PointerHandle, Seat, XkbConfig},
+        seat::{CursorImageStatus, KeyboardHandle, Seat, XkbConfig},
         shm::init_shm_global,
         tablet_manager::{init_tablet_manager_global, TabletSeatTrait},
         xdg_activation::{init_xdg_activation_global, XdgActivationEvent},
@@ -28,44 +25,40 @@ use smithay::{
 #[cfg(feature = "xwayland")]
 use smithay::xwayland::{XWayland, XWaylandEvent};
 
+use crate::qubes::QubesData;
 use crate::shell::init_shell;
 
-pub struct AnvilState<BackendData> {
-    pub backend_data: BackendData,
+pub struct AnvilState {
+    pub backend_data: Rc<RefCell<QubesData>>,
     pub socket_name: Option<String>,
     pub running: Arc<AtomicBool>,
     pub display: Rc<RefCell<Display>>,
-    pub handle: LoopHandle<'static, AnvilState<BackendData>>,
+    pub handle: LoopHandle<'static, AnvilState>,
     pub window_map: Rc<RefCell<crate::window_map::WindowMap>>,
-    pub dnd_icon: Arc<Mutex<Option<WlSurface>>>,
     pub log: slog::Logger,
     // input-related fields
-    pub pointer: PointerHandle,
     pub keyboard: KeyboardHandle,
-    pub suppressed_keys: Vec<u32>,
-    pub pointer_location: Point<f64, Logical>,
     pub cursor_status: Arc<Mutex<CursorImageStatus>>,
     pub seat_name: String,
     pub seat: Seat,
-    pub start_time: std::time::Instant,
     // things we must keep alive
     #[cfg(feature = "xwayland")]
-    pub xwayland: XWayland<AnvilState<BackendData>>,
+    pub xwayland: XWayland<AnvilState>,
 }
 
-impl<BackendData: Backend + 'static> AnvilState<BackendData> {
+impl AnvilState {
     pub fn init(
         display: Rc<RefCell<Display>>,
-        handle: LoopHandle<'static, AnvilState<BackendData>>,
-        backend_data: BackendData,
+        handle: LoopHandle<'static, AnvilState>,
+        backend_data: QubesData,
         log: slog::Logger,
         listen_on_socket: bool,
-    ) -> AnvilState<BackendData> {
+    ) -> AnvilState {
         // init the wayland connection
         handle
             .insert_source(
                 Generic::from_fd(display.borrow().get_poll_fd(), Interest::READ, Mode::Level),
-                move |_, _, state: &mut AnvilState<BackendData>| {
+                move |_, _, state: &mut AnvilState| {
                     let display = state.display.clone();
                     let mut display = display.borrow_mut();
                     match display.dispatch(std::time::Duration::from_millis(0), state) {
@@ -91,7 +84,7 @@ impl<BackendData: Backend + 'static> AnvilState<BackendData> {
         init_xdg_activation_global(
             &mut display.borrow_mut(),
             |state, req, mut ddata| {
-                let anvil_state = ddata.get::<AnvilState<BackendData>>().unwrap();
+                let anvil_state = ddata.get::<AnvilState>().unwrap();
                 match req {
                     XdgActivationEvent::RequestActivation {
                         token,
@@ -129,26 +122,6 @@ impl<BackendData: Backend + 'static> AnvilState<BackendData> {
             None
         };
 
-        // init data device
-
-        let dnd_icon = Arc::new(Mutex::new(None));
-
-        let dnd_icon2 = dnd_icon.clone();
-        init_data_device(
-            &mut display.borrow_mut(),
-            move |event| match event {
-                DataDeviceEvent::DnDStarted { icon, .. } => {
-                    *dnd_icon2.lock().unwrap() = icon;
-                }
-                DataDeviceEvent::DnDDropped => {
-                    *dnd_icon2.lock().unwrap() = None;
-                }
-                _ => {}
-            },
-            default_action_chooser,
-            log.clone(),
-        );
-
         // init input
         let seat_name = backend_data.seat_name();
 
@@ -157,10 +130,6 @@ impl<BackendData: Backend + 'static> AnvilState<BackendData> {
         let cursor_status = Arc::new(Mutex::new(CursorImageStatus::Default));
 
         let cursor_status2 = cursor_status.clone();
-        let pointer = seat.add_pointer(move |new_status| {
-            // TODO: hide winit system cursor when relevant
-            *cursor_status2.lock().unwrap() = new_status
-        });
 
         init_tablet_manager_global(&mut display.borrow_mut());
 
@@ -196,22 +165,17 @@ impl<BackendData: Backend + 'static> AnvilState<BackendData> {
         };
 
         AnvilState {
-            backend_data,
+            backend_data: Rc::new(RefCell::new(backend_data)),
             running: Arc::new(AtomicBool::new(true)),
             display,
             handle,
             window_map: shell_handles.window_map,
-            dnd_icon,
             log,
             socket_name,
-            pointer,
             keyboard,
-            suppressed_keys: Vec::new(),
             cursor_status,
-            pointer_location: (0.0, 0.0).into(),
             seat_name,
             seat,
-            start_time: std::time::Instant::now(),
             #[cfg(feature = "xwayland")]
             xwayland,
         }

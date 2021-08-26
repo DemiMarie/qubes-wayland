@@ -21,13 +21,14 @@ use smithay::{
 
 use slog::Logger;
 
+use crate::shell::SurfaceData;
 use crate::state::{AnvilState, Backend};
 
 pub const OUTPUT_NAME: &str = "qubes";
 
 pub struct QubesData {
-    pub agent: RefCell<qubes_gui_client::agent::Agent>,
-    wid: Cell<u32>,
+    pub agent: qubes_gui_client::agent::Agent,
+    wid: u32,
     pub map: BTreeMap<NonZeroU32, QubesBackendData>,
     pub log: slog::Logger,
 }
@@ -45,14 +46,24 @@ impl Backend for QubesData {
 }
 
 impl QubesData {
-    pub fn id(&self) -> NonZeroU32 {
-        let id = self.wid.get();
-        self.wid.set(
-            id.checked_add(1)
-                .expect("not yet implemented: wid wrapping"),
-        );
+    pub fn id(&mut self) -> NonZeroU32 {
+        let id = self.wid;
+        self.wid = id
+            .checked_add(1)
+            .expect("not yet implemented: wid wrapping");
         id.try_into()
             .expect("IDs start at 2 and do not wrap, so they cannot be zero; qed")
+    }
+    pub fn data(qubes: Rc<RefCell<Self>>) -> SurfaceData {
+        let window = qubes.borrow_mut().id();
+        SurfaceData {
+            buffer: None,
+            geometry: None,
+            buffer_dimensions: None,
+            buffer_scale: 0,
+            window,
+            qubes,
+        }
     }
 }
 
@@ -104,8 +115,8 @@ pub fn run_qubes(log: Logger) {
         .unwrap();
     let raw_fd = agent.as_raw_fd();
     let data = QubesData {
-        agent: RefCell::new(agent),
-        wid: Cell::new(2),
+        agent: agent,
+        wid: 2,
         map: BTreeMap::default(),
         log: log.clone(),
     };
@@ -129,8 +140,8 @@ pub fn run_qubes(log: Logger) {
                 calloop::Mode::Edge,
             ),
             move |_, _, agent_full| {
-                let mut agent = agent_full.backend_data.agent.borrow_mut();
-                match agent.client().read_header() {
+                let ref mut qubes = agent_full.backend_data.borrow_mut();
+                match qubes.agent.client().read_header() {
                     Poll::Pending => {}
                     Poll::Ready(Ok((e, body))) => match e.ty {
                         qubes_gui::MSG_MOTION => {
@@ -182,24 +193,26 @@ pub fn run_qubes(log: Logger) {
                                 0 => panic!("Configure event for window 0?"),
                                 1 => {}
                                 window => {
-                                    match agent_full
-                                        .backend_data
-                                        .map
-                                        .get(&window.try_into().unwrap())
-                                    {
+                                    qubes.agent.client().send(&qubes_gui::ShmImage { rectangle: m.rectangle }, e.window.try_into().unwrap())?;
+                                    match qubes.map.get(&window.try_into().unwrap()) {
                                         None => panic!("Configure event for unknown window"),
                                         Some(QubesBackendData {
                                             surface,
                                             has_configured,
                                         }) => {
-                                            if let Ok(()) = surface.with_pending_state(|state| {
-                                                state.size = if *has_configured {
-                                                    Some((width as _, height as _).into())
+
+                                            if let Ok(true) = surface.with_pending_state(|state| {
+                                                if state.size == Some((width as _, height as _).into()) {
+                                                    false
                                                 } else {
-                                                    None
+                                                    state.size = Some((width as _, height as _).into());
+                                                    true
                                                 }
                                             }) {
+                                                debug!(log_, "Sending configure event to application");
                                                 surface.send_configure();
+                                            } else {
+                                                debug!(log_, "Ignoring MSG_CONFIGURE on dead window");
                                             }
                                         }
                                     };
@@ -208,16 +221,16 @@ pub fn run_qubes(log: Logger) {
                             }
                             drop(std::mem::replace(
                                 &mut buf,
-                                agent.alloc_buffer(width, height).unwrap(),
+                                qubes.agent.alloc_buffer(width, height).unwrap(),
                             ));
-                            let shade = vec![0xFF0000u32; (width * height / 2).try_into().unwrap()];
-                            buf.dump(agent.client(), e.window.try_into().unwrap())
+                            let shade = vec![0xFF00u32; (width * height / 2).try_into().unwrap()];
+                            buf.dump(qubes.agent.client(), e.window.try_into().unwrap())
                                 .unwrap();
                             buf.write(
                                 qubes_castable::as_bytes(&shade[..]),
                                 (width * height / 4 * 4).try_into().unwrap(),
                             );
-                            agent.client().send(&m, e.window.try_into().unwrap())?
+                            qubes.agent.client().send(&m, e.window.try_into().unwrap())?
                         }
                         qubes_gui::MSG_FOCUS => {
                             let mut m = qubes_gui::Focus::default();
