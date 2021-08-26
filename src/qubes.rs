@@ -131,19 +131,27 @@ pub fn run_qubes(log: Logger) {
     let log_ = log.clone();
     handle
         .insert_source(
-            Generic::new(
+            Generic::from_fd(
                 raw_fd,
                 Interest {
                     readable: true,
                     writable: true,
                 },
-                calloop::Mode::Edge,
+                calloop::Mode::Level,
             ),
             move |_, _, agent_full| {
                 let ref mut qubes = agent_full.backend_data.borrow_mut();
-                match qubes.agent.client().read_header() {
-                    Poll::Pending => {}
-                    Poll::Ready(Ok((e, body))) => match e.ty {
+                qubes.agent.client().wait();
+                loop {
+                    let (e, body) = match qubes.agent.client().read_header() {
+                        Poll::Pending => break Ok(calloop::PostAction::Continue),
+                        Poll::Ready(Ok((e, body))) => (e, body),
+                        Poll::Ready(Err(e)) => {
+                            error!(log_, "Critical Qubes Error: {}", e);
+                            break Err(e);
+                        }
+                    };
+                    match e.ty {
                         qubes_gui::MSG_MOTION => {
                             let mut m = qubes_gui::Motion::default();
                             m.as_mut_bytes().copy_from_slice(body);
@@ -159,7 +167,8 @@ pub fn run_qubes(log: Logger) {
                             debug!(log_, "Got a close event!");
                             if e.window == 1 {
                                 debug!(log_, "Got close event for our window, exiting!");
-                                std::process::exit(0);
+                                agent_full.running.store(false, Ordering::SeqCst);
+                                break Ok(calloop::PostAction::Continue);
                             }
                         }
                         qubes_gui::MSG_KEYPRESS => {
@@ -193,30 +202,43 @@ pub fn run_qubes(log: Logger) {
                                 0 => panic!("Configure event for window 0?"),
                                 1 => {}
                                 window => {
-                                    qubes.agent.client().send(&qubes_gui::ShmImage { rectangle: m.rectangle }, e.window.try_into().unwrap())?;
+                                    qubes.agent.client().send(
+                                        &qubes_gui::ShmImage {
+                                            rectangle: m.rectangle,
+                                        },
+                                        e.window.try_into().unwrap(),
+                                    )?;
                                     match qubes.map.get(&window.try_into().unwrap()) {
                                         None => panic!("Configure event for unknown window"),
                                         Some(QubesBackendData {
                                             surface,
                                             has_configured,
                                         }) => {
-
                                             if let Ok(true) = surface.with_pending_state(|state| {
-                                                if state.size == Some((width as _, height as _).into()) {
+                                                if state.size
+                                                    == Some((width as _, height as _).into())
+                                                {
                                                     false
                                                 } else {
-                                                    state.size = Some((width as _, height as _).into());
+                                                    state.size =
+                                                        Some((width as _, height as _).into());
                                                     true
                                                 }
                                             }) {
-                                                debug!(log_, "Sending configure event to application");
+                                                debug!(
+                                                    log_,
+                                                    "Sending configure event to application"
+                                                );
                                                 surface.send_configure();
                                             } else {
-                                                debug!(log_, "Ignoring MSG_CONFIGURE on dead window");
+                                                debug!(
+                                                    log_,
+                                                    "Ignoring MSG_CONFIGURE on dead window"
+                                                );
                                             }
                                         }
                                     };
-                                    return Ok(calloop::PostAction::Reregister);
+                                    continue;
                                 }
                             }
                             drop(std::mem::replace(
@@ -230,7 +252,10 @@ pub fn run_qubes(log: Logger) {
                                 qubes_castable::as_bytes(&shade[..]),
                                 (width * height / 4 * 4).try_into().unwrap(),
                             );
-                            qubes.agent.client().send(&m, e.window.try_into().unwrap())?
+                            qubes
+                                .agent
+                                .client()
+                                .send(&m, e.window.try_into().unwrap())?
                         }
                         qubes_gui::MSG_FOCUS => {
                             let mut m = qubes_gui::Focus::default();
@@ -243,13 +268,8 @@ pub fn run_qubes(log: Logger) {
                             debug!(log_, "Window manager flags have changed: {:?}", m);
                         }
                         _ => debug!(log_, "Ignoring unknown event!"),
-                    },
-                    Poll::Ready(Err(e)) => {
-                        error!(log_, "Critical Qubes Error: {}", e);
-                        return Err(e);
                     }
-                };
-                Ok(calloop::PostAction::Reregister)
+                }
             },
         )
         .unwrap();

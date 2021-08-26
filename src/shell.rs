@@ -238,6 +238,18 @@ pub struct SurfaceData {
     pub qubes: Rc<RefCell<QubesData>>,
 }
 
+impl Drop for SurfaceData {
+    fn drop(&mut self) {
+        self.qubes.borrow_mut().map.remove(&self.window);
+        let _ = self
+            .qubes
+            .borrow_mut()
+            .agent
+            .client()
+            .send(&qubes_gui::Destroy {}, self.window);
+    }
+}
+
 impl SurfaceData {
     pub fn update_buffer(&mut self, attrs: &mut SurfaceAttributes, data: &mut QubesData) {
         debug!(data.log, "Updating buffer!");
@@ -256,7 +268,8 @@ impl SurfaceData {
                 qbuf.dump(agent.client(), self.window.into()).expect("TODO");
                 if let Some(old_buffer) = std::mem::replace(&mut self.buffer, Some((buffer, qbuf)))
                 {
-                    old_buffer.0.release()
+                    old_buffer.0.release();
+                    drop(old_buffer.1);
                 }
                 force = true;
             }
@@ -283,7 +296,7 @@ impl SurfaceData {
                          stride: untrusted_stride,
                          format: _, // already validated
                      }| {
-                         debug!(log, "Updating buffer with damaged areas");
+                        debug!(log, "Updating buffer with damaged areas");
                         // SANTIIZE START
                         let low_len: i32 = match i32::try_from(untrusted_slice.len()) {
                             Err(_) => {
@@ -317,11 +330,11 @@ impl SurfaceData {
                         let height = untrusted_height;
                         let stride = untrusted_stride;
                         if true {
-                        attrs.damage.clear();
-                        attrs.damage.push(Damage::Buffer(Rectangle {
-                            loc: (0, 0).into(),
-                            size: (width, height).into(),
-                        }));
+                            attrs.damage.clear();
+                            attrs.damage.push(Damage::Buffer(Rectangle {
+                                loc: (0, 0).into(),
+                                size: (width, height).into(),
+                            }));
                         }
                         for i in attrs.damage.drain(..) {
                             let (untrusted_loc, untrusted_size) = match i {
@@ -362,19 +375,23 @@ impl SurfaceData {
                                     .try_into()
                                     .expect("checked above")..];
                             // trace!(data.log, "Copying data!");
-                            let bytes_to_write: usize =
-                                (BYTES_PER_PIXEL * w).try_into().unwrap();
+                            let bytes_to_write: usize = (BYTES_PER_PIXEL * w).try_into().unwrap();
                             for i in 0..h {
                                 let start_offset = (i * stride).try_into().unwrap();
-                                let offset_in_dest_buffer =
-                                    (BYTES_PER_PIXEL * (x + (i + y) * width)).try_into().unwrap();
+                                let offset_in_dest_buffer = (BYTES_PER_PIXEL
+                                    * (x + (i + y) * width))
+                                    .try_into()
+                                    .unwrap();
                                 qbuf.write(
                                     &subslice[start_offset..bytes_to_write + start_offset],
                                     offset_in_dest_buffer,
                                 );
                                 let output_message = qubes_gui::ShmImage {
                                     rectangle: qubes_gui::Rectangle {
-                                        top_left: qubes_gui::Coordinates { x: x as u32, y: y as u32 },
+                                        top_left: qubes_gui::Coordinates {
+                                            x: x as u32,
+                                            y: y as u32,
+                                        },
                                         size: qubes_gui::WindowSize {
                                             width: w as u32,
                                             height: w as u32,
@@ -382,18 +399,20 @@ impl SurfaceData {
                                     },
                                 };
                                 qbuf.dump(client, self.window.into()).expect("TODO");
-                                client.send(&output_message, self.window.into()).expect("TODO");
+                                client
+                                    .send(&output_message, self.window.into())
+                                    .expect("TODO");
                             }
                         }
                     },
                 ) {
-                    Ok(()) => {}
+                    Ok(()) => attrs.damage.clear(),
                     Err(shm::BufferAccessError::NotManaged) => panic!("strange shm buffer"),
-                    Err(shm::BufferAccessError::BadMap) => {}
+                    Err(shm::BufferAccessError::BadMap) => return,
                 }
             }
         }
-        Self::send_frame(attrs, 0)
+        Self::send_frame(attrs, 16000000)
     }
 
     /// Returns the size of the surface.
