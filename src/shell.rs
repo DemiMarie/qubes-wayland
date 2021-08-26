@@ -2,6 +2,7 @@
 use std::{
     cell::RefCell,
     convert::{TryFrom, TryInto},
+    collections::BTreeMap,
     num::NonZeroU32,
     rc::Rc,
     sync::{Arc, Mutex},
@@ -37,6 +38,8 @@ pub struct ShellHandles {
     pub window_map: Rc<RefCell<WindowMap>>,
 }
 
+struct QubesClient(Rc<RefCell<BTreeMap<u32, ()>>>);
+
 pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHandles {
     // Create the compositor
     compositor_init(
@@ -69,6 +72,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     }
                 };
                 let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
+                // let client = surface.client().expect("cannot receive event on a dead client; qed");
                 let id = with_states(raw_surface, |data| {
                     data.data_map
                         .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
@@ -218,6 +222,12 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                 let _msg = qubes_gui::WindowFlags { set: 0, unset: 1 };
                 todo!()
             }
+            XdgRequest::NewClient { client } => {
+                let _anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
+                let _ = client.with_data(|data| {
+                    data.insert_if_missing(|| QubesClient(Rc::new(RefCell::new(BTreeMap::new()))))
+                });
+            }
             other => println!("Got an unhandled event: {:?}", other),
         },
         log_,
@@ -255,7 +265,6 @@ impl SurfaceData {
         debug!(data.log, "Updating buffer!");
         const BYTES_PER_PIXEL: i32 = qubes_gui::DUMMY_DRV_FB_BPP as i32 / 8;
         let ref mut agent = data.agent;
-        let mut force = false;
         match attrs.buffer.take() {
             Some(BufferAssignment::NewBuffer { buffer, .. }) => {
                 debug!(data.log, "New buffer");
@@ -271,7 +280,6 @@ impl SurfaceData {
                     old_buffer.0.release();
                     drop(old_buffer.1);
                 }
-                force = true;
             }
             Some(BufferAssignment::Removed) => {
                 // remove the contents
@@ -329,7 +337,7 @@ impl SurfaceData {
                         let width = untrusted_width;
                         let height = untrusted_height;
                         let stride = untrusted_stride;
-                        if true {
+                        if !attrs.damage.is_empty() {
                             attrs.damage.clear();
                             attrs.damage.push(Damage::Buffer(Rectangle {
                                 loc: (0, 0).into(),
@@ -398,7 +406,6 @@ impl SurfaceData {
                                         },
                                     },
                                 };
-                                qbuf.dump(client, self.window.into()).expect("TODO");
                                 client
                                     .send(&output_message, self.window.into())
                                     .expect("TODO");

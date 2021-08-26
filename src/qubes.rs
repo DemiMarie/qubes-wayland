@@ -170,6 +170,11 @@ pub fn run_qubes(log: Logger) {
                                 agent_full.running.store(false, Ordering::SeqCst);
                                 break Ok(calloop::PostAction::Continue);
                             }
+                            let surface: &QubesBackendData = match qubes.map.get(&e.window.try_into().unwrap()) {
+                                None => panic!("Configure event for unknown window"),
+                                Some(w) => w,
+                            };
+                            surface.surface.send_close()
                         }
                         qubes_gui::MSG_KEYPRESS => {
                             let mut m = qubes_gui::Button::default();
@@ -241,10 +246,7 @@ pub fn run_qubes(log: Logger) {
                                     continue;
                                 }
                             }
-                            drop(std::mem::replace(
-                                &mut buf,
-                                qubes.agent.alloc_buffer(width, height).unwrap(),
-                            ));
+                            buf = qubes.agent.alloc_buffer(width, height).unwrap();
                             let shade = vec![0xFF00u32; (width * height / 2).try_into().unwrap()];
                             buf.dump(qubes.agent.client(), e.window.try_into().unwrap())
                                 .unwrap();
