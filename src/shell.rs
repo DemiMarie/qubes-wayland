@@ -1,8 +1,8 @@
 #![allow(dead_code, unused_imports)]
 use std::{
     cell::RefCell,
-    convert::{TryFrom, TryInto},
     collections::BTreeMap,
+    convert::{TryFrom, TryInto},
     num::NonZeroU32,
     rc::Rc,
     sync::{Arc, Mutex},
@@ -39,6 +39,11 @@ pub struct ShellHandles {
 }
 
 struct QubesClient(Rc<RefCell<BTreeMap<u32, ()>>>);
+impl Drop for QubesClient {
+    fn drop(&mut self) {
+        eprintln!("Dropped client")
+    }
+}
 
 pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHandles {
     // Create the compositor
@@ -223,10 +228,11 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                 todo!()
             }
             XdgRequest::NewClient { client } => {
-                let _anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
-                let _ = client.with_data(|data| {
+                let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
+                info!(anvil_state.log, "New client connected!");
+                client.with_data(|data| {
                     data.insert_if_missing(|| QubesClient(Rc::new(RefCell::new(BTreeMap::new()))))
-                });
+                }).expect("New clients are not dead");
             }
             other => println!("Got an unhandled event: {:?}", other),
         },
@@ -250,13 +256,10 @@ pub struct SurfaceData {
 
 impl Drop for SurfaceData {
     fn drop(&mut self) {
-        self.qubes.borrow_mut().map.remove(&self.window);
-        let _ = self
-            .qubes
-            .borrow_mut()
-            .agent
-            .client()
-            .send(&qubes_gui::Destroy {}, self.window);
+        let mut s = self.qubes.borrow_mut();
+        s.map.remove(&self.window);
+        let _ = s.agent.client().send(&qubes_gui::Destroy {}, self.window);
+        eprintln!("SurfaceData removed!")
     }
 }
 
@@ -283,6 +286,7 @@ impl SurfaceData {
             }
             Some(BufferAssignment::Removed) => {
                 // remove the contents
+                debug!(data.log, "Removing buffer");
                 self.buffer = None;
                 self.buffer_dimensions = None;
             }

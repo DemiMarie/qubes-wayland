@@ -39,6 +39,18 @@ pub struct QubesBackendData {
     pub has_configured: bool,
 }
 
+impl Drop for QubesData {
+    fn drop(&mut self) {
+        eprintln!("Dropping connection data!")
+    }
+}
+
+impl Drop for QubesBackendData {
+    fn drop(&mut self) {
+        eprintln!("Dropping data!")
+    }
+}
+
 impl Backend for QubesData {
     fn seat_name(&self) -> String {
         String::from("qubes")
@@ -155,53 +167,54 @@ pub fn run_qubes(log: Logger) {
                         qubes_gui::MSG_MOTION => {
                             let mut m = qubes_gui::Motion::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            debug!(log_, "Motion event: {:?}", m);
+                            trace!(log_, "Motion event: {:?}", m);
                         }
                         qubes_gui::MSG_CROSSING => {
                             let mut m = qubes_gui::Crossing::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            debug!(log_, "Crossing event: {:?}", m)
+                            trace!(log_, "Crossing event: {:?}", m)
                         }
                         qubes_gui::MSG_CLOSE => {
                             assert!(body.is_empty());
-                            debug!(log_, "Got a close event!");
+                            trace!(log_, "Got a close event!");
                             if e.window == 1 {
-                                debug!(log_, "Got close event for our window, exiting!");
+                                trace!(log_, "Got close event for our window, exiting!");
                                 agent_full.running.store(false, Ordering::SeqCst);
                                 break Ok(calloop::PostAction::Continue);
                             }
-                            let surface: &QubesBackendData = match qubes.map.get(&e.window.try_into().unwrap()) {
-                                None => panic!("Configure event for unknown window"),
-                                Some(w) => w,
-                            };
-                            surface.surface.send_close()
+                            let surface: &QubesBackendData =
+                                match qubes.map.get(&e.window.try_into().unwrap()) {
+                                    None => panic!("Configure event for unknown window"),
+                                    Some(w) => w,
+                                };
+                            surface.surface.send_close();
                         }
                         qubes_gui::MSG_KEYPRESS => {
                             let mut m = qubes_gui::Button::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            debug!(log_, "Key pressed: {:?}", m);
+                            trace!(log_, "Key pressed: {:?}", m);
                         }
                         qubes_gui::MSG_BUTTON => {
                             let mut m = qubes_gui::Button::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            debug!(log_, "Button event: {:?}", m);
+                            trace!(log_, "Button event: {:?}", m);
                         }
-                        qubes_gui::MSG_CLIPBOARD_REQ => debug!(log_, "clipboard data requested!"),
-                        qubes_gui::MSG_CLIPBOARD_DATA => debug!(log_, "clipboard data reply!"),
+                        qubes_gui::MSG_CLIPBOARD_REQ => trace!(log_, "clipboard data requested!"),
+                        qubes_gui::MSG_CLIPBOARD_DATA => trace!(log_, "clipboard data reply!"),
                         qubes_gui::MSG_KEYMAP_NOTIFY => {
                             let mut m = qubes_gui::KeymapNotify::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            debug!(log_, "Keymap notification: {:?}", m);
+                            trace!(log_, "Keymap notification: {:?}", m);
                         }
                         qubes_gui::MSG_MAP => {
                             let mut m = qubes_gui::MapInfo::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            debug!(log_, "Map event: {:?}", m);
+                            trace!(log_, "Map event: {:?}", m);
                         }
                         qubes_gui::MSG_CONFIGURE => {
                             let mut m = qubes_gui::Configure::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            debug!(log_, "Configure event {:?} for window {}", m, e.window);
+                            trace!(log_, "Configure event {:?} for window {}", m, e.window);
                             let qubes_gui::WindowSize { width, height } = m.rectangle.size;
                             match e.window {
                                 0 => panic!("Configure event for window 0?"),
@@ -230,7 +243,7 @@ pub fn run_qubes(log: Logger) {
                                                     true
                                                 }
                                             }) {
-                                                debug!(
+                                                trace!(
                                                     log_,
                                                     "Sending configure event to application"
                                                 );
@@ -246,7 +259,7 @@ pub fn run_qubes(log: Logger) {
                                     continue;
                                 }
                             }
-                            buf = qubes.agent.alloc_buffer(width, height).unwrap();
+                            drop(std::mem::replace(&mut buf, qubes.agent.alloc_buffer(width, height).unwrap()));
                             let shade = vec![0xFF00u32; (width * height / 2).try_into().unwrap()];
                             buf.dump(qubes.agent.client(), e.window.try_into().unwrap())
                                 .unwrap();
@@ -262,14 +275,14 @@ pub fn run_qubes(log: Logger) {
                         qubes_gui::MSG_FOCUS => {
                             let mut m = qubes_gui::Focus::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            debug!(log_, "Focus event: {:?}", m);
+                            trace!(log_, "Focus event: {:?}", m);
                         }
                         qubes_gui::MSG_WINDOW_FLAGS => {
                             let mut m = qubes_gui::WindowFlags::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            debug!(log_, "Window manager flags have changed: {:?}", m);
+                            trace!(log_, "Window manager flags have changed: {:?}", m);
                         }
-                        _ => debug!(log_, "Ignoring unknown event!"),
+                        _ => trace!(log_, "Ignoring unknown event!"),
                     }
                 }
             },
