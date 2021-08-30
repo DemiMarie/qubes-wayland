@@ -1,13 +1,6 @@
 use std::{
-    cell::{Cell, RefCell},
-    collections::BTreeMap,
-    convert::TryInto,
-    num::NonZeroU32,
-    os::unix::io::AsRawFd,
-    rc::Rc,
-    sync::atomic::Ordering,
-    task::Poll,
-    time::Duration,
+    cell::RefCell, collections::BTreeMap, convert::TryInto, num::NonZeroU32, os::unix::io::AsRawFd,
+    rc::Rc, sync::atomic::Ordering, task::Poll, time::Duration,
 };
 
 use qubes_castable::Castable;
@@ -16,7 +9,10 @@ use smithay::{
         calloop::{self, generic::Generic, EventLoop, Interest},
         wayland_server::Display,
     },
-    wayland::shell::xdg::ToplevelSurface,
+    wayland::{
+        compositor::{with_surface_tree_upward, SurfaceAttributes, TraversalAction},
+        shell::xdg::ToplevelSurface,
+    },
 };
 
 use slog::Logger;
@@ -31,9 +27,13 @@ pub struct QubesData {
     wid: u32,
     pub map: BTreeMap<NonZeroU32, QubesBackendData>,
     pub log: slog::Logger,
+    buf: qubes_gui_client::agent::Buffer,
 }
 
 pub struct QubesBackendData {
+    /// Surface ID
+    //pub id: NonZeroU32,
+    /// Toplevel surface
     pub surface: ToplevelSurface,
     /// Whether the surface has been configured
     pub has_configured: bool,
@@ -42,12 +42,6 @@ pub struct QubesBackendData {
 impl Drop for QubesData {
     fn drop(&mut self) {
         eprintln!("Dropping connection data!")
-    }
-}
-
-impl Drop for QubesBackendData {
-    fn drop(&mut self) {
-        eprintln!("Dropping data!")
     }
 }
 
@@ -68,6 +62,7 @@ impl QubesData {
     }
     pub fn data(qubes: Rc<RefCell<Self>>) -> SurfaceData {
         let window = qubes.borrow_mut().id();
+        eprintln!("SurfaceData created!");
         SurfaceData {
             buffer: None,
             geometry: None,
@@ -76,6 +71,77 @@ impl QubesData {
             window,
             qubes,
         }
+    }
+
+    fn process_configure(&mut self, m: qubes_gui::Configure, window: u32) -> std::io::Result<()> {
+        self.agent
+            .client()
+            .send(&m, window.try_into().unwrap())
+            .unwrap();
+        let window = window.try_into().expect("Configure event for window 0?");
+        if window == 1.try_into().unwrap() {
+            self.process_self_configure(m, window)
+        } else {
+            self.process_client_configure(m, window)
+        }
+    }
+
+    fn process_client_configure(
+        &mut self,
+        m: qubes_gui::Configure,
+        window: NonZeroU32,
+    ) -> std::io::Result<()> {
+        let qubes_gui::WindowSize { width, height } = m.rectangle.size;
+        self.agent.client().send(
+            &qubes_gui::ShmImage {
+                rectangle: m.rectangle,
+            },
+            window,
+        )?;
+        match self.map.get_mut(&window.try_into().unwrap()) {
+            None => panic!("Configure event for unknown window"),
+            Some(QubesBackendData {
+                surface,
+                ref mut has_configured,
+            }) => {
+                match surface.with_pending_state(|state| {
+                    let new_size = Some((width as _, height as _).into());
+                    let do_send = new_size == state.size;
+                    state.size = new_size;
+                    do_send
+                }) {
+                    Ok(false) if *has_configured => {
+                        trace!(self.log, "Ignoring configure event that didn’t change size")
+                    }
+                    Ok(_) => {
+                        info!(self.log, "Sending configure event to application");
+                        surface.send_configure();
+                        *has_configured = true;
+                    }
+                    Err(_) => warn!(self.log, "Ignoring MSG_CONFIGURE on dead window"),
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn process_self_configure(
+        &mut self,
+        m: qubes_gui::Configure,
+        window: NonZeroU32,
+    ) -> std::io::Result<()> {
+        let qubes_gui::WindowSize { width, height } = m.rectangle.size;
+        drop(std::mem::replace(
+            &mut self.buf,
+            self.agent.alloc_buffer(width, height).unwrap(),
+        ));
+        let shade = vec![0xFF00u32; (width * height / 2).try_into().unwrap()];
+        self.buf.dump(self.agent.client(), window.into())?;
+        self.buf.write(
+            qubes_castable::as_bytes(&shade[..]),
+            (width * height / 4 * 4).try_into().unwrap(),
+        );
+        self.agent.client().send(&m, window)
     }
 }
 
@@ -131,6 +197,7 @@ pub fn run_qubes(log: Logger) {
         wid: 2,
         map: BTreeMap::default(),
         log: log.clone(),
+        buf,
     };
     let mut state = AnvilState::init(
         display.clone(),
@@ -149,9 +216,13 @@ pub fn run_qubes(log: Logger) {
                     readable: true,
                     writable: true,
                 },
-                calloop::Mode::Level,
+                calloop::Mode::Edge,
             ),
-            move |_, _, agent_full| {
+            move |readiness: calloop::Readiness, _fd, agent_full| {
+                if !readiness.readable && !readiness.writable {
+                    panic!("No readiness?");
+                    // return Ok(calloop::PostAction::Continue);
+                }
                 let ref mut qubes = agent_full.backend_data.borrow_mut();
                 qubes.agent.client().wait();
                 loop {
@@ -182,12 +253,10 @@ pub fn run_qubes(log: Logger) {
                                 agent_full.running.store(false, Ordering::SeqCst);
                                 break Ok(calloop::PostAction::Continue);
                             }
-                            let surface: &QubesBackendData =
-                                match qubes.map.get(&e.window.try_into().unwrap()) {
-                                    None => panic!("Configure event for unknown window"),
-                                    Some(w) => w,
-                                };
-                            surface.surface.send_close();
+                            match qubes.map.get(&e.window.try_into().unwrap()) {
+                                None => error!(log_, "Close event for unknown window {}", e.window),
+                                Some(w) => w.surface.send_close(),
+                            };
                         }
                         qubes_gui::MSG_KEYPRESS => {
                             let mut m = qubes_gui::Button::default();
@@ -215,62 +284,7 @@ pub fn run_qubes(log: Logger) {
                             let mut m = qubes_gui::Configure::default();
                             m.as_mut_bytes().copy_from_slice(body);
                             trace!(log_, "Configure event {:?} for window {}", m, e.window);
-                            let qubes_gui::WindowSize { width, height } = m.rectangle.size;
-                            match e.window {
-                                0 => panic!("Configure event for window 0?"),
-                                1 => {}
-                                window => {
-                                    qubes.agent.client().send(
-                                        &qubes_gui::ShmImage {
-                                            rectangle: m.rectangle,
-                                        },
-                                        e.window.try_into().unwrap(),
-                                    )?;
-                                    match qubes.map.get(&window.try_into().unwrap()) {
-                                        None => panic!("Configure event for unknown window"),
-                                        Some(QubesBackendData {
-                                            surface,
-                                            has_configured,
-                                        }) => {
-                                            if let Ok(true) = surface.with_pending_state(|state| {
-                                                if state.size
-                                                    == Some((width as _, height as _).into())
-                                                {
-                                                    false
-                                                } else {
-                                                    state.size =
-                                                        Some((width as _, height as _).into());
-                                                    true
-                                                }
-                                            }) {
-                                                trace!(
-                                                    log_,
-                                                    "Sending configure event to application"
-                                                );
-                                                surface.send_configure();
-                                            } else {
-                                                debug!(
-                                                    log_,
-                                                    "Ignoring MSG_CONFIGURE on dead window"
-                                                );
-                                            }
-                                        }
-                                    };
-                                    continue;
-                                }
-                            }
-                            drop(std::mem::replace(&mut buf, qubes.agent.alloc_buffer(width, height).unwrap()));
-                            let shade = vec![0xFF00u32; (width * height / 2).try_into().unwrap()];
-                            buf.dump(qubes.agent.client(), e.window.try_into().unwrap())
-                                .unwrap();
-                            buf.write(
-                                qubes_castable::as_bytes(&shade[..]),
-                                (width * height / 4 * 4).try_into().unwrap(),
-                            );
-                            qubes
-                                .agent
-                                .client()
-                                .send(&m, e.window.try_into().unwrap())?
+                            qubes.process_configure(m, e.window)?
                         }
                         qubes_gui::MSG_FOCUS => {
                             let mut m = qubes_gui::Focus::default();
@@ -288,6 +302,62 @@ pub fn run_qubes(log: Logger) {
             },
         )
         .unwrap();
+    {
+        let log = log.clone();
+        let redraw_timer =
+            calloop::timer::Timer::new().expect("not worth handling can’t create timer");
+        let timer_handle = redraw_timer.handle();
+        timer_handle.add_timeout(std::time::Duration::from_millis(16), ());
+        let mut time_spent = 0;
+        handle
+            .insert_source(redraw_timer, move |(), timer_handle, agent_full| {
+                // trace!(log, "Timer callback fired, reregistering!");
+                time_spent += 16;
+                timer_handle.add_timeout(std::time::Duration::from_millis(16), ());
+                let ref mut qubes = agent_full.backend_data.borrow_mut();
+                let mut dead_surfaces = vec![];
+                for (key, value) in qubes.map.iter_mut() {
+                    let surface = match value.surface.get_surface() {
+                        None => {
+                            trace!(log, "Pushing toplevel with no surface onto dead list");
+                            dead_surfaces.push(*key);
+                            continue;
+                        }
+                        Some(s) if !s.as_ref().is_alive() => {
+                            trace!(log, "Pushing toplevel with dead surface onto dead list");
+                            dead_surfaces.push(*key);
+                            continue;
+                        }
+                        Some(s) => s,
+                    };
+                    with_surface_tree_upward(
+                        &surface,
+                        (),
+                        |_surface, _surface_data, ()| TraversalAction::DoChildren(()),
+                        |_surface, states, ()| {
+                            SurfaceData::send_frame(
+                                &mut *states.cached_state.current::<SurfaceAttributes>(),
+                                time_spent,
+                            );
+                        },
+                        |_surface, _surface_data, ()| true,
+                    );
+                }
+                for i in dead_surfaces.iter() {
+                    qubes
+                        .agent
+                        .client()
+                        .send(&qubes_gui::Destroy {}, *i)
+                        .unwrap();
+                    let _: QubesBackendData = qubes
+                        .map
+                        .remove(i)
+                        .expect("these were keys in the map; qed");
+                }
+            })
+            .expect("FIXME: handle initialization failed");
+    }
+
     #[cfg(feature = "xwayland")]
     state.start_xwayland();
 

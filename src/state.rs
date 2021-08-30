@@ -18,7 +18,6 @@ use smithay::{
         seat::{CursorImageStatus, KeyboardHandle, Seat, XkbConfig},
         shm::init_shm_global,
         tablet_manager::{init_tablet_manager_global, TabletSeatTrait},
-        xdg_activation::{init_xdg_activation_global, XdgActivationEvent},
     },
 };
 
@@ -128,8 +127,6 @@ impl AnvilState {
         let (mut seat, _) = Seat::new(&mut display.borrow_mut(), seat_name.clone(), log.clone());
 
         let cursor_status = Arc::new(Mutex::new(CursorImageStatus::Default));
-
-        let cursor_status2 = cursor_status.clone();
 
         init_tablet_manager_global(&mut display.borrow_mut());
 

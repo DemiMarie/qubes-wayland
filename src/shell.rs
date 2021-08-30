@@ -63,7 +63,6 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
     // init the xdg_shell
     let xdg_window_map = window_map.clone();
     let log_ = log.clone();
-    let inner_log = log.clone();
     let (xdg_shell_state, _, _) = xdg_shell_init(
         &mut *display.borrow_mut(),
         move |shell_event, mut _dispatch_data| match shell_event {
@@ -159,7 +158,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         .get::<RefCell<SurfaceData>>()
                         .unwrap()
                         .borrow();
-                    debug!(
+                    info!(
                         anvil_state.log,
                         "A configure event was acknowledged!  Params: surface {:?}, configure {:?}",
                         surface,
@@ -230,9 +229,13 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
             XdgRequest::NewClient { client } => {
                 let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
                 info!(anvil_state.log, "New client connected!");
-                client.with_data(|data| {
-                    data.insert_if_missing(|| QubesClient(Rc::new(RefCell::new(BTreeMap::new()))))
-                }).expect("New clients are not dead");
+                client
+                    .with_data(|data| {
+                        data.insert_if_missing(|| {
+                            QubesClient(Rc::new(RefCell::new(BTreeMap::new())))
+                        })
+                    })
+                    .expect("New clients are not dead");
             }
             other => println!("Got an unhandled event: {:?}", other),
         },
@@ -252,15 +255,6 @@ pub struct SurfaceData {
     pub buffer_scale: i32,
     pub window: std::num::NonZeroU32,
     pub qubes: Rc<RefCell<QubesData>>,
-}
-
-impl Drop for SurfaceData {
-    fn drop(&mut self) {
-        let mut s = self.qubes.borrow_mut();
-        s.map.remove(&self.window);
-        let _ = s.agent.client().send(&qubes_gui::Destroy {}, self.window);
-        eprintln!("SurfaceData removed!")
-    }
 }
 
 impl SurfaceData {
@@ -341,7 +335,7 @@ impl SurfaceData {
                         let width = untrusted_width;
                         let height = untrusted_height;
                         let stride = untrusted_stride;
-                        if !attrs.damage.is_empty() {
+                        if !attrs.damage.is_empty() && false {
                             attrs.damage.clear();
                             attrs.damage.push(Damage::Buffer(Rectangle {
                                 loc: (0, 0).into(),
