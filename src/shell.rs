@@ -423,7 +423,7 @@ impl SurfaceData {
                 }
             }
         }
-        Self::send_frame(attrs, 16000000)
+        // Self::send_frame(attrs, 16000000)
     }
 
     /// Returns the size of the surface.
