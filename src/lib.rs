@@ -6,7 +6,6 @@ extern crate slog;
 pub mod qubes;
 pub mod shell;
 pub mod state;
-pub mod window_map;
 #[cfg(feature = "xwayland")]
 pub mod xwayland;
 

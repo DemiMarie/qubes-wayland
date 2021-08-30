@@ -28,14 +28,12 @@ use smithay::{
 use crate::{
     qubes::QubesData,
     state::AnvilState,
-    window_map::{Kind as SurfaceKind, PopupKind, WindowMap},
 };
 use qubes_gui::Message as _;
 
 #[derive(Clone)]
 pub struct ShellHandles {
     pub xdg_state: Arc<Mutex<XdgShellState>>,
-    pub window_map: Rc<RefCell<WindowMap>>,
 }
 
 struct QubesClient(Rc<RefCell<BTreeMap<u32, ()>>>);
@@ -51,17 +49,10 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
         &mut *display.borrow_mut(),
         move |surface, mut ddata| {
             let anvil_state = ddata.get::<AnvilState>().unwrap();
-            let window_map = anvil_state.window_map.as_ref();
-            surface_commit(&surface, &*window_map, &anvil_state.backend_data)
+            surface_commit(&surface, &anvil_state.backend_data)
         },
         log.clone(),
     );
-
-    // Init a window map, to track the location of our windows
-    let window_map = Rc::new(RefCell::new(WindowMap::default()));
-
-    // init the xdg_shell
-    let xdg_window_map = window_map.clone();
     let log_ = log.clone();
     let (xdg_shell_state, _, _) = xdg_shell_init(
         &mut *display.borrow_mut(),
@@ -134,12 +125,9 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     .unwrap();
             }
             XdgRequest::NewPopup {
-                surface,
+                surface: _,
                 positioner: _,
             } => {
-                xdg_window_map
-                    .borrow_mut()
-                    .insert_popup(PopupKind::Xdg(surface));
                 todo!()
             }
             XdgRequest::AckConfigure { surface, configure } => {
@@ -244,7 +232,6 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
 
     ShellHandles {
         xdg_state: xdg_shell_state,
-        window_map,
     }
 }
 
@@ -436,7 +423,6 @@ impl SurfaceData {
 
 fn surface_commit(
     surface: &wl_surface::WlSurface,
-    _window_map: &RefCell<WindowMap>,
     backend_data: &Rc<RefCell<QubesData>>,
 ) {
     debug!(

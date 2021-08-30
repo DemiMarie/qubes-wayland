@@ -174,7 +174,7 @@ pub fn run_qubes(log: Logger) {
             my_window,
         )
         .unwrap();
-    let mut buf = agent.alloc_buffer(width, height).unwrap();
+    let buf = agent.alloc_buffer(width, height).unwrap();
     let shade = vec![0xFF00u32; (width * height / 2).try_into().unwrap()];
     buf.dump(agent.client(), 1.try_into().unwrap()).unwrap();
     buf.write(
@@ -374,7 +374,6 @@ pub fn run_qubes(log: Logger) {
             state.running.store(false, Ordering::SeqCst);
         } else {
             display.borrow_mut().flush_clients(&mut state);
-            state.window_map.borrow_mut().refresh();
         }
 
         #[cfg(feature = "debug")]

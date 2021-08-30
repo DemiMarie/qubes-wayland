@@ -33,7 +33,6 @@ pub struct AnvilState {
     pub running: Arc<AtomicBool>,
     pub display: Rc<RefCell<Display>>,
     pub handle: LoopHandle<'static, AnvilState>,
-    pub window_map: Rc<RefCell<crate::window_map::WindowMap>>,
     pub log: slog::Logger,
     // input-related fields
     pub keyboard: KeyboardHandle,
@@ -76,7 +75,7 @@ impl AnvilState {
 
         init_shm_global(&mut (*display).borrow_mut(), vec![], log.clone());
 
-        let shell_handles = init_shell(display.clone(), log.clone());
+        let _shell_handles = init_shell(display.clone(), log.clone());
 
         init_xdg_output_manager(&mut display.borrow_mut(), log.clone());
         #[cfg(any())]
@@ -166,7 +165,6 @@ impl AnvilState {
             running: Arc::new(AtomicBool::new(true)),
             display,
             handle,
-            window_map: shell_handles.window_map,
             log,
             socket_name,
             keyboard,
