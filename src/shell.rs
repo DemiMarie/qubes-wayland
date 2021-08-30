@@ -345,10 +345,8 @@ impl SurfaceData {
                                 || untrusted_size.h <= 0
                                 || untrusted_loc.x < 0
                                 || untrusted_loc.y < 0
-                                || untrusted_size.w > width
-                                || untrusted_size.h > height
-                                || width - untrusted_size.w < untrusted_loc.x
-                                || height - untrusted_size.h < untrusted_loc.y
+                                || untrusted_loc.x > width
+                                || untrusted_loc.y > height
                             {
                                 buffer.as_ref().post_error(
                                     wl_shm::Error::InvalidStride as u32,
@@ -356,13 +354,9 @@ impl SurfaceData {
                                 );
                                 return;
                             }
-                            // SANITIZE END
-                            let (x, y, w, h) = (
-                                untrusted_loc.x,
-                                untrusted_loc.y,
-                                untrusted_size.w,
-                                untrusted_size.h,
-                            );
+                            let w = untrusted_size.w.min(width - untrusted_loc.x);
+                            let h = untrusted_size.w.min(height - untrusted_loc.y);
+                            let (x, y) = (untrusted_loc.x, untrusted_loc.y);
                             let subslice =
                                 &untrusted_slice[(offset + BYTES_PER_PIXEL * x + y * stride)
                                     .try_into()
@@ -404,7 +398,6 @@ impl SurfaceData {
                 }
             }
         }
-        // Self::send_frame(attrs, 16000000)
     }
 
     /// Returns the size of the surface.
