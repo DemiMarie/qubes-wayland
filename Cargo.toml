@@ -39,7 +39,8 @@ path = "gui-rust/qubes-gui"
 path = "gui-rust/qubes-castable"
 
 [features]
-default = ["smithay/use_system_lib"]
+#default = ["smithay/use_system_lib"]
+default = []
 
 xwayland = [ "smithay/xwayland", "x11rb" ]
 debug = [ "fps_ticker" ]
