@@ -25,10 +25,7 @@ use smithay::{
     },
 };
 
-use crate::{
-    qubes::QubesData,
-    state::AnvilState,
-};
+use crate::{qubes::QubesData, state::AnvilState};
 use qubes_gui::Message as _;
 
 #[derive(Clone)]
@@ -414,10 +411,7 @@ impl SurfaceData {
     }
 }
 
-fn surface_commit(
-    surface: &wl_surface::WlSurface,
-    backend_data: &Rc<RefCell<QubesData>>,
-) {
+fn surface_commit(surface: &wl_surface::WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
     debug!(
         backend_data.borrow().log,
         "Got a commit for surface {:?}", surface
