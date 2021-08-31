@@ -15,7 +15,7 @@ use smithay::{
     wayland::{
         data_device::set_data_device_focus,
         output::xdg::init_xdg_output_manager,
-        seat::{CursorImageStatus, KeyboardHandle, Seat, XkbConfig},
+        seat::{CursorImageStatus, KeyboardHandle, PointerHandle, Seat, XkbConfig},
         shm::init_shm_global,
         tablet_manager::{init_tablet_manager_global, TabletSeatTrait},
     },
@@ -35,6 +35,7 @@ pub struct AnvilState {
     pub handle: LoopHandle<'static, AnvilState>,
     pub log: slog::Logger,
     // input-related fields
+    pub pointer: PointerHandle,
     pub keyboard: KeyboardHandle,
     pub cursor_status: Arc<Mutex<CursorImageStatus>>,
     pub seat_name: String,
@@ -127,6 +128,10 @@ impl AnvilState {
 
         let cursor_status = Arc::new(Mutex::new(CursorImageStatus::Default));
 
+        let cursor_status2 = cursor_status.clone();
+        let pointer =
+            seat.add_pointer(move |new_status| *cursor_status2.lock().unwrap() = new_status);
+
         init_tablet_manager_global(&mut display.borrow_mut());
 
         let cursor_status3 = cursor_status.clone();
@@ -166,6 +171,7 @@ impl AnvilState {
             display,
             handle,
             log,
+            pointer,
             socket_name,
             keyboard,
             cursor_status,

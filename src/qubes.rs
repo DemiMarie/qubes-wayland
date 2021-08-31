@@ -98,7 +98,11 @@ impl QubesData {
             },
             window,
         )?;
-        match self.map.get_mut(&window.try_into().unwrap()) {
+        let window = window
+            .try_into()
+            .expect("The GUI daemon never sends a zero window; qed");
+        let data: Option<&mut QubesBackendData> = self.map.get_mut(&window);
+        match data {
             None => panic!("Configure event for unknown window"),
             Some(QubesBackendData {
                 surface,
@@ -114,7 +118,12 @@ impl QubesData {
                         trace!(self.log, "Ignoring configure event that didn’t change size")
                     }
                     Ok(_) => {
-                        info!(self.log, "Sending configure event to application");
+                        trace!(
+                            self.log,
+                            "Sending configure event to application: width {}, height {}",
+                            width,
+                            height
+                        );
                         surface.send_configure();
                         *has_configured = true;
                     }
@@ -249,7 +258,7 @@ pub fn run_qubes(log: Logger) {
                             assert!(body.is_empty());
                             trace!(log_, "Got a close event!");
                             if e.window == 1 {
-                                trace!(log_, "Got close event for our window, exiting!");
+                                info!(log_, "Got close event for our window, exiting!");
                                 agent_full.running.store(false, Ordering::SeqCst);
                                 break Ok(calloop::PostAction::Continue);
                             }
@@ -259,14 +268,14 @@ pub fn run_qubes(log: Logger) {
                             };
                         }
                         qubes_gui::MSG_KEYPRESS => {
-                            let mut m = qubes_gui::Button::default();
+                            let mut m = qubes_gui::Keypress::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            trace!(log_, "Key pressed: {:?}", m);
+                            info!(log_, "Key pressed: {:?}", m);
                         }
                         qubes_gui::MSG_BUTTON => {
                             let mut m = qubes_gui::Button::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            trace!(log_, "Button event: {:?}", m);
+                            info!(log_, "Button event: {:?}", m);
                         }
                         qubes_gui::MSG_CLIPBOARD_REQ => trace!(log_, "clipboard data requested!"),
                         qubes_gui::MSG_CLIPBOARD_DATA => trace!(log_, "clipboard data reply!"),
