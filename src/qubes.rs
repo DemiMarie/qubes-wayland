@@ -7,11 +7,15 @@ use qubes_castable::Castable;
 use smithay::{
     reexports::{
         calloop::{self, generic::Generic, EventLoop, Interest},
-        wayland_server::Display,
+        wayland_server::{
+            protocol::{wl_pointer::ButtonState, wl_surface::WlSurface},
+            Display,
+        },
     },
     wayland::{
         compositor::{with_surface_tree_upward, SurfaceAttributes, TraversalAction},
         shell::xdg::ToplevelSurface,
+        SERIAL_COUNTER,
     },
 };
 
@@ -37,12 +41,6 @@ pub struct QubesBackendData {
     pub surface: ToplevelSurface,
     /// Whether the surface has been configured
     pub has_configured: bool,
-}
-
-impl Drop for QubesData {
-    fn drop(&mut self) {
-        eprintln!("Dropping connection data!")
-    }
 }
 
 impl Backend for QubesData {
@@ -109,20 +107,28 @@ impl QubesData {
                 ref mut has_configured,
             }) => {
                 match surface.with_pending_state(|state| {
-                    let new_size = Some((width as _, height as _).into());
+                    let new_size = Some(
+                        if *has_configured {
+                            (width as _, height as _)
+                        } else {
+                            (0, 0)
+                        }
+                        .into(),
+                    );
                     let do_send = new_size == state.size;
                     state.size = new_size;
                     do_send
                 }) {
-                    Ok(false) if *has_configured => {
-                        trace!(self.log, "Ignoring configure event that didn’t change size")
+                    Ok(true) if *has_configured => {
+                        debug!(self.log, "Ignoring configure event that didn’t change size")
                     }
                     Ok(_) => {
-                        trace!(
+                        debug!(
                             self.log,
-                            "Sending configure event to application: width {}, height {}",
+                            "Sending configure event to application: width {}, height {}, has_configured {}",
                             width,
-                            height
+                            height,
+                            *has_configured,
                         );
                         surface.send_configure();
                         *has_configured = true;
@@ -247,7 +253,29 @@ pub fn run_qubes(log: Logger) {
                         qubes_gui::MSG_MOTION => {
                             let mut m = qubes_gui::Motion::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            trace!(log_, "Motion event: {:?}", m);
+                            debug!(log_, "Motion event: {:?}", m);
+                            let surface = e.window.try_into().ok().and_then(|s| qubes.map.get(&s));
+                            if surface.is_none() && false {
+                                error!(
+                                    agent_full.log,
+                                    "Button event for unknown window {}", e.window
+                                )
+                            }
+                            let location = (m.coordinates.x.into(), m.coordinates.y.into()).into();
+                            let focus = surface
+                                .and_then(|surface| surface.surface.get_surface())
+                                .map(|surface: &WlSurface| {
+                                    (
+                                        surface.clone(),
+                                        (m.coordinates.x as i32, m.coordinates.y as i32).into(),
+                                    )
+                                });
+                            agent_full.pointer.motion(
+                                location,
+                                focus,
+                                SERIAL_COUNTER.next_serial(),
+                                0,
+                            )
                         }
                         qubes_gui::MSG_CROSSING => {
                             let mut m = qubes_gui::Crossing::default();
@@ -270,12 +298,23 @@ pub fn run_qubes(log: Logger) {
                         qubes_gui::MSG_KEYPRESS => {
                             let mut m = qubes_gui::Keypress::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            info!(log_, "Key pressed: {:?}", m);
+                            info!(agent_full.log, "Key pressed: {:?}", m);
                         }
                         qubes_gui::MSG_BUTTON => {
                             let mut m = qubes_gui::Button::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            info!(log_, "Button event: {:?}", m);
+                            trace!(log_, "Button event: {:?}", m);
+                            let state = match m.ty {
+                                4 => ButtonState::Pressed,
+                                5 => ButtonState::Released,
+                                _ => todo!("Strange event type"),
+                            };
+                            agent_full.pointer.button(
+                                m.button,
+                                state,
+                                SERIAL_COUNTER.next_serial(),
+                                0,
+                            )
                         }
                         qubes_gui::MSG_CLIPBOARD_REQ => trace!(log_, "clipboard data requested!"),
                         qubes_gui::MSG_CLIPBOARD_DATA => trace!(log_, "clipboard data reply!"),
@@ -316,13 +355,14 @@ pub fn run_qubes(log: Logger) {
         let redraw_timer =
             calloop::timer::Timer::new().expect("not worth handling can’t create timer");
         let timer_handle = redraw_timer.handle();
-        timer_handle.add_timeout(std::time::Duration::from_millis(16), ());
-        let mut time_spent = 0;
+        let instant = std::time::Instant::now();
+        let time: u32 = 16;
+        timer_handle.add_timeout(std::time::Duration::from_millis(time.into()), ());
         handle
             .insert_source(redraw_timer, move |(), timer_handle, agent_full| {
                 // trace!(log, "Timer callback fired, reregistering!");
-                time_spent += 16;
-                timer_handle.add_timeout(std::time::Duration::from_millis(16), ());
+                let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
+                timer_handle.add_timeout(std::time::Duration::from_millis(time.into()), ());
                 let ref mut qubes = agent_full.backend_data.borrow_mut();
                 let mut dead_surfaces = vec![];
                 for (key, value) in qubes.map.iter_mut() {
@@ -333,7 +373,7 @@ pub fn run_qubes(log: Logger) {
                             continue;
                         }
                         Some(s) if !s.as_ref().is_alive() => {
-                            trace!(log, "Pushing toplevel with dead surface onto dead list");
+                            debug!(log, "Pushing toplevel with dead surface onto dead list");
                             dead_surfaces.push(*key);
                             continue;
                         }

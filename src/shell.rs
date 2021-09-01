@@ -11,14 +11,15 @@ use std::{
 use smithay::{
     backend::renderer::buffer_dimensions,
     reexports::wayland_server::{
-        protocol::{wl_buffer, wl_shm, wl_surface},
+        protocol::{wl_buffer, wl_shm, wl_surface::WlSurface},
         Display,
     },
     utils::{Logical, Physical, Point, Rectangle, Size},
     wayland::{
         compositor::{
-            compositor_init, is_sync_subsurface, with_states, with_surface_tree_upward,
-            BufferAssignment, Damage, SurfaceAttributes, TraversalAction,
+            self, compositor_init, get_parent, is_sync_subsurface, with_states,
+            with_surface_tree_downward, BufferAssignment, Damage, SurfaceAttributes,
+            TraversalAction,
         },
         shell::xdg::{self, xdg_shell_init, ShellState as XdgShellState, XdgRequest},
         shm,
@@ -65,7 +66,15 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                 };
                 let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
                 // let client = surface.client().expect("cannot receive event on a dead client; qed");
-                let id = with_states(raw_surface, |data| {
+                let (id, min_dimensions) = with_states(raw_surface, |data| {
+                    let toplevel_data = data
+                        .data_map
+                        .get::<std::sync::Mutex<xdg::XdgToplevelSurfaceRoleAttributes>>()
+                        .expect("Smithay always creates this data; qed")
+                        .lock()
+                        .expect("Poisoned?");
+                    let min_dimensions = toplevel_data.max_size;
+                    drop(toplevel_data);
                     data.data_map
                         .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
                             RefCell::new(QubesData::data(anvil_state.backend_data.clone()))
@@ -88,7 +97,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             }
                         )
                         .is_none());
-                    id
+                    (id, min_dimensions)
                 })
                 .expect("TODO: handling dead clients");
                 let ref mut agent = anvil_state.backend_data.borrow_mut().agent;
@@ -96,8 +105,8 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     rectangle: qubes_gui::Rectangle {
                         top_left: qubes_gui::Coordinates { x: 0, y: 0 },
                         size: qubes_gui::WindowSize {
-                            width: 256,
-                            height: 256,
+                            width: min_dimensions.w.max(1) as _,
+                            height: min_dimensions.h.max(1) as _,
                         },
                     },
                     parent: None,
@@ -411,7 +420,7 @@ impl SurfaceData {
     }
 }
 
-fn surface_commit(surface: &wl_surface::WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
+fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
     debug!(
         backend_data.borrow().log,
         "Got a commit for surface {:?}", surface
@@ -421,27 +430,59 @@ fn surface_commit(surface: &wl_surface::WlSurface, backend_data: &Rc<RefCell<Qub
 
     if !is_sync_subsurface(surface) {
         // Update the buffer of all child surfaces
-        with_surface_tree_upward(
+        with_surface_tree_downward(
             surface,
-            (),
-            |_, _, _| TraversalAction::DoChildren(()),
-            |_, states, _| {
-                states
+            None,
+            |_surface: &WlSurface,
+             surface_data: &compositor::SurfaceData,
+             &parent: &Option<NonZeroU32>| {
+                surface_data
                     .data_map
                     .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
-                        RefCell::new(QubesData::data(backend_data.clone()))
+                        assert!(parent.is_none());
+                        let data = RefCell::new(QubesData::data(backend_data.clone()));
+                        let msg = qubes_gui::Create {
+                            rectangle: qubes_gui::Rectangle {
+                                top_left: qubes_gui::Coordinates { x: 0, y: 0 },
+                                size: qubes_gui::WindowSize {
+                                    width: 256,
+                                    height: 256,
+                                },
+                            },
+                            parent,
+                            override_redirect: 0,
+                        };
+                        backend_data
+                            .borrow_mut()
+                            .agent
+                            .client()
+                            .send(&msg, data.borrow().window)
+                            .expect("TODO: send errors");
+                        data
                     });
-                let mut data = states
+                let res: Option<NonZeroU32> = surface_data
                     .data_map
                     .get::<RefCell<SurfaceData>>()
                     .unwrap()
-                    .borrow_mut();
-                data.update_buffer(
-                    &mut *states.cached_state.current::<SurfaceAttributes>(),
-                    &mut *backend_data.borrow_mut(),
-                );
+                    .borrow()
+                    .window
+                    .into();
+                TraversalAction::DoChildren(res)
             },
-            |_, _, _| true,
+            |_surface: &WlSurface,
+             states: &compositor::SurfaceData,
+             &parent: &Option<NonZeroU32>| {
+                states
+                    .data_map
+                    .get::<RefCell<SurfaceData>>()
+                    .unwrap()
+                    .borrow_mut()
+                    .update_buffer(
+                        &mut *states.cached_state.current::<SurfaceAttributes>(),
+                        &mut *backend_data.borrow_mut(),
+                    );
+            },
+            |_surface: &WlSurface, _surface_data, _| true,
         );
     }
 }
