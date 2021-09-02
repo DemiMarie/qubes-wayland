@@ -66,14 +66,17 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                 };
                 let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
                 // let client = surface.client().expect("cannot receive event on a dead client; qed");
-                let (id, min_dimensions) = with_states(raw_surface, |data| {
+                let (id, size) = with_states(raw_surface, |data| {
                     let toplevel_data = data
                         .data_map
-                        .get::<std::sync::Mutex<xdg::XdgToplevelSurfaceRoleAttributes>>()
+                        .get::<Mutex<xdg::XdgToplevelSurfaceRoleAttributes>>()
                         .expect("Smithay always creates this data; qed")
                         .lock()
                         .expect("Poisoned?");
-                    let min_dimensions = toplevel_data.max_size;
+                    let size = (*toplevel_data)
+                        .current
+                        .size
+                        .unwrap_or_else(|| (1, 1).into());
                     drop(toplevel_data);
                     data.data_map
                         .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
@@ -97,7 +100,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             }
                         )
                         .is_none());
-                    (id, min_dimensions)
+                    (id, size)
                 })
                 .expect("TODO: handling dead clients");
                 let ref mut agent = anvil_state.backend_data.borrow_mut().agent;
@@ -105,8 +108,8 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     rectangle: qubes_gui::Rectangle {
                         top_left: qubes_gui::Coordinates { x: 0, y: 0 },
                         size: qubes_gui::WindowSize {
-                            width: min_dimensions.w.max(1) as _,
-                            height: min_dimensions.h.max(1) as _,
+                            width: size.w.max(1) as _,
+                            height: size.h.max(1) as _,
                         },
                     },
                     parent: None,
@@ -152,7 +155,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         .get::<RefCell<SurfaceData>>()
                         .unwrap()
                         .borrow();
-                    info!(
+                    debug!(
                         anvil_state.log,
                         "A configure event was acknowledged!  Params: surface {:?}, configure {:?}",
                         surface,
@@ -251,8 +254,14 @@ pub struct SurfaceData {
 }
 
 impl SurfaceData {
-    pub fn update_buffer(&mut self, attrs: &mut SurfaceAttributes, data: &mut QubesData) {
+    pub fn update_buffer(
+        &mut self,
+        attrs: &mut SurfaceAttributes,
+        data: &mut QubesData,
+        geometry: Option<Rectangle<i32, Logical>>,
+    ) {
         debug!(data.log, "Updating buffer!");
+        info!(data.log, "Updating buffer with {:?}", attrs);
         const BYTES_PER_PIXEL: i32 = qubes_gui::DUMMY_DRV_FB_BPP as i32 / 8;
         let ref mut agent = data.agent;
         match attrs.buffer.take() {
@@ -337,10 +346,10 @@ impl SurfaceData {
                         }
                         for i in attrs.damage.drain(..) {
                             let (untrusted_loc, untrusted_size) = match i {
-                                Damage::Surface(Rectangle {
-                                    loc: Point { x, y, .. },
-                                    size: Size { w, h, .. },
-                                }) => ((x, y).into(), (w, h).into()),
+                                Damage::Surface(r) => {
+                                    let r = r.to_buffer(self.buffer_scale);
+                                    (r.loc, r.size)
+                                }
                                 Damage::Buffer(Rectangle {
                                     loc: untrusted_loc,
                                     size: untrusted_size,
@@ -360,13 +369,35 @@ impl SurfaceData {
                                 );
                                 return;
                             }
-                            let w = untrusted_size.w.min(width - untrusted_loc.x);
-                            let h = untrusted_size.w.min(height - untrusted_loc.y);
-                            let (x, y) = (untrusted_loc.x, untrusted_loc.y);
-                            let subslice =
-                                &untrusted_slice[(offset + BYTES_PER_PIXEL * x + y * stride)
-                                    .try_into()
-                                    .expect("checked above")..];
+                            let mut w = untrusted_size.w.min(width - untrusted_loc.x);
+                            let mut h = untrusted_size.w.min(height - untrusted_loc.y);
+                            let (mut x, mut y) = (untrusted_loc.x, untrusted_loc.y);
+                            // MEGA-HACK FOR QUBES
+                            //
+                            // Qubes CANNOT render outside of the bounding box.  Move the window!
+                            let (source_x, source_y) = if let Some(geometry) = geometry {
+                                let x = if geometry.loc.x > 0 && w > geometry.loc.x {
+                                    w -= geometry.loc.x;
+                                    x + geometry.loc.x
+                                } else {
+                                    x
+                                };
+                                let y = if geometry.loc.y > 0 && h > geometry.loc.y {
+                                    h -= geometry.loc.y;
+                                    y + geometry.loc.y
+                                } else {
+                                    y
+                                };
+                                (x, y)
+                            } else {
+                                (x, y)
+                            };
+
+                            let subslice = &untrusted_slice[(offset
+                                + BYTES_PER_PIXEL * source_x
+                                + source_y * stride)
+                                .try_into()
+                                .expect("checked above")..];
                             // trace!(data.log, "Copying data!");
                             let bytes_to_write: usize = (BYTES_PER_PIXEL * w).try_into().unwrap();
                             for i in 0..h {
@@ -472,6 +503,10 @@ fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
             |_surface: &WlSurface,
              states: &compositor::SurfaceData,
              &parent: &Option<NonZeroU32>| {
+                let geometry = states
+                    .cached_state
+                    .current::<xdg::SurfaceCachedState>()
+                    .geometry;
                 states
                     .data_map
                     .get::<RefCell<SurfaceData>>()
@@ -480,6 +515,7 @@ fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
                     .update_buffer(
                         &mut *states.cached_state.current::<SurfaceAttributes>(),
                         &mut *backend_data.borrow_mut(),
+                        geometry,
                     );
             },
             |_surface: &WlSurface, _surface_data, _| true,

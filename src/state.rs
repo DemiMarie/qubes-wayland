@@ -10,10 +10,10 @@ use std::{
 use smithay::{
     reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
-        wayland_server::Display,
+        wayland_server::{protocol::wl_data_device_manager::DndAction, Display},
     },
     wayland::{
-        data_device::set_data_device_focus,
+        data_device::{init_data_device, set_data_device_focus},
         output::xdg::init_xdg_output_manager,
         seat::{CursorImageStatus, KeyboardHandle, PointerHandle, Seat, XkbConfig},
         shm::init_shm_global,
@@ -132,6 +132,12 @@ impl AnvilState {
         let pointer =
             seat.add_pointer(move |new_status| *cursor_status2.lock().unwrap() = new_status);
 
+        init_data_device(
+            &mut display.borrow_mut(),
+            drop,
+            |_, _| DndAction::empty(),
+            log.clone(),
+        );
         init_tablet_manager_global(&mut display.borrow_mut());
 
         let cursor_status3 = cursor_status.clone();
