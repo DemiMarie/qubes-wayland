@@ -260,10 +260,26 @@ impl SurfaceData {
             BufferAssignment::NewBuffer { buffer, .. } => {
                 debug!(data.log, "New buffer");
                 // new contents
-                self.buffer_dimensions = buffer_dimensions(&buffer);
+                let size = match buffer_dimensions(&buffer) {
+                    None => {
+                        buffer.as_ref().post_error(
+                            wl_shm::Error::InvalidStride as u32,
+                            "Cannot have a buffer with no size".into(),
+                        );
+                        return;
+                    }
+                    Some(size) => size,
+                };
                 self.buffer_scale = scale;
-                let Size { w, h, .. } = buffer_dimensions(&buffer).unwrap();
-                assert!(w > 0 && h > 0, "NYI: posting an error to the client");
+                self.buffer_dimensions = Some(size);
+                let Size { w, h, .. } = size;
+                if w <= 0 || h <= 0 {
+                    buffer.as_ref().post_error(
+                        wl_shm::Error::InvalidFd as u32,
+                        "Buffer size not valid".into(),
+                    );
+                    return;
+                }
                 let qbuf = agent.alloc_buffer(w as _, h as _).expect("TODO");
                 qbuf.dump(agent.client(), self.window.into()).expect("TODO");
                 if let Some(old_buffer) = std::mem::replace(&mut self.buffer, Some((buffer, qbuf)))
