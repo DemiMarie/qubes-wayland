@@ -29,6 +29,8 @@ pub const OUTPUT_NAME: &str = "qubes";
 pub struct QubesData {
     pub agent: qubes_gui_client::agent::Agent,
     wid: u32,
+    last_width: u32,
+    last_height: u32,
     pub map: BTreeMap<NonZeroU32, QubesBackendData>,
     pub log: slog::Logger,
     buf: qubes_gui_client::agent::Buffer,
@@ -146,17 +148,36 @@ impl QubesData {
         window: NonZeroU32,
     ) -> std::io::Result<()> {
         let qubes_gui::WindowSize { width, height } = m.rectangle.size;
-        drop(std::mem::replace(
-            &mut self.buf,
-            self.agent.alloc_buffer(width, height).unwrap(),
-        ));
-        let shade = vec![0xFF00u32; (width * height / 2).try_into().unwrap()];
-        self.buf.dump(self.agent.client(), window.into())?;
+        if width == self.last_width && height == self.last_height {
+            // no redraw needed
+            return Ok(());
+        }
+        let mut need_dump = false;
+        if self.last_width * self.last_height != width * height {
+            drop(std::mem::replace(
+                &mut self.buf,
+                self.agent.alloc_buffer(width, height).unwrap(),
+            ));
+            need_dump = true;
+        }
+        self.last_width = width;
+        self.last_height = height;
+        let lines = height / 2;
+        let line_width = width * 4;
+        let shade = vec![0xFF00u32; (lines * width).try_into().unwrap()];
         self.buf.write(
             qubes_castable::as_bytes(&shade[..]),
-            (width * height / 4 * 4).try_into().unwrap(),
+            ((height / 4) * line_width).try_into().unwrap(),
         );
-        self.agent.client().send(&m, window)
+        if need_dump {
+            self.buf.dump(self.agent.client(), window.into())?;
+        }
+        let client = self.agent.client();
+        client.send(&m, window)?;
+        let output_message = qubes_gui::ShmImage {
+            rectangle: m.rectangle,
+        };
+        client.send(&output_message, window)
     }
 }
 
@@ -212,6 +233,8 @@ pub fn run_qubes(log: Logger) {
         wid: 2,
         map: BTreeMap::default(),
         log: log.clone(),
+        last_width: 0,
+        last_height: 0,
         buf,
     };
     let mut state = AnvilState::init(
