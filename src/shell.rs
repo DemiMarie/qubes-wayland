@@ -254,22 +254,14 @@ pub struct SurfaceData {
 }
 
 impl SurfaceData {
-    pub fn update_buffer(
-        &mut self,
-        attrs: &mut SurfaceAttributes,
-        data: &mut QubesData,
-        geometry: Option<Rectangle<i32, Logical>>,
-    ) {
-        debug!(data.log, "Updating buffer!");
-        info!(data.log, "Updating buffer with {:?}", attrs);
-        const BYTES_PER_PIXEL: i32 = qubes_gui::DUMMY_DRV_FB_BPP as i32 / 8;
-        let ref mut agent = data.agent;
-        match attrs.buffer.take() {
-            Some(BufferAssignment::NewBuffer { buffer, .. }) => {
+    fn process_new_buffers(&mut self, attrs: BufferAssignment, data: &mut QubesData, scale: i32) {
+        let agent = &mut data.agent;
+        match attrs {
+            BufferAssignment::NewBuffer { buffer, .. } => {
                 debug!(data.log, "New buffer");
                 // new contents
                 self.buffer_dimensions = buffer_dimensions(&buffer);
-                self.buffer_scale = attrs.buffer_scale;
+                self.buffer_scale = scale;
                 let Size { w, h, .. } = buffer_dimensions(&buffer).unwrap();
                 assert!(w > 0 && h > 0, "NYI: posting an error to the client");
                 let qbuf = agent.alloc_buffer(w as _, h as _).expect("TODO");
@@ -280,14 +272,27 @@ impl SurfaceData {
                     drop(old_buffer.1);
                 }
             }
-            Some(BufferAssignment::Removed) => {
+            BufferAssignment::Removed => {
                 // remove the contents
                 debug!(data.log, "Removing buffer");
                 self.buffer = None;
                 self.buffer_dimensions = None;
             }
-            None => {}
         }
+    }
+
+    pub fn update_buffer(
+        &mut self,
+        attrs: &mut SurfaceAttributes,
+        data: &mut QubesData,
+        geometry: Option<Rectangle<i32, Logical>>,
+    ) {
+        debug!(data.log, "Updating buffer with {:?}", attrs);
+        const BYTES_PER_PIXEL: i32 = qubes_gui::DUMMY_DRV_FB_BPP as i32 / 8;
+        if let Some(assignment) = attrs.buffer.take() {
+            self.process_new_buffers(assignment, data, attrs.buffer_scale)
+        }
+        let ref mut agent = data.agent;
         debug!(data.log, "Damage: {:?}!", &attrs.damage);
         let client = agent.client();
         if !attrs.damage.is_empty() {
