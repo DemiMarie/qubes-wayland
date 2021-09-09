@@ -333,7 +333,8 @@ pub fn run_qubes(log: Logger) {
                                 error!(agent_full.log, "Bad keycode from X11: {}", m.keycode);
                                 return Ok(calloop::PostAction::Continue);
                             }
-                            info!(agent_full.log, "Key pressed: {:?}", m);
+                            // NOT A GOOD IDEA: this is sensitive information
+                            // info!(agent_full.log, "Key pressed: {:?}", m);
                             let (state, timeout) = match m.ty {
                                 2 => (KeyState::Pressed, 0),
                                 3 => (KeyState::Released, 0),
