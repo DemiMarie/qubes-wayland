@@ -70,6 +70,7 @@ impl QubesData {
             buffer_scale: 0,
             window,
             qubes,
+            buffer_swapped: false,
         }
     }
 

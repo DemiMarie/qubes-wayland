@@ -248,6 +248,7 @@ pub struct SurfaceData {
     pub buffer: Option<(wl_buffer::WlBuffer, qubes_gui_client::agent::Buffer)>,
     pub geometry: Option<Rectangle<i32, Logical>>,
     pub buffer_dimensions: Option<Size<i32, Physical>>,
+    pub buffer_swapped: bool,
     pub buffer_scale: i32,
     pub window: std::num::NonZeroU32,
     pub qubes: Rc<RefCell<QubesData>>,
@@ -281,7 +282,7 @@ impl SurfaceData {
                     return;
                 }
                 let qbuf = agent.alloc_buffer(w as _, h as _).expect("TODO");
-                qbuf.dump(agent.client(), self.window.into()).expect("TODO");
+                self.buffer_swapped = true;
                 if let Some(old_buffer) = std::mem::replace(&mut self.buffer, Some((buffer, qbuf)))
                 {
                     old_buffer.0.release();
@@ -358,7 +359,7 @@ impl SurfaceData {
                         let width = untrusted_width;
                         let height = untrusted_height;
                         let stride = untrusted_stride;
-                        if !attrs.damage.is_empty() && false {
+                        if !attrs.damage.is_empty() && true {
                             attrs.damage.clear();
                             attrs.damage.push(Damage::Buffer(Rectangle {
                                 loc: (0, 0).into(),
@@ -392,7 +393,7 @@ impl SurfaceData {
                             }
                             let mut w = untrusted_size.w.min(width - untrusted_loc.x);
                             let mut h = untrusted_size.w.min(height - untrusted_loc.y);
-                            let (mut x, mut y) = (untrusted_loc.x, untrusted_loc.y);
+                            let (x, y) = (untrusted_loc.x, untrusted_loc.y);
                             // MEGA-HACK FOR QUBES
                             //
                             // Qubes CANNOT render outside of the bounding box.  Move the window!
@@ -431,26 +432,36 @@ impl SurfaceData {
                                     &subslice[start_offset..bytes_to_write + start_offset],
                                     offset_in_dest_buffer,
                                 );
-                                let output_message = qubes_gui::ShmImage {
-                                    rectangle: qubes_gui::Rectangle {
-                                        top_left: qubes_gui::Coordinates {
-                                            x: x as u32,
-                                            y: y as u32,
-                                        },
-                                        size: qubes_gui::WindowSize {
-                                            width: w as u32,
-                                            height: w as u32,
-                                        },
-                                    },
-                                };
-                                client
-                                    .send(&output_message, self.window.into())
-                                    .expect("TODO");
                             }
+                            let output_message = qubes_gui::ShmImage {
+                                rectangle: qubes_gui::Rectangle {
+                                    top_left: qubes_gui::Coordinates {
+                                        x: x as u32,
+                                        y: y as u32,
+                                    },
+                                    size: qubes_gui::WindowSize {
+                                        width: w as u32,
+                                        height: w as u32,
+                                    },
+                                },
+                            };
+                            client
+                                .send(&output_message, self.window.into())
+                                .expect("TODO");
                         }
                     },
                 ) {
-                    Ok(()) => attrs.damage.clear(),
+                    Ok(()) => {
+                        if self.buffer_swapped {
+                            self.buffer
+                                .as_ref()
+                                .expect("buffer_swapped never set unless a buffer is present; qed")
+                                .1
+                                .dump(agent.client(), self.window.into())
+                                .expect("TODO");
+                        }
+                        attrs.damage.clear()
+                    }
                     Err(shm::BufferAccessError::NotManaged) => panic!("strange shm buffer"),
                     Err(shm::BufferAccessError::BadMap) => return,
                 }
