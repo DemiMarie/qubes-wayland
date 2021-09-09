@@ -37,8 +37,6 @@ pub struct QubesData {
 }
 
 pub struct QubesBackendData {
-    /// Surface ID
-    //pub id: NonZeroU32,
     /// Toplevel surface
     pub surface: ToplevelSurface,
     /// Whether the surface has been configured
