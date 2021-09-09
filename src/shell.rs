@@ -51,7 +51,6 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
         },
         log.clone(),
     );
-    let log_ = log.clone();
     let (xdg_shell_state, _, _) = xdg_shell_init(
         &mut *display.borrow_mut(),
         move |shell_event, mut _dispatch_data| match shell_event {
@@ -60,7 +59,11 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     Some(s) => s,
                     // If there is no underlying surface just ignore the request
                     None => {
-                        debug!(log, "Ignoring request to create window with no surface");
+                        let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
+                        debug!(
+                            anvil_state.log,
+                            "Ignoring request to create window with no surface"
+                        );
                         return;
                     }
                 };
@@ -116,7 +119,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     parent: None,
                     override_redirect: 0,
                 };
-                debug!(log, "Creating window {}", id);
+                debug!(anvil_state.log, "Creating window {}", id);
                 agent.client().send(&msg, id).expect("TODO: send errors");
                 let msg = qubes_gui::Configure {
                     rectangle: msg.rectangle,
@@ -211,7 +214,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     return;
                 };
                 let _msg = qubes_gui::WindowFlags { set: 1, unset: 0 };
-                todo!()
+                return;
             }
             XdgRequest::UnMaximize { surface } => {
                 let _anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
@@ -235,9 +238,13 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     })
                     .expect("New clients are not dead");
             }
-            other => println!("Got an unhandled event: {:?}", other),
+            XdgRequest::ClientPong { client: _ } => {}
+            other => {
+                let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
+                info!(anvil_state.log, "Got an unhandled event: {:?}", other);
+            }
         },
-        log_,
+        log,
     );
 
     ShellHandles {

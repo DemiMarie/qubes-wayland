@@ -152,7 +152,7 @@ impl AnvilState {
                 set_data_device_focus(seat, focus.and_then(|s| s.as_ref().client()))
             })
             .expect("Failed to initialize the keyboard");
-        keyboard.change_repeat_info(0, 0);
+        keyboard.change_repeat_info(1, i32::MAX);
 
         #[cfg(feature = "xwayland")]
         let xwayland = {
