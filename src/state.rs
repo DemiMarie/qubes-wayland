@@ -122,7 +122,7 @@ impl AnvilState {
         };
 
         // init input
-        let seat_name = backend_data.seat_name();
+        let seat_name = String::from("Qubes Virtual Seat");
 
         let (mut seat, _) = Seat::new(&mut display.borrow_mut(), seat_name.clone(), log.clone());
 

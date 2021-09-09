@@ -22,7 +22,7 @@ use smithay::{
 use slog::Logger;
 
 use crate::shell::SurfaceData;
-use crate::state::{AnvilState, Backend};
+use crate::state::AnvilState;
 
 pub const OUTPUT_NAME: &str = "qubes";
 
@@ -41,12 +41,6 @@ pub struct QubesBackendData {
     pub surface: ToplevelSurface,
     /// Whether the surface has been configured
     pub has_configured: bool,
-}
-
-impl Backend for QubesData {
-    fn seat_name(&self) -> String {
-        String::from("qubes")
-    }
 }
 
 impl QubesData {
