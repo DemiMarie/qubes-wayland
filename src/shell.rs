@@ -97,6 +97,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             super::qubes::QubesBackendData {
                                 surface: surface.clone(),
                                 has_configured: false,
+                                coordinates: Default::default(),
                             }
                         )
                         .is_none());
