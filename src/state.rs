@@ -79,33 +79,6 @@ impl AnvilState {
         let _shell_handles = init_shell(display.clone(), log.clone());
 
         init_xdg_output_manager(&mut display.borrow_mut(), log.clone());
-        #[cfg(any())]
-        init_xdg_activation_global(
-            &mut display.borrow_mut(),
-            |state, req, mut ddata| {
-                let anvil_state = ddata.get::<AnvilState>().unwrap();
-                match req {
-                    XdgActivationEvent::RequestActivation {
-                        token,
-                        token_data,
-                        surface,
-                    } => {
-                        if token_data.timestamp.elapsed().as_secs() < 10 {
-                            // Just grant the wish
-                            anvil_state
-                                .window_map
-                                .borrow_mut()
-                                .bring_surface_to_top(&surface);
-                        } else {
-                            // Discard the request
-                            state.lock().unwrap().remove_request(&token);
-                        }
-                    }
-                    XdgActivationEvent::DestroyActivationRequest { .. } => {}
-                }
-            },
-            log.clone(),
-        );
 
         let socket_name = if listen_on_socket {
             let socket_name = display
