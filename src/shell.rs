@@ -383,7 +383,6 @@ impl SurfaceData {
         }
         let ref mut agent = data.agent;
         debug!(data.log, "Damage: {:?}!", &attrs.damage);
-        let client = agent.client();
         if !attrs.damage.is_empty() {
             if let Some((buffer, qbuf)) = self.buffer.as_ref() {
                 debug!(data.log, "Performing damage calculation");
@@ -406,8 +405,8 @@ impl SurfaceData {
                                 size: (width, height).into(),
                             }));
                         }
-                        for i in attrs.damage.drain(..) {
-                            let (untrusted_loc, untrusted_size) = match i {
+                        for i in &attrs.damage {
+                            let (untrusted_loc, untrusted_size) = match *i {
                                 Damage::Surface(r) => {
                                     let r = r.to_buffer(self.buffer_scale);
                                     (r.loc, r.size)
@@ -429,7 +428,7 @@ impl SurfaceData {
                                     wl_shm::Error::InvalidStride as u32,
                                     "Invalid damage region".to_owned(),
                                 );
-                                return;
+                                return None;
                             }
                             let mut w = untrusted_size.w.min(width - untrusted_loc.x);
                             let mut h = untrusted_size.w.min(height - untrusted_loc.y);
@@ -473,25 +472,11 @@ impl SurfaceData {
                                     offset_in_dest_buffer,
                                 );
                             }
-                            let output_message = qubes_gui::ShmImage {
-                                rectangle: qubes_gui::Rectangle {
-                                    top_left: qubes_gui::Coordinates {
-                                        x: x as u32,
-                                        y: y as u32,
-                                    },
-                                    size: qubes_gui::WindowSize {
-                                        width: w as u32,
-                                        height: w as u32,
-                                    },
-                                },
-                            };
-                            client
-                                .send(&output_message, self.window.into())
-                                .expect("TODO");
                         }
+                        return Some((width, height, std::mem::replace(&mut attrs.damage, vec![])));
                     },
                 ) {
-                    Ok(()) => {
+                    Ok(Some((width, height, damage))) => {
                         if self.buffer_swapped {
                             self.buffer
                                 .as_ref()
@@ -500,10 +485,37 @@ impl SurfaceData {
                                 .dump(agent.client(), self.window.into())
                                 .expect("TODO");
                         }
-                        attrs.damage.clear()
+                        for i in damage {
+                            let (loc, size) = match i {
+                                Damage::Surface(r) => {
+                                    let r = r.to_buffer(self.buffer_scale);
+                                    (r.loc, r.size)
+                                }
+                                Damage::Buffer(Rectangle { loc, size }) => (loc, size),
+                            };
+                            let w = size.w.min(width - loc.x);
+                            let h = size.w.min(height - loc.y);
+                            let (x, y) = (loc.x, loc.y);
+                            let output_message = qubes_gui::ShmImage {
+                                rectangle: qubes_gui::Rectangle {
+                                    top_left: qubes_gui::Coordinates {
+                                        x: x as u32,
+                                        y: y as u32,
+                                    },
+                                    size: qubes_gui::WindowSize {
+                                        width: w as u32,
+                                        height: h as u32,
+                                    },
+                                },
+                            };
+                            agent
+                                .client()
+                                .send(&output_message, self.window.into())
+                                .expect("TODO");
+                        }
                     }
                     Err(shm::BufferAccessError::NotManaged) => panic!("strange shm buffer"),
-                    Err(shm::BufferAccessError::BadMap) => return,
+                    Err(shm::BufferAccessError::BadMap) | Ok(None) => return,
                 }
             }
         }
