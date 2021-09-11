@@ -344,7 +344,7 @@ pub fn run_qubes(log: Logger) {
                                 time_spent,
                                 |_, _| true,
                             );
-                            info!(agent_full.log, "Keypress sent to client");
+                            trace!(agent_full.log, "Keypress sent to client");
                             if let Some(surface) = e
                                 .window
                                 .try_into()
