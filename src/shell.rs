@@ -1,4 +1,3 @@
-#![allow(dead_code, unused_imports)]
 use std::{
     cell::RefCell,
     collections::BTreeMap,
@@ -9,17 +8,15 @@ use std::{
 };
 
 use smithay::{
-    backend::renderer::buffer_dimensions,
     reexports::wayland_server::{
         protocol::{wl_buffer, wl_shm, wl_surface::WlSurface},
         Display,
     },
-    utils::{Logical, Physical, Point, Rectangle, Size},
+    utils::{Logical, Physical, Rectangle, Size},
     wayland::{
         compositor::{
-            self, compositor_init, get_parent, is_sync_subsurface, with_states,
-            with_surface_tree_downward, BufferAssignment, Damage, SurfaceAttributes,
-            TraversalAction,
+            self, compositor_init, is_sync_subsurface, with_states, with_surface_tree_downward,
+            BufferAssignment, Damage, SurfaceAttributes, TraversalAction,
         },
         shell::xdg::{self, xdg_shell_init, ShellState as XdgShellState, XdgRequest},
         shm,
@@ -27,7 +24,6 @@ use smithay::{
 };
 
 use crate::{qubes::QubesData, state::AnvilState};
-use qubes_gui::Message as _;
 
 #[derive(Clone)]
 pub struct ShellHandles {
@@ -68,7 +64,6 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     }
                 };
                 let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
-                // let client = surface.client().expect("cannot receive event on a dead client; qed");
                 let (id, size) = with_states(raw_surface, |data| {
                     let toplevel_data = data
                         .data_map
@@ -79,7 +74,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     let size = (*toplevel_data)
                         .current
                         .size
-                        .unwrap_or_else(|| (1, 1).into());
+                        .unwrap_or_else(|| (256, 256).into());
                     drop(toplevel_data);
                     data.data_map
                         .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
@@ -88,7 +83,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     let id = data
                         .data_map
                         .get::<RefCell<SurfaceData>>()
-                        .unwrap()
+                        .expect("this data was just inserted above, so it will be present; qed")
                         .borrow()
                         .window;
                     assert!(anvil_state
@@ -251,6 +246,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
         xdg_state: xdg_shell_state,
     }
 }
+const BYTES_PER_PIXEL: i32 = qubes_gui::DUMMY_DRV_FB_BPP as i32 / 8;
 
 pub struct SurfaceData {
     pub buffer: Option<(wl_buffer::WlBuffer, qubes_gui_client::agent::Buffer)>,
@@ -263,33 +259,100 @@ pub struct SurfaceData {
 }
 
 impl SurfaceData {
+    fn process_new_buffer(
+        &mut self,
+        untrusted_slice: &[u8],
+        shm::BufferData {
+            offset: untrusted_offset,
+            width: untrusted_width,
+            height: untrusted_height,
+            stride: untrusted_stride,
+            format: _, // already validated
+        }: shm::BufferData,
+        buffer: &wl_buffer::WlBuffer,
+    ) {
+        let buffer_length: i32 =
+            i32::try_from(untrusted_slice.len()).expect("Smithay rejects bad pool sizes");
+        // SANTIIZE START
+        if untrusted_width <= 0
+            || untrusted_height <= 0
+            || untrusted_width > qubes_gui::MAX_WINDOW_WIDTH as _
+            || untrusted_height > qubes_gui::MAX_WINDOW_HEIGHT as _
+        {
+            buffer.as_ref().post_error(
+                wl_shm::Error::InvalidStride as u32,
+                format!(
+                    "Dimensions {}x{} not valid: must be between 1x1 and {}x{} inclusive",
+                    untrusted_width,
+                    untrusted_height,
+                    qubes_gui::MAX_WINDOW_WIDTH,
+                    qubes_gui::MAX_WINDOW_HEIGHT,
+                ),
+            );
+            return;
+        }
+        if untrusted_stride / BYTES_PER_PIXEL < untrusted_width {
+            buffer.as_ref().post_error(
+                wl_shm::Error::InvalidStride as u32,
+                panic!(
+                    "Stride {} too small for width {}",
+                    untrusted_stride, untrusted_width
+                ),
+            );
+            return;
+        }
+        if untrusted_offset < 0
+            || untrusted_offset >= buffer_length
+            || i32::checked_mul(untrusted_stride, untrusted_height)
+                .map(|untrusted_length| buffer_length - untrusted_offset < untrusted_length)
+                .unwrap_or(true)
+        {
+            let msg = format!(
+                "bad pool: offset {} stride {} width {} height {} buffer length {}",
+                untrusted_offset,
+                untrusted_stride,
+                untrusted_width,
+                untrusted_height,
+                buffer_length
+            );
+            buffer
+                .as_ref()
+                .post_error(wl_shm::Error::InvalidStride as u32, msg);
+            return;
+        }
+        // SANITIZE END
+        self.buffer_dimensions = Some((untrusted_width, untrusted_height).into());
+    }
     fn process_new_buffers(&mut self, attrs: BufferAssignment, data: &mut QubesData, scale: i32) {
         let agent = &mut data.agent;
+        self.buffer_dimensions = None;
         match attrs {
             BufferAssignment::NewBuffer { buffer, .. } => {
                 debug!(data.log, "New buffer");
                 // new contents
-                let size = match buffer_dimensions(&buffer) {
-                    None => {
-                        buffer.as_ref().post_error(
-                            wl_shm::Error::InvalidStride as u32,
-                            "Cannot have a buffer with no size".into(),
-                        );
-                        return;
-                    }
-                    Some(size) => size,
-                };
-                self.buffer_scale = scale;
-                self.buffer_dimensions = Some(size);
-                let Size { w, h, .. } = size;
-                if w <= 0 || h <= 0 {
-                    buffer.as_ref().post_error(
-                        wl_shm::Error::InvalidFd as u32,
-                        "Buffer size not valid".into(),
-                    );
+                if shm::with_buffer_contents(&buffer, |a, b| self.process_new_buffer(a, b, &buffer))
+                    .is_err()
+                {
+                    let err = "internal error: bad buffer not rejected by Smithay".into();
+                    buffer.as_ref().post_error(3, err);
                     return;
                 }
-                let qbuf = agent.alloc_buffer(w as _, h as _).expect("TODO");
+
+                let Size { w, h, .. } = match self.buffer_dimensions {
+                    None => return, // invalid data
+                    Some(data) => data,
+                };
+                self.buffer_scale = scale;
+                let qbuf = match agent.alloc_buffer(w as _, h as _) {
+                    Err(_) => {
+                        // 2 is no_memory
+                        buffer
+                            .as_ref()
+                            .post_error(2, "Failed to allocate Xen shared memory".into());
+                        return;
+                    }
+                    Ok(qbuf) => qbuf,
+                };
                 self.buffer_swapped = true;
                 if let Some(old_buffer) = std::mem::replace(&mut self.buffer, Some((buffer, qbuf)))
                 {
@@ -301,7 +364,6 @@ impl SurfaceData {
                 // remove the contents
                 debug!(data.log, "Removing buffer");
                 self.buffer = None;
-                self.buffer_dimensions = None;
             }
         }
     }
@@ -313,9 +375,11 @@ impl SurfaceData {
         geometry: Option<Rectangle<i32, Logical>>,
     ) {
         debug!(data.log, "Updating buffer with {:?}", attrs);
-        const BYTES_PER_PIXEL: i32 = qubes_gui::DUMMY_DRV_FB_BPP as i32 / 8;
         if let Some(assignment) = attrs.buffer.take() {
             self.process_new_buffers(assignment, data, attrs.buffer_scale)
+        }
+        if self.buffer_dimensions.is_none() {
+            return;
         }
         let ref mut agent = data.agent;
         debug!(data.log, "Damage: {:?}!", &attrs.damage);
@@ -328,45 +392,13 @@ impl SurfaceData {
                     buffer,
                     |untrusted_slice: &[u8],
                      shm::BufferData {
-                         offset: untrusted_offset,
-                         width: untrusted_width,
-                         height: untrusted_height,
-                         stride: untrusted_stride,
-                         format: _, // already validated
+                         offset,
+                         width,
+                         height,
+                         stride,
+                         format: _,
                      }| {
                         debug!(log, "Updating buffer with damaged areas");
-                        // SANTIIZE START
-                        let low_len: i32 = match i32::try_from(untrusted_slice.len()) {
-                            Err(_) => {
-                                buffer.as_ref().post_error(
-                                    wl_shm::Error::InvalidFd as u32,
-                                    "Pool size not valid".into(),
-                                );
-                                return;
-                            }
-                            Ok(l) => l,
-                        };
-                        if untrusted_offset < 0
-                            || untrusted_height <= 0
-                            || untrusted_width <= 0
-                            || untrusted_stride / BYTES_PER_PIXEL < untrusted_width
-                            || i32::checked_mul(untrusted_stride, untrusted_height)
-                                .map(|product| {
-                                    low_len < product || untrusted_offset > low_len - product
-                                })
-                                .unwrap_or(true)
-                        {
-                            buffer.as_ref().post_error(
-                                wl_shm::Error::InvalidStride as u32,
-                                "Parameters not valid".into(),
-                            );
-                            return;
-                        }
-                        // SANITIZE END
-                        let offset = untrusted_offset;
-                        let width = untrusted_width;
-                        let height = untrusted_height;
-                        let stride = untrusted_stride;
                         if !attrs.damage.is_empty() && true {
                             attrs.damage.clear();
                             attrs.damage.push(Damage::Buffer(Rectangle {
@@ -542,7 +574,7 @@ fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
             },
             |_surface: &WlSurface,
              states: &compositor::SurfaceData,
-             &parent: &Option<NonZeroU32>| {
+             &_parent: &Option<NonZeroU32>| {
                 let geometry = states
                     .cached_state
                     .current::<xdg::SurfaceCachedState>()

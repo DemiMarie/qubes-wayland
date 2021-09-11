@@ -8,10 +8,7 @@ use smithay::{
     backend::input::KeyState,
     reexports::{
         calloop::{self, generic::Generic, EventLoop, Interest},
-        wayland_server::{
-            protocol::{wl_pointer::ButtonState, wl_surface::WlSurface},
-            Display,
-        },
+        wayland_server::{protocol::wl_pointer::ButtonState, Display},
     },
     utils::{Logical, Point},
     wayland::{
@@ -335,9 +332,9 @@ pub fn run_qubes(log: Logger) {
                             }
                             // NOT A GOOD IDEA: this is sensitive information
                             // info!(agent_full.log, "Key pressed: {:?}", m);
-                            let (state, timeout) = match m.ty {
-                                2 => (KeyState::Pressed, 0),
-                                3 => (KeyState::Released, 0),
+                            let state = match m.ty {
+                                2 => KeyState::Pressed,
+                                3 => KeyState::Released,
                                 _ => todo!(),
                             };
                             agent_full.keyboard.input(
@@ -355,7 +352,10 @@ pub fn run_qubes(log: Logger) {
                                 .and_then(|s| qubes.map.get(&s))
                                 .and_then(|s| s.surface.client())
                             {
-                                surface.send_ping(SERIAL_COUNTER.next_serial());
+                                if false && surface.send_ping(SERIAL_COUNTER.next_serial()).is_err()
+                                {
+                                    // ignore for now
+                                }
                             }
                         }
                         qubes_gui::MSG_BUTTON => {
