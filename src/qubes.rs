@@ -367,7 +367,7 @@ pub fn run_qubes(log: Logger) {
                                 5 => ButtonState::Released,
                                 _ => todo!("Strange event type"),
                             };
-                            info!(agent_full.log, "Sending button Button event: {:?}", m);
+                            info!(agent_full.log, "Sending button event: {:?}", m);
                             agent_full.pointer.button(
                                 m.button,
                                 state,
