@@ -49,194 +49,188 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
     );
     let (xdg_shell_state, _, _) = xdg_shell_init(
         &mut *display.borrow_mut(),
-        move |shell_event, mut _dispatch_data| match shell_event {
-            XdgRequest::NewToplevel { surface } => {
-                let raw_surface = match surface.get_surface() {
-                    Some(s) => s,
-                    // If there is no underlying surface just ignore the request
-                    None => {
-                        let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
-                        debug!(
-                            anvil_state.log,
-                            "Ignoring request to create window with no surface"
-                        );
-                        return;
-                    }
-                };
-                let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
-                let (id, size) = with_states(raw_surface, |data| {
-                    let toplevel_data = data
-                        .data_map
-                        .get::<Mutex<xdg::XdgToplevelSurfaceRoleAttributes>>()
-                        .expect("Smithay always creates this data; qed")
-                        .lock()
-                        .expect("Poisoned?");
-                    let size = (*toplevel_data)
-                        .current
-                        .size
-                        .unwrap_or_else(|| (256, 256).into());
-                    drop(toplevel_data);
-                    data.data_map
-                        .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
-                            RefCell::new(QubesData::data(anvil_state.backend_data.clone()))
-                        });
-                    let id = data
-                        .data_map
-                        .get::<RefCell<SurfaceData>>()
-                        .expect("this data was just inserted above, so it will be present; qed")
-                        .borrow()
-                        .window;
-                    assert!(anvil_state
-                        .backend_data
-                        .borrow_mut()
-                        .map
-                        .insert(
-                            id,
-                            super::qubes::QubesBackendData {
-                                surface: surface.clone(),
-                                has_configured: false,
-                                coordinates: Default::default(),
-                            }
-                        )
-                        .is_none());
-                    (id, size)
-                })
-                .expect("TODO: handling dead clients");
-                let ref mut agent = anvil_state.backend_data.borrow_mut().agent;
-                let msg = qubes_gui::Create {
-                    rectangle: qubes_gui::Rectangle {
-                        top_left: qubes_gui::Coordinates { x: 0, y: 0 },
-                        size: qubes_gui::WindowSize {
-                            width: size.w.max(1) as _,
-                            height: size.h.max(1) as _,
-                        },
-                    },
-                    parent: None,
-                    override_redirect: 0,
-                };
-                debug!(anvil_state.log, "Creating window {}", id);
-                agent.client().send(&msg, id).expect("TODO: send errors");
-                let msg = qubes_gui::Configure {
-                    rectangle: msg.rectangle,
-                    override_redirect: msg.override_redirect,
-                };
-                agent.client().send(&msg, id).expect("TODO: send errors");
-                agent
-                    .client()
-                    .send(
-                        &qubes_gui::MapInfo {
-                            override_redirect: 0,
-                            transient_for: 0,
-                        },
-                        id,
-                    )
-                    .unwrap();
-            }
-            XdgRequest::NewPopup {
-                surface: _,
-                positioner: _,
-            } => {
-                todo!()
-            }
-            XdgRequest::AckConfigure { surface, configure } => {
-                let configure = match configure {
-                    xdg::Configure::Toplevel(configure) => configure,
-                    xdg::Configure::Popup(_) => todo!("Popup configures"),
-                };
-                with_states(&surface, |data| {
-                    let mut anvil_state = _dispatch_data
-                        .get::<AnvilState>()
-                        .unwrap()
-                        .backend_data
-                        .borrow_mut();
-                    let state = data
-                        .data_map
-                        .get::<RefCell<SurfaceData>>()
-                        .unwrap()
-                        .borrow();
-                    debug!(
-                        anvil_state.log,
-                        "A configure event was acknowledged!  Params: surface {:?}, configure {:?}",
-                        surface,
-                        configure
-                    );
-                    let size = configure.state.size.unwrap_or_else(|| (1, 1).into());
-                    let msg = &qubes_gui::Configure {
+        move |shell_event, mut dispatch_data| {
+            let anvil_state = dispatch_data.get::<AnvilState>().unwrap();
+            match shell_event {
+                XdgRequest::NewToplevel { surface } => {
+                    let raw_surface = match surface.get_surface() {
+                        Some(s) => s,
+                        // If there is no underlying surface just ignore the request
+                        None => {
+                            debug!(
+                                anvil_state.log,
+                                "Ignoring request to create window with no surface"
+                            );
+                            return;
+                        }
+                    };
+                    let (id, size) = with_states(raw_surface, |data| {
+                        let toplevel_data = data
+                            .data_map
+                            .get::<Mutex<xdg::XdgToplevelSurfaceRoleAttributes>>()
+                            .expect("Smithay always creates this data; qed")
+                            .lock()
+                            .expect("Poisoned?");
+                        let size = (*toplevel_data)
+                            .current
+                            .size
+                            .unwrap_or_else(|| (256, 256).into());
+                        drop(toplevel_data);
+                        data.data_map
+                            .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
+                                RefCell::new(QubesData::data(anvil_state.backend_data.clone()))
+                            });
+                        let id = data
+                            .data_map
+                            .get::<RefCell<SurfaceData>>()
+                            .expect("this data was just inserted above, so it will be present; qed")
+                            .borrow()
+                            .window;
+                        assert!(anvil_state
+                            .backend_data
+                            .borrow_mut()
+                            .map
+                            .insert(
+                                id,
+                                super::qubes::QubesBackendData {
+                                    surface: surface.clone(),
+                                    has_configured: false,
+                                    coordinates: Default::default(),
+                                }
+                            )
+                            .is_none());
+                        (id, size)
+                    })
+                    .expect("TODO: handling dead clients");
+                    let ref mut agent = anvil_state.backend_data.borrow_mut().agent;
+                    let msg = qubes_gui::Create {
                         rectangle: qubes_gui::Rectangle {
-                            top_left: qubes_gui::Coordinates::default(),
+                            top_left: qubes_gui::Coordinates { x: 0, y: 0 },
                             size: qubes_gui::WindowSize {
                                 width: size.w.max(1) as _,
                                 height: size.h.max(1) as _,
                             },
                         },
+                        parent: None,
                         override_redirect: 0,
                     };
-                    anvil_state.agent.client().send(msg, state.window).unwrap()
-                })
-                .unwrap()
-            }
-            XdgRequest::RePosition {
-                surface,
-                positioner,
-                token,
-            } => {
-                let result = surface.with_pending_state(|state| {
-                    // NOTE: This is again a simplification, a proper compositor would
-                    // calculate the geometry of the popup here. For simplicity we just
-                    // use the default implementation here that does not take the
-                    // window position and output constraints into account.
-                    let geometry = positioner.get_geometry();
-                    state.geometry = geometry;
-                    state.positioner = positioner;
-                });
-
-                if result.is_ok() {
-                    surface.send_repositioned(token);
+                    debug!(anvil_state.log, "Creating window {}", id);
+                    agent.client().send(&msg, id).expect("TODO: send errors");
+                    let msg = qubes_gui::Configure {
+                        rectangle: msg.rectangle,
+                        override_redirect: msg.override_redirect,
+                    };
+                    agent.client().send(&msg, id).expect("TODO: send errors");
+                    agent
+                        .client()
+                        .send(
+                            &qubes_gui::MapInfo {
+                                override_redirect: 0,
+                                transient_for: 0,
+                            },
+                            id,
+                        )
+                        .unwrap();
                 }
-                // QUBES HOOK: notify daemon about window movement
-            }
-            XdgRequest::Fullscreen {
-                surface, output: _, ..
-            } => {
-                // QUBES HOOK: ask daemon to make surface fullscreen
-                // NOTE: This is only one part of the solution. We can set the
-                // location and configure size here, but the surface should be rendered fullscreen
-                // independently from its buffer size
-                let _wl_surface = if let Some(surface) = surface.get_surface() {
-                    surface
-                } else {
-                    // If there is no underlying surface just ignore the request
-                    return;
-                };
-                let _msg = qubes_gui::WindowFlags { set: 1, unset: 0 };
-                return;
-            }
-            XdgRequest::UnMaximize { surface } => {
-                let _anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
-                let _wl_surface = if let Some(surface) = surface.get_surface() {
-                    surface
-                } else {
-                    // If there is no underlying surface just ignore the request
-                    return;
-                };
-                let _msg = qubes_gui::WindowFlags { set: 0, unset: 1 };
-                todo!()
-            }
-            XdgRequest::NewClient { client } => {
-                let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
-                info!(anvil_state.log, "New client connected!");
-                client
-                    .with_data(|data| {
-                        data.insert_if_missing(|| {
-                            QubesClient(Rc::new(RefCell::new(BTreeMap::new())))
-                        })
+                XdgRequest::NewPopup {
+                    surface: _,
+                    positioner: _,
+                } => {
+                    todo!()
+                }
+                XdgRequest::AckConfigure { surface, configure } => {
+                    let configure = match configure {
+                        xdg::Configure::Toplevel(configure) => configure,
+                        xdg::Configure::Popup(_) => todo!("Popup configures"),
+                    };
+                    with_states(&surface, |data| {
+                        let mut anvil_state = anvil_state.backend_data.borrow_mut();
+                        let state = data
+                            .data_map
+                            .get::<RefCell<SurfaceData>>()
+                            .unwrap()
+                            .borrow();
+                        debug!(
+                        anvil_state.log,
+                        "A configure event was acknowledged!  Params: surface {:?}, configure {:?}",
+                        surface,
+                        configure
+                    );
+                        let size = configure.state.size.unwrap_or_else(|| (256, 256).into());
+                        let msg = &qubes_gui::Configure {
+                            rectangle: qubes_gui::Rectangle {
+                                top_left: qubes_gui::Coordinates::default(),
+                                size: qubes_gui::WindowSize {
+                                    width: size.w.max(1) as _,
+                                    height: size.h.max(1) as _,
+                                },
+                            },
+                            override_redirect: 0,
+                        };
+                        anvil_state.agent.client().send(msg, state.window).unwrap()
                     })
-                    .expect("New clients are not dead");
-            }
-            XdgRequest::ClientPong { client: _ } => {}
-            other => {
-                let anvil_state = _dispatch_data.get::<AnvilState>().unwrap();
-                info!(anvil_state.log, "Got an unhandled event: {:?}", other);
+                    .unwrap()
+                }
+                XdgRequest::RePosition {
+                    surface,
+                    positioner,
+                    token,
+                } => {
+                    let result = surface.with_pending_state(|state| {
+                        // NOTE: This is again a simplification, a proper compositor would
+                        // calculate the geometry of the popup here. For simplicity we just
+                        // use the default implementation here that does not take the
+                        // window position and output constraints into account.
+                        let geometry = positioner.get_geometry();
+                        state.geometry = geometry;
+                        state.positioner = positioner;
+                    });
+
+                    if result.is_ok() {
+                        surface.send_repositioned(token);
+                    }
+                    // QUBES HOOK: notify daemon about window movement
+                }
+                XdgRequest::Fullscreen {
+                    surface, output: _, ..
+                } => {
+                    // QUBES HOOK: ask daemon to make surface fullscreen
+                    // NOTE: This is only one part of the solution. We can set the
+                    // location and configure size here, but the surface should be rendered fullscreen
+                    // independently from its buffer size
+                    let _wl_surface = if let Some(surface) = surface.get_surface() {
+                        surface
+                    } else {
+                        // If there is no underlying surface just ignore the request
+                        return;
+                    };
+                    let _msg = qubes_gui::WindowFlags { set: 1, unset: 0 };
+                    return;
+                }
+                XdgRequest::UnMaximize { surface } => {
+                    let _wl_surface = if let Some(surface) = surface.get_surface() {
+                        surface
+                    } else {
+                        // If there is no underlying surface just ignore the request
+                        return;
+                    };
+                    let _msg = qubes_gui::WindowFlags { set: 0, unset: 1 };
+                    todo!()
+                }
+                XdgRequest::NewClient { client } => {
+                    info!(anvil_state.log, "New client connected!");
+                    client
+                        .with_data(|data| {
+                            data.insert_if_missing(|| {
+                                QubesClient(Rc::new(RefCell::new(BTreeMap::new())))
+                            })
+                        })
+                        .expect("New clients are not dead");
+                }
+                XdgRequest::ClientPong { client: _ } => {}
+                other => {
+                    info!(anvil_state.log, "Got an unhandled event: {:?}", other);
+                }
             }
         },
         log,
@@ -252,6 +246,7 @@ pub struct SurfaceData {
     pub buffer: Option<(wl_buffer::WlBuffer, qubes_gui_client::agent::Buffer)>,
     pub geometry: Option<Rectangle<i32, Logical>>,
     pub buffer_dimensions: Option<Size<i32, Physical>>,
+    pub coordinates: qubes_gui::Coordinates,
     pub buffer_swapped: bool,
     pub buffer_scale: i32,
     pub window: std::num::NonZeroU32,
@@ -484,6 +479,28 @@ impl SurfaceData {
                                 .1
                                 .dump(agent.client(), self.window.into())
                                 .expect("TODO");
+                            let Size { w, h, .. } = geometry
+                                .map(|g| g.size.to_physical(self.buffer_scale))
+                                .unwrap_or_else(|| {
+                                    self.buffer_dimensions.expect(
+                                        "buffer_dimensions are Some if a buffer is present; qed",
+                                    )
+                                });
+                            let msg = qubes_gui::Configure {
+                                rectangle: qubes_gui::Rectangle {
+                                    top_left: self.coordinates,
+                                    size: qubes_gui::WindowSize {
+                                        width: w
+                                            .try_into()
+                                            .expect("negative sizes rejected earlier; qed"),
+                                        height: h
+                                            .try_into()
+                                            .expect("negative sizes rejected earlier; qed"),
+                                    },
+                                },
+                                override_redirect: 0,
+                            };
+                            agent.client().send(&msg, self.window.into()).expect("TODO");
                         }
                         for i in damage {
                             let (loc, size) = match i {

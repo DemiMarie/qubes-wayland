@@ -8,5 +8,5 @@ fn main() {
     );
     let _guard = slog_scope::set_global_logger(log.clone());
     slog_stdlog::init().expect("Could not setup log backend");
-    anvil::qubes::run_qubes(log)
+    anvil::qubes::run_qubes(log, std::env::args_os())
 }

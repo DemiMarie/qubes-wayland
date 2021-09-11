@@ -12,7 +12,7 @@ use smithay::{
     },
     utils::{Logical, Point},
     wayland::{
-        compositor::{with_surface_tree_upward, SurfaceAttributes, TraversalAction},
+        compositor::{with_states, with_surface_tree_upward, SurfaceAttributes, TraversalAction},
         shell::xdg::ToplevelSurface,
         SERIAL_COUNTER,
     },
@@ -64,6 +64,7 @@ impl QubesData {
             window,
             qubes,
             buffer_swapped: false,
+            coordinates: Default::default(),
         }
     }
 
@@ -105,6 +106,13 @@ impl QubesData {
             }) => {
                 let qubes_gui::Coordinates { x, y } = m.rectangle.top_left;
                 *coordinates = (x as i32, y as i32).into();
+                surface.get_surface().map(|surface| {
+                    with_states(surface, |data| {
+                        if let Some(state) = data.data_map.get::<RefCell<SurfaceData>>() {
+                            state.borrow_mut().coordinates = m.rectangle.top_left
+                        }
+                    })
+                });
                 match surface.with_pending_state(|state| {
                     let new_size = Some(
                         if *has_configured {
@@ -178,7 +186,7 @@ impl QubesData {
     }
 }
 
-pub fn run_qubes(log: Logger) {
+pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
     let mut event_loop = EventLoop::try_new().unwrap();
     let display = Rc::new(RefCell::new(Display::new()));
     let instant = std::time::Instant::now();
@@ -499,6 +507,17 @@ pub fn run_qubes(log: Logger) {
     state.start_xwayland();
 
     info!(log, "Initialization completed, starting the main loop.");
+    let mut args = args.skip(1);
+    if let Some(arg) = args.next() {
+        let mut v = vec![arg.clone()];
+        let mut cmd = std::process::Command::new(arg);
+        for i in args {
+            v.push(i.clone());
+            cmd.arg(i);
+        }
+        let child = cmd.spawn().expect("Failed to execute subcommand");
+        println!("Spawned child process {:?} with args {:?}", child, v);
+    }
 
     while state.running.load(Ordering::SeqCst) {
         // Send frame events so that client start drawing their next frame
