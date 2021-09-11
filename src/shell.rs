@@ -294,7 +294,7 @@ impl SurfaceData {
         if untrusted_stride / BYTES_PER_PIXEL < untrusted_width {
             buffer.as_ref().post_error(
                 wl_shm::Error::InvalidStride as u32,
-                panic!(
+                format!(
                     "Stride {} too small for width {}",
                     untrusted_stride, untrusted_width
                 ),
