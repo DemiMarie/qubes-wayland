@@ -8,6 +8,7 @@ use smithay::{
     backend::input::KeyState,
     reexports::{
         calloop::{self, generic::Generic, EventLoop, Interest},
+        wayland_protocols::xdg_shell::server::xdg_toplevel,
         wayland_server::{protocol::wl_pointer::ButtonState, Display},
     },
     utils::{Logical, Point},
@@ -429,12 +430,39 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                         qubes_gui::MSG_FOCUS => {
                             let mut m = qubes_gui::Focus::default();
                             m.as_mut_bytes().copy_from_slice(body);
-                            trace!(agent_full.log, "Focus event: {:?}", m);
+                            if m.mode != 0 {
+                                error!(agent_full.log, "GUI daemon bug: mode should be NotifyNormal (0), got {}", m.mode)
+                            }
+                            let has_focus = match m.ty {
+                                9 /* FocusIn */ => true,
+                                10 /* FocusOut */ => false,
+                                bad_focus => {
+                                    error!(agent_full.log, "GUI daemon bug: invalid Focus value {}", bad_focus);
+                                    continue
+                                }
+                            };
+                            if m.detail > 7 {
+                                error!(agent_full.log, "GUI daemon bug: invalid X11 Detail value {}", m.detail);
+                                continue
+                            }
+                            info!(agent_full.log, "Focus event: {:?}", m);
                             let window = qubes.map.get(&e.window.try_into().unwrap());
                             let serial = SERIAL_COUNTER.next_serial();
                             // agent_full.pointer.set_focus(window, serial);
-                            let surface = window.and_then(|s| s.surface.get_surface());
-                            agent_full.keyboard.set_focus(surface, serial);
+                            let surface =
+                                window.and_then(|QubesBackendData { surface, .. }| {
+                                    if let Ok(true) = surface.with_pending_state(|state| {
+                                        if has_focus {
+                                            state.states.set(xdg_toplevel::State::Activated)
+                                        } else {
+                                            state.states.unset(xdg_toplevel::State::Activated)
+                                        }
+                                    }) {
+                                        surface.send_configure();
+                                    }
+                                    surface.get_surface()
+                                });
+                            agent_full.keyboard.set_focus(if has_focus { surface } else { None }, serial);
                         }
                         qubes_gui::MSG_WINDOW_FLAGS => {
                             let mut m = qubes_gui::WindowFlags::default();

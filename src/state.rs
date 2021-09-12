@@ -10,14 +10,18 @@ use std::{
 use smithay::{
     reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
-        wayland_server::{protocol::wl_data_device_manager::DndAction, Display},
+        wayland_server::{
+            protocol::{wl_data_device_manager::DndAction, wl_output::Subpixel},
+            Display,
+        },
     },
     wayland::{
         data_device::{init_data_device, set_data_device_focus},
-        output::xdg::init_xdg_output_manager,
+        output::{xdg::init_xdg_output_manager, Output, PhysicalProperties},
         seat::{CursorImageStatus, KeyboardHandle, PointerHandle, Seat, XkbConfig},
         shm::init_shm_global,
         tablet_manager::{init_tablet_manager_global, TabletSeatTrait},
+        xdg_activation::{init_xdg_activation_global, XdgActivationEvent},
     },
 };
 
@@ -79,6 +83,23 @@ impl AnvilState {
         let _shell_handles = init_shell(display.clone(), log.clone());
 
         init_xdg_output_manager(&mut display.borrow_mut(), log.clone());
+        init_xdg_activation_global(
+            &mut display.borrow_mut(),
+            |state, req, _ddata| {
+                match req {
+                    XdgActivationEvent::RequestActivation {
+                        token,
+                        token_data: _,
+                        surface: _,
+                    } => {
+                        // Discard the request
+                        state.lock().unwrap().remove_request(&token);
+                    }
+                    XdgActivationEvent::DestroyActivationRequest { .. } => {}
+                }
+            },
+            log.clone(),
+        );
 
         let socket_name = if listen_on_socket {
             let socket_name = display
@@ -96,8 +117,22 @@ impl AnvilState {
 
         // init input
         let seat_name = String::from("Qubes Virtual Seat");
+        let output_name = String::from("Qubes Virtual Output");
 
         let (mut seat, _) = Seat::new(&mut display.borrow_mut(), seat_name.clone(), log.clone());
+
+        let monitor_properties = PhysicalProperties {
+            size: (0, 0).into(),
+            subpixel: Subpixel::Unknown,
+            make: String::from("Qubes OS"),
+            model: String::from("Virtual Monitor"),
+        };
+        let (_output, _) = Output::new(
+            &mut display.borrow_mut(),
+            output_name,
+            monitor_properties,
+            log.clone(),
+        );
 
         let cursor_status = Arc::new(Mutex::new(CursorImageStatus::Default));
 
