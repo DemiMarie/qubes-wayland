@@ -23,7 +23,10 @@ use smithay::{
     },
 };
 
-use crate::{qubes::QubesData, state::AnvilState};
+use crate::{
+    qubes::{Kind, QubesData},
+    state::AnvilState,
+};
 
 #[derive(Clone)]
 pub struct ShellHandles {
@@ -93,7 +96,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             .insert(
                                 id,
                                 super::qubes::QubesBackendData {
-                                    surface: surface.clone(),
+                                    surface: Kind::Toplevel(surface.clone()),
                                     has_configured: false,
                                     coordinates: Default::default(),
                                 }
@@ -133,15 +136,91 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         .unwrap();
                 }
                 XdgRequest::NewPopup {
-                    surface: _,
+                    surface,
                     positioner: _,
                 } => {
-                    todo!()
+                    let raw_surface = match surface.get_surface() {
+                        Some(s) => s,
+                        // If there is no underlying surface just ignore the request
+                        None => {
+                            debug!(
+                                anvil_state.log,
+                                "Ignoring request to create window with no surface"
+                            );
+                            return;
+                        }
+                    };
+                    let (id, size) = with_states(raw_surface, |data| {
+                        let popup_data = data
+                            .data_map
+                            .get::<Mutex<xdg::XdgPopupSurfaceRoleAttributes>>()
+                            .expect("Smithay always creates this data; qed")
+                            .lock()
+                            .expect("Poisoned?");
+                        let size = (*popup_data).current.geometry.size;
+                        drop(popup_data);
+                        data.data_map
+                            .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
+                                RefCell::new(QubesData::data(anvil_state.backend_data.clone()))
+                            });
+                        let id = data
+                            .data_map
+                            .get::<RefCell<SurfaceData>>()
+                            .expect("this data was just inserted above, so it will be present; qed")
+                            .borrow()
+                            .window;
+                        assert!(anvil_state
+                            .backend_data
+                            .borrow_mut()
+                            .map
+                            .insert(
+                                id,
+                                super::qubes::QubesBackendData {
+                                    surface: Kind::Popup(surface.clone()),
+                                    has_configured: false,
+                                    coordinates: Default::default(),
+                                }
+                            )
+                            .is_none());
+                        (id, size)
+                    })
+                    .expect("TODO: handling dead clients");
+                    let ref mut agent = anvil_state.backend_data.borrow_mut().agent;
+                    let msg = qubes_gui::Create {
+                        rectangle: qubes_gui::Rectangle {
+                            top_left: qubes_gui::Coordinates { x: 0, y: 0 },
+                            size: qubes_gui::WindowSize {
+                                width: size.w.max(1) as _,
+                                height: size.h.max(1) as _,
+                            },
+                        },
+                        parent: None,
+                        override_redirect: 0,
+                    };
+                    debug!(anvil_state.log, "Creating window {}", id);
+                    agent.client().send(&msg, id).expect("TODO: send errors");
+                    let msg = qubes_gui::Configure {
+                        rectangle: msg.rectangle,
+                        override_redirect: msg.override_redirect,
+                    };
+                    agent.client().send(&msg, id).expect("TODO: send errors");
+                    agent
+                        .client()
+                        .send(
+                            &qubes_gui::MapInfo {
+                                override_redirect: 0,
+                                transient_for: 0,
+                            },
+                            id,
+                        )
+                        .unwrap();
                 }
                 XdgRequest::AckConfigure { surface, configure } => {
-                    let configure = match configure {
-                        xdg::Configure::Toplevel(configure) => configure,
-                        xdg::Configure::Popup(_) => todo!("Popup configures"),
+                    let size = match configure {
+                        xdg::Configure::Toplevel(configure) => {
+                            configure.state.size.unwrap_or_else(|| (256, 256).into())
+                        }
+                        xdg::Configure::Popup(configure) => configure.state.geometry.size,
                     };
                     with_states(&surface, |data| {
                         let mut anvil_state = anvil_state.backend_data.borrow_mut();
@@ -151,15 +230,12 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             .unwrap()
                             .borrow();
                         debug!(
-                        anvil_state.log,
-                        "A configure event was acknowledged!  Params: surface {:?}, configure {:?}",
-                        surface,
-                        configure
-                    );
-                        let size = configure.state.size.unwrap_or_else(|| (256, 256).into());
+                            anvil_state.log,
+                            "A configure event was acknowledged!  Params: surface {:?}", surface,
+                        );
                         let msg = &qubes_gui::Configure {
                             rectangle: qubes_gui::Rectangle {
-                                top_left: qubes_gui::Coordinates::default(),
+                                top_left: state.coordinates,
                                 size: qubes_gui::WindowSize {
                                     width: size.w.max(1) as _,
                                     height: size.h.max(1) as _,
@@ -228,8 +304,48 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         .expect("New clients are not dead");
                 }
                 XdgRequest::ClientPong { client: _ } => {}
-                other => {
-                    info!(anvil_state.log, "Got an unhandled event: {:?}", other);
+                XdgRequest::Grab {
+                    surface: _,
+                    seat: _,
+                    serial: _,
+                } => {
+                    // do nothing - pointer events are under the control of the
+                    // trunk compositor and there is nothing this compositor can
+                    // do about them.
+                }
+                XdgRequest::Move {
+                    surface: _,
+                    seat: _,
+                    serial: _,
+                } => {
+                    // do nothing - these are handled by the trunk compositor
+                    // this will change when subsurface support is added
+                }
+                XdgRequest::Resize {
+                    surface: _,
+                    seat: _,
+                    serial: _,
+                    edges: _,
+                } => {
+                    // do nothing - these are handled by the trunk compositor
+                    // this will change when subsurface support is added
+                }
+                XdgRequest::Maximize { surface: _ } => {
+                    // not yet implemented
+                }
+                XdgRequest::UnFullscreen { surface: _ } => {
+                    // not yet implemented
+                }
+                XdgRequest::Minimize { surface: _ } => {
+                    // not yet implemented
+                }
+                XdgRequest::ShowWindowMenu {
+                    surface: _,
+                    seat: _,
+                    serial: _,
+                    location: _,
+                } => {
+                    // do nothing
                 }
             }
         },

@@ -8,13 +8,16 @@ use smithay::{
     backend::input::KeyState,
     reexports::{
         calloop::{self, generic::Generic, EventLoop, Interest},
-        wayland_protocols::xdg_shell::server::xdg_toplevel,
-        wayland_server::{protocol::wl_pointer::ButtonState, Display},
+        wayland_protocols::xdg_shell::server::{xdg_popup, xdg_toplevel},
+        wayland_server::{
+            protocol::{wl_pointer::ButtonState, wl_surface::WlSurface},
+            Display,
+        },
     },
-    utils::{Logical, Point},
+    utils::{DeadResource, Logical, Point},
     wayland::{
         compositor::{with_states, with_surface_tree_upward, SurfaceAttributes, TraversalAction},
-        shell::xdg::ToplevelSurface,
+        shell::xdg::{PopupSurface, ShellClient, ToplevelSurface},
         SERIAL_COUNTER,
     },
 };
@@ -36,9 +39,47 @@ pub struct QubesData {
     buf: qubes_gui_client::agent::Buffer,
 }
 
+/// Surface kinds
+pub enum Kind {
+    /// xdg-toplevel
+    Toplevel(ToplevelSurface),
+    /// Popup
+    Popup(PopupSurface),
+}
+
+impl Kind {
+    pub fn send_configure(&self) {
+        match self {
+            Self::Toplevel(t) => t.send_configure(),
+            Self::Popup(t) => drop(t.send_configure()),
+        }
+    }
+
+    fn send_close(&self) {
+        match self {
+            Self::Toplevel(t) => t.send_close(),
+            Self::Popup(t) => t.send_popup_done(),
+        }
+    }
+
+    fn get_surface(&self) -> Option<&WlSurface> {
+        match self {
+            Self::Toplevel(t) => t.get_surface(),
+            Self::Popup(t) => t.get_surface(),
+        }
+    }
+
+    fn client(&self) -> Option<ShellClient> {
+        match self {
+            Self::Toplevel(t) => t.client(),
+            Self::Popup(t) => t.client(),
+        }
+    }
+}
+
 pub struct QubesBackendData {
     /// Toplevel surface
-    pub surface: ToplevelSurface,
+    pub surface: Kind,
     /// Whether the surface has been configured
     pub has_configured: bool,
     /// The coordinates of the surface
@@ -114,19 +155,32 @@ impl QubesData {
                         }
                     })
                 });
-                match surface.with_pending_state(|state| {
-                    let new_size = Some(
-                        if *has_configured {
+                match match surface {
+                    Kind::Toplevel(surface) => surface.with_pending_state(|state| {
+                        let new_size = Some(
+                            if *has_configured {
+                                (width as _, height as _)
+                            } else {
+                                (0, 0)
+                            }
+                            .into(),
+                        );
+                        let do_send = new_size == state.size;
+                        state.size = new_size;
+                        do_send
+                    }),
+                    Kind::Popup(surface) => surface.with_pending_state(|state| {
+                        let new_size = if *has_configured {
                             (width as _, height as _)
                         } else {
                             (0, 0)
                         }
-                        .into(),
-                    );
-                    let do_send = new_size == state.size;
-                    state.size = new_size;
-                    do_send
-                }) {
+                        .into();
+                        let do_send = new_size == state.geometry.size;
+                        state.geometry.size = new_size;
+                        do_send
+                    }),
+                } {
                     Ok(true) if *has_configured => {
                         debug!(self.log, "Ignoring configure event that didn’t change size")
                     }
@@ -451,13 +505,20 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             // agent_full.pointer.set_focus(window, serial);
                             let surface =
                                 window.and_then(|QubesBackendData { surface, .. }| {
-                                    if let Ok(true) = surface.with_pending_state(|state| {
+                                    if let Ok(true) = match surface {
+                                        Kind::Toplevel(surface) => surface.with_pending_state(|state| {
                                         if has_focus {
                                             state.states.set(xdg_toplevel::State::Activated)
                                         } else {
                                             state.states.unset(xdg_toplevel::State::Activated)
+                                        }}),
+                                        Kind::Popup(surface) => {
+                                            if !has_focus {
+                                                surface.send_popup_done()
+                                            }
+                                            Ok(true)
                                         }
-                                    }) {
+                                    } {
                                         surface.send_configure();
                                     }
                                     surface.get_surface()
