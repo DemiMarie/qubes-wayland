@@ -281,7 +281,6 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         return;
                     };
                     let _msg = qubes_gui::WindowFlags { set: 1, unset: 0 };
-                    return;
                 }
                 XdgRequest::UnMaximize { surface } => {
                     let _wl_surface = if let Some(surface) = surface.get_surface() {
@@ -291,7 +290,6 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         return;
                     };
                     let _msg = qubes_gui::WindowFlags { set: 0, unset: 1 };
-                    todo!()
                 }
                 XdgRequest::NewClient { client } => {
                     info!(anvil_state.log, "New client connected!");
