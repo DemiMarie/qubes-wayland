@@ -494,6 +494,20 @@ impl SurfaceData {
         debug!(data.log, "Damage: {:?}!", &attrs.damage);
         if !attrs.damage.is_empty() {
             if let Some((buffer, qbuf)) = self.buffer.as_ref() {
+                if let Some(geometry) = geometry {
+                    if geometry.loc.x < 0
+                        || geometry.loc.y < 0
+                        || geometry.size.w < 0
+                        || geometry.size.h < 0
+                    {
+                        buffer.as_ref().post_error(
+                            3,
+                            "TODO: find a better error for negative geometry".into(),
+                        );
+                        return;
+                    }
+                }
+                self.geometry = geometry;
                 debug!(data.log, "Performing damage calculation");
                 let log = data.log.clone();
                 match shm::with_buffer_contents(

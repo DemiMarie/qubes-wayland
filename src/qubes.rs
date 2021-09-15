@@ -8,13 +8,13 @@ use smithay::{
     backend::input::KeyState,
     reexports::{
         calloop::{self, generic::Generic, EventLoop, Interest},
-        wayland_protocols::xdg_shell::server::{xdg_popup, xdg_toplevel},
+        wayland_protocols::xdg_shell::server::xdg_toplevel,
         wayland_server::{
             protocol::{wl_pointer::ButtonState, wl_surface::WlSurface},
             Display,
         },
     },
-    utils::{DeadResource, Logical, Point},
+    utils::{Logical, Point},
     wayland::{
         compositor::{with_states, with_surface_tree_upward, SurfaceAttributes, TraversalAction},
         shell::xdg::{PopupSurface, ShellClient, ToplevelSurface},
@@ -342,19 +342,42 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             if surface.is_none() && false {
                                 error!(
                                     agent_full.log,
-                                    "Button event for unknown window {}", e.window
+                                    "Motion event for unknown window {}", e.window
                                 )
                             }
-                            let location = (m.coordinates.x.into(), m.coordinates.y.into()).into();
                             let focus = surface.and_then(|surface| {
                                 surface
                                     .surface
                                     .get_surface()
-                                    .map(|s| (s.clone(), surface.coordinates))
+                                    .and_then(|s| {
+                                        with_states(s, |data| {
+                                            let geometry = data
+                                                .data_map
+                                                .get::<RefCell<SurfaceData>>()
+                                                .expect("this data was just inserted above, so it will be present; qed")
+                                                .borrow()
+                                                .geometry;
+                                            if let Some(geometry) = geometry {
+                                                m.coordinates.x = m.coordinates.x
+                                                    .saturating_add(surface.coordinates.x.max(0) as _)
+                                                    .saturating_add(geometry.loc.x as u32);
+                                                m.coordinates.y = m.coordinates.y
+                                                    .saturating_add(surface.coordinates.y.max(0) as _)
+                                                    .saturating_add(geometry.loc.y as u32);
+                                            } else {
+                                                m.coordinates.x = m.coordinates.x
+                                                    .saturating_add(surface.coordinates.x.max(0) as _);
+                                                m.coordinates.y = m.coordinates.y
+                                                    .saturating_add(surface.coordinates.y.max(0) as _);
+                                            }
+                                        }).ok().map(|()| (s.clone(), surface.coordinates))
+                                    })
                             });
+                            let location = (m.coordinates.x.into(), m.coordinates.y.into()).into();
                             trace!(
                                 agent_full.log,
-                                "Sending motion event to window {}",
+                                "Sending motion event {:?} to window {}",
+                                location,
                                 e.window
                             );
                             agent_full.pointer.motion(
@@ -430,7 +453,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 5 => ButtonState::Released,
                                 _ => todo!("Strange event type"),
                             };
-                            info!(agent_full.log, "Sending button event: {:?}", m);
+                            // info!(agent_full.log, "Sending button event: {:?}", m);
                             agent_full.pointer.button(
                                 m.button,
                                 state,
@@ -499,7 +522,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 error!(agent_full.log, "GUI daemon bug: invalid X11 Detail value {}", m.detail);
                                 continue
                             }
-                            info!(agent_full.log, "Focus event: {:?}", m);
+                            trace!(agent_full.log, "Focus event: {:?}", m);
                             let window = qubes.map.get(&e.window.try_into().unwrap());
                             let serial = SERIAL_COUNTER.next_serial();
                             // agent_full.pointer.set_focus(window, serial);
