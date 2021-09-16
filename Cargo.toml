@@ -21,7 +21,7 @@ xkbcommon = { version = "0.4.0", default-features = false }
 [dependencies.smithay]
 path = "smithay"
 default-features = false
-features = [ "wayland_frontend", "slog-stdlog" ]
+features = [ "wayland_frontend", "slog-stdlog", "use_system_lib"]
 
 [dependencies.x11rb]
 optional = true
@@ -45,3 +45,13 @@ default = []
 xwayland = [ "smithay/xwayland", "x11rb" ]
 debug = [ "fps_ticker" ]
 test_all_features = ["default", "debug"]
+
+[patch.crates-io]
+wayland-sys = { path = "wayland-rs/wayland-sys" }
+wayland-scanner = { path = "wayland-rs/wayland-scanner" }
+# wayland-client = { path = "wayland-rs/wayland-client" }
+wayland-server = { path = "wayland-rs/wayland-server" }
+wayland-protocols = { path = "wayland-rs/wayland-protocols" }
+wayland-commons = { path = "wayland-rs/wayland-commons" }
+# wayland-cursor = { path = "wayland-rs/wayland-cursor" }
+# wayland-egl = { path = "wayland-rs/wayland-egl" }

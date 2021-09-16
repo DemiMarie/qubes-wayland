@@ -18,7 +18,9 @@ use smithay::{
             self, compositor_init, is_sync_subsurface, with_states, with_surface_tree_downward,
             BufferAssignment, Damage, SurfaceAttributes, TraversalAction,
         },
-        shell::xdg::{self, xdg_shell_init, ShellState as XdgShellState, XdgRequest},
+        shell::xdg::{
+            self, xdg_shell_init, PositionerState, ShellState as XdgShellState, XdgRequest,
+        },
         shm,
     },
 };
@@ -137,8 +139,14 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                 }
                 XdgRequest::NewPopup {
                     surface,
-                    positioner: _,
+                    positioner,
                 } => {
+                    info!(
+                        anvil_state.log,
+                        "Creating popup for surface {:?} with positioner {:?}!",
+                        surface,
+                        positioner
+                    );
                     let raw_surface = match surface.get_surface() {
                         Some(s) => s,
                         // If there is no underlying surface just ignore the request
@@ -150,52 +158,57 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             return;
                         }
                     };
-                    let (id, size) = with_states(raw_surface, |data| {
+                    let (id, geometry) = with_states(raw_surface, |data| {
                         let popup_data = data
                             .data_map
                             .get::<Mutex<xdg::XdgPopupSurfaceRoleAttributes>>()
                             .expect("Smithay always creates this data; qed")
                             .lock()
                             .expect("Poisoned?");
-                        let size = (*popup_data).current.geometry.size;
+                        let geometry = (*popup_data).current.geometry;
                         drop(popup_data);
                         data.data_map
                             .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
                                 RefCell::new(QubesData::data(anvil_state.backend_data.clone()))
                             });
-                        let id = data
+                        let mut mut_data = data
                             .data_map
                             .get::<RefCell<SurfaceData>>()
                             .expect("this data was just inserted above, so it will be present; qed")
-                            .borrow()
-                            .window;
+                            .borrow_mut();
+                        mut_data.coordinates.x = geometry.loc.x as _;
+                        mut_data.coordinates.y = geometry.loc.y as _;
+                        // mut_data.buffer_dimensions = Some(geometry.size.into());
                         assert!(anvil_state
                             .backend_data
                             .borrow_mut()
                             .map
                             .insert(
-                                id,
+                                mut_data.window,
                                 super::qubes::QubesBackendData {
                                     surface: Kind::Popup(surface.clone()),
                                     has_configured: false,
-                                    coordinates: Default::default(),
+                                    coordinates: geometry.loc,
                                 }
                             )
                             .is_none());
-                        (id, size)
+                        (mut_data.window, geometry)
                     })
                     .expect("TODO: handling dead clients");
                     let ref mut agent = anvil_state.backend_data.borrow_mut().agent;
                     let msg = qubes_gui::Create {
                         rectangle: qubes_gui::Rectangle {
-                            top_left: qubes_gui::Coordinates { x: 0, y: 0 },
+                            top_left: qubes_gui::Coordinates {
+                                x: geometry.loc.x as _,
+                                y: geometry.loc.y as _,
+                            },
                             size: qubes_gui::WindowSize {
-                                width: size.w.max(1) as _,
-                                height: size.h.max(1) as _,
+                                width: geometry.size.w.max(1) as _,
+                                height: geometry.size.h.max(1) as _,
                             },
                         },
                         parent: None,
-                        override_redirect: 0,
+                        override_redirect: 1,
                     };
                     debug!(anvil_state.log, "Creating window {}", id);
                     agent.client().send(&msg, id).expect("TODO: send errors");
@@ -208,12 +221,13 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         .client()
                         .send(
                             &qubes_gui::MapInfo {
-                                override_redirect: 0,
+                                override_redirect: 1,
                                 transient_for: 0,
                             },
                             id,
                         )
                         .unwrap();
+                    let _ = surface.send_configure();
                 }
                 XdgRequest::AckConfigure { surface, configure } => {
                     let size = match configure {
@@ -364,7 +378,13 @@ pub struct SurfaceData {
     pub buffer_swapped: bool,
     pub buffer_scale: i32,
     pub window: std::num::NonZeroU32,
-    pub qubes: Rc<RefCell<QubesData>>,
+    // pub qubes: Rc<RefCell<QubesData>>,
+}
+
+impl Drop for SurfaceData {
+    fn drop(&mut self) {
+        eprintln!("SurfaceData destroyed!");
+    }
 }
 
 impl SurfaceData {

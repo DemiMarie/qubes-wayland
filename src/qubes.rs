@@ -1,6 +1,13 @@
 use std::{
-    cell::RefCell, collections::BTreeMap, convert::TryInto, num::NonZeroU32, os::unix::io::AsRawFd,
-    rc::Rc, sync::atomic::Ordering, task::Poll, time::Duration,
+    cell::RefCell,
+    collections::BTreeMap,
+    convert::TryInto,
+    num::NonZeroU32,
+    os::unix::io::AsRawFd,
+    rc::Rc,
+    sync::atomic::Ordering,
+    task::Poll,
+    time::Duration, // borrow::BorrowMut,
 };
 
 use qubes_castable::Castable;
@@ -96,7 +103,7 @@ impl QubesData {
             .expect("IDs start at 2 and do not wrap, so they cannot be zero; qed")
     }
     pub fn data(qubes: Rc<RefCell<Self>>) -> SurfaceData {
-        let window = qubes.borrow_mut().id();
+        let window = (*qubes).borrow_mut().id();
         eprintln!("SurfaceData created!");
         SurfaceData {
             buffer: None,
@@ -104,7 +111,6 @@ impl QubesData {
             buffer_dimensions: None,
             buffer_scale: 0,
             window,
-            qubes,
             buffer_swapped: false,
             coordinates: Default::default(),
         }
@@ -421,7 +427,10 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             let state = match m.ty {
                                 2 => KeyState::Pressed,
                                 3 => KeyState::Released,
-                                _ => todo!(),
+                                strange => {
+                                    error!(agent_full.log, "GUI daemon bug: strange key event type {}", strange);
+                                    continue
+                                }
                             };
                             agent_full.keyboard.input(
                                 m.keycode - 8,
@@ -451,7 +460,10 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             let state = match m.ty {
                                 4 => ButtonState::Pressed,
                                 5 => ButtonState::Released,
-                                _ => todo!("Strange event type"),
+                                strange => {
+                                    error!(agent_full.log, "GUI daemon bug: strange button event type {}", strange);
+                                    continue
+                                }
                             };
                             // info!(agent_full.log, "Sending button event: {:?}", m);
                             agent_full.pointer.button(
@@ -537,6 +549,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                         }}),
                                         Kind::Popup(surface) => {
                                             if !has_focus {
+                                                info!(agent_full.log, "Dismissing popup because it no longer has focus");
                                                 surface.send_popup_done()
                                             }
                                             Ok(true)
@@ -553,7 +566,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             m.as_mut_bytes().copy_from_slice(body);
                             trace!(agent_full.log, "Window manager flags have changed: {:?}", m);
                         }
-                        _ => trace!(agent_full.log, "Ignoring unknown event!"),
+                        _ => warn!(agent_full.log, "Ignoring unknown event!"),
                     }
                 }
             },
@@ -576,14 +589,30 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                 for (key, value) in qubes.map.iter_mut() {
                     let surface = match value.surface.get_surface() {
                         None => {
-                            trace!(log, "Pushing toplevel with no surface onto dead list");
+                            info!(log, "Pushing toplevel with no surface onto dead list");
                             dead_surfaces.push(*key);
                             continue;
                         }
                         Some(s) if !s.as_ref().is_alive() => {
-                            debug!(log, "Pushing toplevel with dead surface onto dead list");
+                            info!(log, "Pushing toplevel with dead surface onto dead list");
                             dead_surfaces.push(*key);
-                            continue;
+                            match with_states(s, |data| {
+                                data.data_map
+                                    .get::<RefCell<SurfaceData>>()
+                                    .map(RefCell::borrow_mut)
+                                    .map(|mut surface_data| {
+                                        surface_data.buffer = None;
+                                        surface_data.geometry = None;
+                                        surface_data.buffer_dimensions = None;
+                                    })
+                            }) {
+                                Ok(Some(())) => s,
+                                Ok(None) => s,
+                                Err(e) => {
+                                    info!(log, "Got an error: {}", e);
+                                    s
+                                }
+                            }
                         }
                         Some(s) => s,
                     };

@@ -11,7 +11,9 @@ use smithay::{
     reexports::{
         calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
         wayland_server::{
-            protocol::{wl_data_device_manager::DndAction, wl_output::Subpixel},
+            protocol::{
+                wl_data_device_manager::DndAction, wl_output::Subpixel, wl_surface::WlSurface,
+            },
             Display,
         },
     },
@@ -44,6 +46,7 @@ pub struct AnvilState {
     pub cursor_status: Arc<Mutex<CursorImageStatus>>,
     pub seat_name: String,
     pub seat: Seat,
+    pub grab_surface: Option<WlSurface>,
     // things we must keep alive
     #[cfg(feature = "xwayland")]
     pub xwayland: XWayland<AnvilState>,
@@ -192,6 +195,7 @@ impl AnvilState {
             cursor_status,
             seat_name,
             seat,
+            grab_surface: None,
             #[cfg(feature = "xwayland")]
             xwayland,
         }
