@@ -335,7 +335,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             debug!(agent_full.log, "Motion event: {:?}", event);
                             let surface = window.try_into().ok().and_then(|s| qubes.map.get(&s));
                             if surface.is_none() && false {
-                                error!(
+                                warn!(
                                     agent_full.log,
                                     "Motion event for unknown window {}", window
                                 )
@@ -479,35 +479,53 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 );
                             }
                         }
-                        DaemonToAgentEvent::Redraw { window: _, portion_to_redraw } => {
-                            trace!(agent_full.log, "Map event: {:?}", portion_to_redraw);
+                        DaemonToAgentEvent::Redraw { window, portion_to_redraw } => {
+                            trace!(
+                                agent_full.log,
+                                #"qubes-event",
+                                "Map event";
+                                "portion_to_redraw" => ?portion_to_redraw,
+                                "window" => ?window,
+                            );
                         }
                         DaemonToAgentEvent::Configure { window, new_size_and_position } => {
                             trace!(
                                 agent_full.log,
-                                "Configure event {:?} for window {}",
-                                new_size_and_position,
-                                window,
+                                #"qubes-event",
+                                "Configure";
+                                "event" => ?new_size_and_position,
+                                "window" => window,
                             );
                             qubes.process_configure(new_size_and_position, window)?
                         }
                         DaemonToAgentEvent::Focus { window, event } => {
                             if event.mode != 0 {
-                                error!(agent_full.log, "GUI daemon bug: mode should be NotifyNormal (0), got {}", event.mode);
+                                error!(
+                                    agent_full.log,
+                                    #"daemon-bug",
+                                    "mode not zero";
+                                    "window" => window,
+                                    "mode" => event.mode,
+                                )
                             }
                             let has_focus = match event.ty {
                                 9 /* FocusIn */ => true,
                                 10 /* FocusOut */ => false,
                                 bad_focus => {
-                                    error!(agent_full.log, "GUI daemon bug: invalid Focus value {}", bad_focus);
+                                    error!(
+                                        agent_full.log,
+                                        #"daemon-bug",
+                                        "bad Focus event type";
+                                        "type" => bad_focus,
+                                    );
                                     continue
                                 }
                             };
                             if event.detail > 7 {
-                                error!(agent_full.log, "GUI daemon bug: invalid X11 Detail value {}", event.detail);
+                                error!(agent_full.log, #"daemon-bug", "bad X11 Detail"; "detail" => event.detail);
                                 continue
                             }
-                            trace!(agent_full.log, "Focus event: {:?}", event);
+                            trace!(agent_full.log, "Focus event"; "event" => ?event, "window" => window);
                             let window = qubes.map.get(&window.try_into().unwrap());
                             let serial = SERIAL_COUNTER.next_serial();
                             // agent_full.pointer.set_focus(window, serial);
