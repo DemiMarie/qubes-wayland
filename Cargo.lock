@@ -10,7 +10,9 @@ dependencies = [
  "fps_ticker",
  "qubes-castable",
  "qubes-gui",
+ "qubes-gui-agent-proto",
  "qubes-gui-client",
+ "qubes-gui-gntalloc",
  "rand",
  "slog",
  "slog-async",
@@ -40,9 +42,9 @@ dependencies = [
 
 [[package]]
 name = "arc-swap"
-version = "1.3.2"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5ab7d9e73059c86c36473f459b52adbd99c3554a4fec492caef460806006f00"
+checksum = "e6df5aef5c5830360ce5218cecb8f018af3438af5686ae945094affc86fdec63"
 
 [[package]]
 name = "atty"
@@ -381,13 +383,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "qubes-gui-agent-proto"
+version = "0.1.0"
+dependencies = [
+ "qubes-castable",
+ "qubes-gui",
+]
+
+[[package]]
 name = "qubes-gui-client"
 version = "0.1.0"
 dependencies = [
- "libc 0.2.95",
  "qubes-castable",
  "qubes-gui",
  "vchan",
+]
+
+[[package]]
+name = "qubes-gui-gntalloc"
+version = "0.1.0"
+dependencies = [
+ "libc 0.2.95",
+ "qubes-gui",
 ]
 
 [[package]]
@@ -683,6 +700,8 @@ checksum = "fd6fbd9a79829dd1ad0cc20627bf1ed606756a7f77edff7b66b7064f9cb327c6"
 [[package]]
 name = "wayland-commons"
 version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93d6377fc0efc620da05cb78c5dc846420940e7b2c471aa2faf59c58e063c2b7"
 dependencies = [
  "nix 0.22.1",
  "once_cell",
@@ -693,6 +712,8 @@ dependencies = [
 [[package]]
 name = "wayland-protocols"
 version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "503643f261c0f18124a4666b8c1e66258cf68b51f675d6e64469fbc72ddf0cd6"
 dependencies = [
  "bitflags",
  "wayland-commons",
@@ -703,6 +724,8 @@ dependencies = [
 [[package]]
 name = "wayland-scanner"
 version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d3d043a8926b2836749018bfb393e2328cac86bd414b9c3d3f8c523d0dee2dd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -712,6 +735,8 @@ dependencies = [
 [[package]]
 name = "wayland-server"
 version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e32897c3dc5c4e74658086653e98ea0f4ef1467277f262ced50fb4123942a541"
 dependencies = [
  "bitflags",
  "downcast-rs",
@@ -728,6 +753,8 @@ dependencies = [
 [[package]]
 name = "wayland-sys"
 version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fef2a7d20f93be1379a2dfd9457c291e840b942fa38fe0b95ad6b0425a22d43a"
 dependencies = [
  "dlib",
  "libc 0.2.102",

@@ -18,9 +18,7 @@ use smithay::{
             self, compositor_init, is_sync_subsurface, with_states, with_surface_tree_downward,
             BufferAssignment, Damage, SurfaceAttributes, TraversalAction,
         },
-        shell::xdg::{
-            self, xdg_shell_init, PositionerState, ShellState as XdgShellState, XdgRequest,
-        },
+        shell::xdg::{self, xdg_shell_init, ShellState as XdgShellState, XdgRequest},
         shm,
     },
 };
@@ -120,14 +118,13 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         override_redirect: 0,
                     };
                     debug!(anvil_state.log, "Creating window {}", id);
-                    agent.client().send(&msg, id).expect("TODO: send errors");
+                    agent.send(&msg, id).expect("TODO: send errors");
                     let msg = qubes_gui::Configure {
                         rectangle: msg.rectangle,
                         override_redirect: msg.override_redirect,
                     };
-                    agent.client().send(&msg, id).expect("TODO: send errors");
+                    agent.send(&msg, id).expect("TODO: send errors");
                     agent
-                        .client()
                         .send(
                             &qubes_gui::MapInfo {
                                 override_redirect: 0,
@@ -211,14 +208,13 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         override_redirect: 1,
                     };
                     debug!(anvil_state.log, "Creating window {}", id);
-                    agent.client().send(&msg, id).expect("TODO: send errors");
+                    agent.send(&msg, id).expect("TODO: send errors");
                     let msg = qubes_gui::Configure {
                         rectangle: msg.rectangle,
                         override_redirect: msg.override_redirect,
                     };
-                    agent.client().send(&msg, id).expect("TODO: send errors");
+                    agent.send(&msg, id).expect("TODO: send errors");
                     agent
-                        .client()
                         .send(
                             &qubes_gui::MapInfo {
                                 override_redirect: 1,
@@ -257,7 +253,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             },
                             override_redirect: 0,
                         };
-                        anvil_state.agent.client().send(msg, state.window).unwrap()
+                        anvil_state.agent.send(msg, state.window).unwrap()
                     })
                     .unwrap()
                 }
@@ -371,7 +367,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
 const BYTES_PER_PIXEL: i32 = qubes_gui::DUMMY_DRV_FB_BPP as i32 / 8;
 
 pub struct SurfaceData {
-    pub buffer: Option<(wl_buffer::WlBuffer, qubes_gui_client::agent::Buffer)>,
+    pub buffer: Option<(wl_buffer::WlBuffer, qubes_gui_gntalloc::Buffer)>,
     pub geometry: Option<Rectangle<i32, Logical>>,
     pub buffer_dimensions: Option<Size<i32, Physical>>,
     pub coordinates: qubes_gui::Coordinates,
@@ -453,7 +449,7 @@ impl SurfaceData {
         self.buffer_dimensions = Some((untrusted_width, untrusted_height).into());
     }
     fn process_new_buffers(&mut self, attrs: BufferAssignment, data: &mut QubesData, scale: i32) {
-        let agent = &mut data.agent;
+        let connection = &mut data.connection;
         self.buffer_dimensions = None;
         match attrs {
             BufferAssignment::NewBuffer { buffer, .. } => {
@@ -472,7 +468,7 @@ impl SurfaceData {
                     Some(data) => data,
                 };
                 self.buffer_scale = scale;
-                let qbuf = match agent.alloc_buffer(w as _, h as _) {
+                let qbuf = match connection.alloc_buffer(w as _, h as _) {
                     Err(_) => {
                         // 2 is no_memory
                         buffer
@@ -621,12 +617,15 @@ impl SurfaceData {
                 ) {
                     Ok(Some((width, height, damage))) => {
                         if self.buffer_swapped {
-                            self.buffer
+                            let msg = self
+                                .buffer
                                 .as_ref()
                                 .expect("buffer_swapped never set unless a buffer is present; qed")
                                 .1
-                                .dump(agent.client(), self.window.into())
-                                .expect("TODO");
+                                .msg();
+                            agent
+                                .send_raw(msg, self.window, qubes_gui::MSG_WINDOW_DUMP)
+                                .unwrap();
                             let Size { w, h, .. } = geometry
                                 .map(|g| g.size.to_physical(self.buffer_scale))
                                 .unwrap_or_else(|| {
@@ -648,7 +647,7 @@ impl SurfaceData {
                                 },
                                 override_redirect: 0,
                             };
-                            agent.client().send(&msg, self.window.into()).expect("TODO");
+                            agent.send(&msg, self.window.into()).expect("TODO");
                         }
                         for i in damage {
                             let (loc, size) = match i {
@@ -674,7 +673,6 @@ impl SurfaceData {
                                 },
                             };
                             agent
-                                .client()
                                 .send(&output_message, self.window.into())
                                 .expect("TODO");
                         }
@@ -735,7 +733,6 @@ fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
                         backend_data
                             .borrow_mut()
                             .agent
-                            .client()
                             .send(&msg, data.borrow().window)
                             .expect("TODO: send errors");
                         data

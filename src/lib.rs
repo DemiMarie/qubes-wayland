@@ -1,4 +1,5 @@
-#![warn(rust_2018_idioms)]
+#![forbid(rust_2018_idioms)]
+#![deny(unreachable_code)]
 
 #[macro_use]
 extern crate slog;

@@ -17,6 +17,7 @@ slog-async = "2.2"
 slog-stdlog = "4.1.0"
 slog-scope = "4.4.0"
 xkbcommon = { version = "0.4.0", default-features = false }
+qubes-gui-agent-proto = { path = "gui-rust/qubes-gui-agent-proto" }
 
 [dependencies.smithay]
 path = "smithay"
@@ -38,6 +39,9 @@ path = "gui-rust/qubes-gui"
 [dependencies.qubes-castable]
 path = "gui-rust/qubes-castable"
 
+[dependencies.qubes-gui-gntalloc]
+path = "gui-rust/qubes-gui-gntalloc"
+
 [features]
 #default = ["smithay/use_system_lib"]
 default = []
@@ -47,11 +51,11 @@ debug = [ "fps_ticker" ]
 test_all_features = ["default", "debug"]
 
 [patch.crates-io]
-wayland-sys = { path = "wayland-rs/wayland-sys" }
-wayland-scanner = { path = "wayland-rs/wayland-scanner" }
+# wayland-sys = { path = "wayland-rs/wayland-sys" }
+# wayland-scanner = { path = "wayland-rs/wayland-scanner" }
 # wayland-client = { path = "wayland-rs/wayland-client" }
-wayland-server = { path = "wayland-rs/wayland-server" }
-wayland-protocols = { path = "wayland-rs/wayland-protocols" }
-wayland-commons = { path = "wayland-rs/wayland-commons" }
+# wayland-server = { path = "wayland-rs/wayland-server" }
+# wayland-protocols = { path = "wayland-rs/wayland-protocols" }
+# wayland-commons = { path = "wayland-rs/wayland-commons" }
 # wayland-cursor = { path = "wayland-rs/wayland-cursor" }
 # wayland-egl = { path = "wayland-rs/wayland-egl" }

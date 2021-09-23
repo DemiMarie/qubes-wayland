@@ -1,15 +1,9 @@
 use std::{
-    cell::RefCell,
-    collections::BTreeMap,
-    convert::TryInto,
-    num::NonZeroU32,
-    os::unix::io::AsRawFd,
-    rc::Rc,
-    sync::atomic::Ordering,
-    time::Duration, // borrow::BorrowMut,
+    cell::RefCell, collections::BTreeMap, convert::TryInto, num::NonZeroU32, os::unix::io::AsRawFd,
+    rc::Rc, sync::atomic::Ordering, task::Poll, time::Duration,
 };
 
-use qubes_gui::DaemonToAgentEvent;
+use qubes_gui_agent_proto::DaemonToAgentEvent;
 use smithay::{
     backend::input::KeyState,
     reexports::{
@@ -23,6 +17,7 @@ use smithay::{
     utils::{Logical, Point},
     wayland::{
         compositor::{with_states, with_surface_tree_upward, SurfaceAttributes, TraversalAction},
+        seat::FilterResult,
         shell::xdg::{PopupSurface, ShellClient, ToplevelSurface},
         SERIAL_COUNTER,
     },
@@ -36,13 +31,14 @@ use crate::state::AnvilState;
 pub const OUTPUT_NAME: &str = "qubes";
 
 pub struct QubesData {
-    pub agent: qubes_gui_client::agent::Agent,
+    pub agent: qubes_gui_client::Client,
+    pub connection: qubes_gui_gntalloc::Agent,
     wid: u32,
     last_width: u32,
     last_height: u32,
     pub map: BTreeMap<NonZeroU32, QubesBackendData>,
     pub log: slog::Logger,
-    buf: qubes_gui_client::agent::Buffer,
+    buf: qubes_gui_gntalloc::Buffer,
 }
 
 /// Surface kinds
@@ -116,10 +112,7 @@ impl QubesData {
     }
 
     fn process_configure(&mut self, m: qubes_gui::Configure, window: u32) -> std::io::Result<()> {
-        self.agent
-            .client()
-            .send(&m, window.try_into().unwrap())
-            .unwrap();
+        self.agent.send(&m, window.try_into().unwrap()).unwrap();
         let window = window.try_into().expect("Configure event for window 0?");
         if window == 1.try_into().unwrap() {
             self.process_self_configure(m, window)
@@ -134,7 +127,7 @@ impl QubesData {
         window: NonZeroU32,
     ) -> std::io::Result<()> {
         let qubes_gui::WindowSize { width, height } = m.rectangle.size;
-        self.agent.client().send(
+        self.agent.send(
             &qubes_gui::ShmImage {
                 rectangle: m.rectangle,
             },
@@ -221,7 +214,7 @@ impl QubesData {
         if self.last_width * self.last_height != width * height {
             drop(std::mem::replace(
                 &mut self.buf,
-                self.agent.alloc_buffer(width, height).unwrap(),
+                self.connection.alloc_buffer(width, height).unwrap(),
             ));
             need_dump = true;
         }
@@ -235,9 +228,11 @@ impl QubesData {
             ((height / 4) * line_width).try_into().unwrap(),
         );
         if need_dump {
-            self.buf.dump(self.agent.client(), window.into())?;
+            self.agent
+                .send_raw(self.buf.msg(), window, qubes_gui::MSG_WINDOW_DUMP)
+                .unwrap();
         }
-        let client = self.agent.client();
+        let client = &mut self.agent;
         client.send(&m, window)?;
         let output_message = qubes_gui::ShmImage {
             rectangle: m.rectangle,
@@ -255,15 +250,14 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
      * Initialize the globals
      */
 
-    let mut agent = qubes_gui_client::agent::new(0).unwrap();
+    let mut connection = qubes_gui_gntalloc::new(0).unwrap();
+    let (mut agent, conf) = qubes_gui_client::Client::agent(0).unwrap();
     // we now have a agent 🙂
     info!(log, "🙂 Somebody connected to us, yay!");
-    debug!(log, "Configuration parameters: {:?}", agent.conf());
-    debug!(log, "Creating window");
+    info!(log, "Configuration parameters: {:?}", conf);
     let (width, height) = (0x200, 0x100);
     let my_window = 1.try_into().unwrap();
     agent
-        .client()
         .send(
             &qubes_gui::Create {
                 rectangle: qubes_gui::Rectangle {
@@ -276,15 +270,22 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
             my_window,
         )
         .unwrap();
-    let buf = agent.alloc_buffer(width, height).unwrap();
+    let title = b"Qubes Demo Rust GUI Agent";
+    let mut title_buf = [0u8; 128];
+    title_buf[..title.len()].copy_from_slice(title);
+    agent
+        .send_raw(&mut title_buf, my_window, qubes_gui::MSG_SET_TITLE)
+        .unwrap();
+    let buf = connection.alloc_buffer(width, height).unwrap();
     let shade = vec![0xFF00u32; (width * height / 2).try_into().unwrap()];
-    buf.dump(agent.client(), 1.try_into().unwrap()).unwrap();
+    agent
+        .send_raw(buf.msg(), my_window, qubes_gui::MSG_WINDOW_DUMP)
+        .unwrap();
     buf.write(
         qubes_castable::as_bytes(&shade[..]),
         (width * height).try_into().unwrap(),
     );
     agent
-        .client()
         .send(
             &qubes_gui::MapInfo {
                 override_redirect: 0,
@@ -295,7 +296,8 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
         .unwrap();
     let raw_fd = agent.as_raw_fd();
     let data = QubesData {
-        agent: agent,
+        agent,
+        connection,
         wid: 2,
         map: BTreeMap::default(),
         log: log.clone(),
@@ -327,9 +329,17 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                     // return Ok(calloop::PostAction::Continue);
                 }
                 let ref mut qubes = agent_full.backend_data.borrow_mut();
-                qubes.agent.client().wait();
-                while let Some(ev) = qubes.agent.client().next_event()? {
-                    match ev {
+                qubes.agent.wait();
+                loop {
+                    match loop {
+                        match qubes.agent.read_header().map(Result::unwrap) {
+                            Poll::Pending => return Ok(calloop::PostAction::Continue),
+                            Poll::Ready((hdr, body)) => match DaemonToAgentEvent::parse(hdr, body).unwrap() {
+                                None => {}
+                                Some(ev) => break ev,
+                            },
+                        }
+                    } {
                         DaemonToAgentEvent::Motion { window, mut event } => {
                             let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
                             debug!(agent_full.log, "Motion event: {:?}", event);
@@ -416,12 +426,12 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                     continue
                                 }
                             };
-                            agent_full.keyboard.input(
+                            agent_full.keyboard.input::<(), _>(
                                 event.keycode - 8,
                                 state,
                                 SERIAL_COUNTER.next_serial(),
                                 time_spent,
-                                |_, _| true,
+                                |_, _| FilterResult::Forward,
                             );
                             trace!(agent_full.log, "Keypress sent to client");
                             if let Some(surface) = window
@@ -470,12 +480,12 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                     0 => KeyState::Released,
                                     _ => unreachable!(),
                                 };
-                                agent_full.keyboard.input(
+                                agent_full.keyboard.input::<(), _>(
                                     i as _,
                                     state,
                                     serial,
                                     time_spent,
-                                    |_, _| true,
+                                    |_, _| FilterResult::Forward,
                                 );
                             }
                         }
@@ -558,7 +568,6 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                         _ => warn!(agent_full.log, "Ignoring unknown event!"),
                     }
                 }
-                Ok(calloop::PostAction::Continue)
             },
         )
         .unwrap();
@@ -620,11 +629,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                     );
                 }
                 for i in dead_surfaces.iter() {
-                    qubes
-                        .agent
-                        .client()
-                        .send(&qubes_gui::Destroy {}, *i)
-                        .unwrap();
+                    qubes.agent.send(&qubes_gui::Destroy {}, *i).unwrap();
                     let _: QubesBackendData = qubes
                         .map
                         .remove(i)
