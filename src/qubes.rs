@@ -474,12 +474,20 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                     };
                                     agent_full.pointer.axis(frame)
                                 }
-                                1|2|3 => agent_full.pointer.button(
-                                    event.button,
-                                    state,
-                                    SERIAL_COUNTER.next_serial(),
-                                    time_spent,
-                                ),
+                                1|2|3 => {
+                                    let button = match event.button {
+                                        1 => 0x110,
+                                        2 => 0x112,
+                                        3 => 0x111,
+                                        _ => unreachable!(),
+                                    };
+                                    agent_full.pointer.button(
+                                        button,
+                                        state,
+                                        SERIAL_COUNTER.next_serial(),
+                                        time_spent,
+                                    );
+                                }
                                 _ => continue,
                             }
                         }
