@@ -112,9 +112,9 @@ impl QubesData {
     }
 
     fn process_configure(&mut self, m: qubes_gui::Configure, window: u32) -> std::io::Result<()> {
-        self.agent.send(&m, window.try_into().unwrap()).unwrap();
         let window = window.try_into().expect("Configure event for window 0?");
         if window == 1.try_into().unwrap() {
+            self.agent.send(&m, window).unwrap();
             self.process_self_configure(m, window)
         } else {
             self.process_client_configure(m, window)
@@ -127,75 +127,75 @@ impl QubesData {
         window: NonZeroU32,
     ) -> std::io::Result<()> {
         let qubes_gui::WindowSize { width, height } = m.rectangle.size;
+        let window = window
+            .try_into()
+            .expect("The GUI daemon never sends a zero window; qed");
+        let data: Option<&mut QubesBackendData> = self.map.get_mut(&window);
+        let QubesBackendData {
+            surface,
+            ref mut has_configured,
+            ref mut coordinates,
+        } = match data {
+            None => return Ok(()),
+            Some(data) => data,
+        };
         self.agent.send(
             &qubes_gui::ShmImage {
                 rectangle: m.rectangle,
             },
             window,
         )?;
-        let window = window
-            .try_into()
-            .expect("The GUI daemon never sends a zero window; qed");
-        let data: Option<&mut QubesBackendData> = self.map.get_mut(&window);
-        match data {
-            None => panic!("Configure event for unknown window"),
-            Some(QubesBackendData {
-                surface,
-                ref mut has_configured,
-                ref mut coordinates,
-            }) => {
-                let qubes_gui::Coordinates { x, y } = m.rectangle.top_left;
-                *coordinates = (x as i32, y as i32).into();
-                surface.get_surface().map(|surface| {
-                    with_states(surface, |data| {
-                        if let Some(state) = data.data_map.get::<RefCell<SurfaceData>>() {
-                            state.borrow_mut().coordinates = m.rectangle.top_left
-                        }
-                    })
-                });
-                match match surface {
-                    Kind::Toplevel(surface) => surface.with_pending_state(|state| {
-                        let new_size = Some(
-                            if *has_configured {
-                                (width as _, height as _)
-                            } else {
-                                (0, 0)
-                            }
-                            .into(),
-                        );
-                        let do_send = new_size == state.size;
-                        state.size = new_size;
-                        do_send
-                    }),
-                    Kind::Popup(surface) => surface.with_pending_state(|state| {
-                        let new_size = if *has_configured {
-                            (width as _, height as _)
-                        } else {
-                            (0, 0)
-                        }
-                        .into();
-                        let do_send = new_size == state.geometry.size;
-                        state.geometry.size = new_size;
-                        do_send
-                    }),
-                } {
-                    Ok(true) if *has_configured => {
-                        debug!(self.log, "Ignoring configure event that didn’t change size")
-                    }
-                    Ok(_) => {
-                        debug!(
-                            self.log,
-                            "Sending configure event to application: width {}, height {}, has_configured {}",
-                            width,
-                            height,
-                            *has_configured,
-                        );
-                        surface.send_configure();
-                        *has_configured = true;
-                    }
-                    Err(_) => warn!(self.log, "Ignoring MSG_CONFIGURE on dead window"),
+        self.agent.send(&m, window).unwrap();
+        let qubes_gui::Coordinates { x, y } = m.rectangle.top_left;
+        *coordinates = (x as i32, y as i32).into();
+        surface.get_surface().map(|surface| {
+            with_states(surface, |data| {
+                if let Some(state) = data.data_map.get::<RefCell<SurfaceData>>() {
+                    state.borrow_mut().coordinates = m.rectangle.top_left
                 }
+            })
+        });
+        match match surface {
+            Kind::Toplevel(surface) => surface.with_pending_state(|state| {
+                let new_size = Some(
+                    if *has_configured {
+                        (width as _, height as _)
+                    } else {
+                        (0, 0)
+                    }
+                    .into(),
+                );
+                let do_send = new_size == state.size;
+                state.size = new_size;
+                do_send
+            }),
+            Kind::Popup(surface) => surface.with_pending_state(|state| {
+                let new_size = if *has_configured {
+                    (width as _, height as _)
+                } else {
+                    (0, 0)
+                }
+                .into();
+                let do_send = new_size == state.geometry.size;
+                state.geometry.size = new_size;
+                do_send
+            }),
+        } {
+            Ok(true) if *has_configured => {
+                debug!(self.log, "Ignoring configure event that didn’t change size")
             }
+            Ok(_) => {
+                trace!(
+                    self.log,
+                    "Sending configure event to application: width {}, height {}, has_configured {}",
+                    width,
+                    height,
+                    *has_configured,
+                );
+                surface.send_configure();
+                *has_configured = true;
+            }
+            Err(_) => warn!(self.log, "Ignoring MSG_CONFIGURE on dead window"),
         }
         Ok(())
     }
