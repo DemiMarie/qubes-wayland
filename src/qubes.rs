@@ -10,14 +10,17 @@ use smithay::{
         calloop::{self, generic::Generic, EventLoop, Interest},
         wayland_protocols::xdg_shell::server::xdg_toplevel,
         wayland_server::{
-            protocol::{wl_pointer::ButtonState, wl_surface::WlSurface},
+            protocol::{
+                wl_pointer::{Axis, AxisSource, ButtonState},
+                wl_surface::WlSurface,
+            },
             Display,
         },
     },
     utils::{Logical, Point},
     wayland::{
         compositor::{with_states, with_surface_tree_upward, SurfaceAttributes, TraversalAction},
-        seat::FilterResult,
+        seat::{AxisFrame, FilterResult},
         shell::xdg::{PopupSurface, ShellClient, ToplevelSurface},
         SERIAL_COUNTER,
     },
@@ -458,12 +461,27 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 }
                             };
                             // info!(agent_full.log, "Sending button event: {:?}", event);
-                            agent_full.pointer.button(
-                                event.button,
-                                state,
-                                SERIAL_COUNTER.next_serial(),
-                                time_spent,
-                            )
+                            match event.button {
+                                4|5|6|7 => {
+                                    let frame = AxisFrame::new(time_spent)
+                                        .source(AxisSource::Wheel);
+                                    let frame = match event.button {
+                                        4 => frame.value(Axis::VerticalScroll, -10f64),
+                                        5 => frame.value(Axis::VerticalScroll, 10f64),
+                                        6 => frame.value(Axis::HorizontalScroll, -10f64),
+                                        7 => frame.value(Axis::HorizontalScroll, 10f64),
+                                        _ => unreachable!(),
+                                    };
+                                    agent_full.pointer.axis(frame)
+                                }
+                                1|2|3 => agent_full.pointer.button(
+                                    event.button,
+                                    state,
+                                    SERIAL_COUNTER.next_serial(),
+                                    time_spent,
+                                ),
+                                _ => continue,
+                            }
                         }
                         DaemonToAgentEvent::Copy => {
                             trace!(agent_full.log, "clipboard data requested!")
@@ -472,8 +490,8 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             trace!(agent_full.log, "clipboard data reply!")
                         }
                         DaemonToAgentEvent::Keymap { new_keymap } => {
-                            let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
                             trace!(agent_full.log, "Keymap notification: {:?}", new_keymap);
+                            let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
                             let serial = SERIAL_COUNTER.next_serial();
                             for i in 0x0..0x100 {
                                 let state = match (new_keymap.keys[i / 32] >> (i % 8)) & 0x1 {
