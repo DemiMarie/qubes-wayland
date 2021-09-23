@@ -117,7 +117,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         parent: None,
                         override_redirect: 0,
                     };
-                    debug!(anvil_state.log, "Creating window {}", id);
+                    debug!(anvil_state.log, "Creating window"; "id" => u32::from(id));
                     agent.send(&msg, id).expect("TODO: send errors");
                     let msg = qubes_gui::Configure {
                         rectangle: msg.rectangle,
@@ -140,9 +140,9 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                 } => {
                     info!(
                         anvil_state.log,
-                        "Creating popup for surface {:?} with positioner {:?}!",
-                        surface,
-                        positioner
+                        "Creating popup";
+                        "surface" => ?surface,
+                        "positioner" => ?positioner,
                     );
                     let raw_surface = match surface.get_surface() {
                         Some(s) => s,
@@ -207,7 +207,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                         parent: None,
                         override_redirect: 1,
                     };
-                    debug!(anvil_state.log, "Creating window {}", id);
+                    trace!(anvil_state.log, "Creating window"; "id" => u32::from(id));
                     agent.send(&msg, id).expect("TODO: send errors");
                     let msg = qubes_gui::Configure {
                         rectangle: msg.rectangle,

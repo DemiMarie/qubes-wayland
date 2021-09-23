@@ -228,6 +228,7 @@ impl QubesData {
             ((height / 4) * line_width).try_into().unwrap(),
         );
         if need_dump {
+            trace!(self.log, "Dumping"; "window" => u32::from(window));
             self.agent
                 .send_raw(self.buf.msg(), window, qubes_gui::MSG_WINDOW_DUMP)
                 .unwrap();
@@ -629,11 +630,13 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                     );
                 }
                 for i in dead_surfaces.iter() {
+                    trace!(log, "Destroying window"; "window" => u32::from(*i));
                     qubes.agent.send(&qubes_gui::Destroy {}, *i).unwrap();
                     let _: QubesBackendData = qubes
                         .map
                         .remove(i)
                         .expect("these were keys in the map; qed");
+                    trace!(log, "Destruct successful"; "window" => u32::from(*i));
                 }
             })
             .expect("FIXME: handle initialization failed");
