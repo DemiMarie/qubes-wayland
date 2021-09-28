@@ -496,179 +496,174 @@ impl SurfaceData {
         }
         let ref mut agent = data.agent;
         debug!(data.log, "Damage: {:?}!", &attrs.damage);
-        if !attrs.damage.is_empty() {
-            if let Some((buffer, qbuf)) = self.buffer.as_ref() {
-                if let Some(geometry) = geometry {
-                    if geometry.loc.x < 0
-                        || geometry.loc.y < 0
-                        || geometry.size.w < 0
-                        || geometry.size.h < 0
+        if attrs.damage.is_empty() {
+            return;
+        }
+        let (buffer, qbuf) = match self.buffer.as_ref() {
+            Some(s) => s,
+            None => return,
+        };
+        if let Some(geometry) = geometry {
+            if geometry.loc.x < 0
+                || geometry.loc.y < 0
+                || geometry.size.w < 0
+                || geometry.size.h < 0
+            {
+                buffer
+                    .as_ref()
+                    .post_error(3, "TODO: find a better error for negative geometry".into());
+                return;
+            }
+        }
+        self.geometry = geometry;
+        debug!(data.log, "Performing damage calculation");
+        let log = data.log.clone();
+        let (width, height, damage) = match shm::with_buffer_contents(
+            buffer,
+            |untrusted_slice: &[u8],
+             shm::BufferData {
+                 offset,
+                 width,
+                 height,
+                 stride,
+                 format: _,
+             }| {
+                debug!(log, "Updating buffer with damaged areas");
+                if !attrs.damage.is_empty() && true {
+                    attrs.damage.clear();
+                    attrs.damage.push(Damage::Buffer(Rectangle {
+                        loc: (0, 0).into(),
+                        size: (width, height).into(),
+                    }));
+                }
+                for i in &attrs.damage {
+                    let (untrusted_loc, untrusted_size) = match *i {
+                        Damage::Surface(r) => {
+                            let r = r.to_buffer(self.buffer_scale);
+                            (r.loc, r.size)
+                        }
+                        Damage::Buffer(Rectangle {
+                            loc: untrusted_loc,
+                            size: untrusted_size,
+                        }) => (untrusted_loc, untrusted_size),
+                    };
+                    // SANITIZE START
+                    if untrusted_size.w <= 0
+                        || untrusted_size.h <= 0
+                        || untrusted_loc.x < 0
+                        || untrusted_loc.y < 0
+                        || untrusted_loc.x > width
+                        || untrusted_loc.y > height
                     {
                         buffer.as_ref().post_error(
-                            3,
-                            "TODO: find a better error for negative geometry".into(),
+                            wl_shm::Error::InvalidStride as u32,
+                            "Invalid damage region".to_owned(),
                         );
-                        return;
+                        return None;
                     }
-                }
-                self.geometry = geometry;
-                debug!(data.log, "Performing damage calculation");
-                let log = data.log.clone();
-                match shm::with_buffer_contents(
-                    buffer,
-                    |untrusted_slice: &[u8],
-                     shm::BufferData {
-                         offset,
-                         width,
-                         height,
-                         stride,
-                         format: _,
-                     }| {
-                        debug!(log, "Updating buffer with damaged areas");
-                        if !attrs.damage.is_empty() && true {
-                            attrs.damage.clear();
-                            attrs.damage.push(Damage::Buffer(Rectangle {
-                                loc: (0, 0).into(),
-                                size: (width, height).into(),
-                            }));
-                        }
-                        for i in &attrs.damage {
-                            let (untrusted_loc, untrusted_size) = match *i {
-                                Damage::Surface(r) => {
-                                    let r = r.to_buffer(self.buffer_scale);
-                                    (r.loc, r.size)
-                                }
-                                Damage::Buffer(Rectangle {
-                                    loc: untrusted_loc,
-                                    size: untrusted_size,
-                                }) => (untrusted_loc, untrusted_size),
-                            };
-                            // SANITIZE START
-                            if untrusted_size.w <= 0
-                                || untrusted_size.h <= 0
-                                || untrusted_loc.x < 0
-                                || untrusted_loc.y < 0
-                                || untrusted_loc.x > width
-                                || untrusted_loc.y > height
-                            {
-                                buffer.as_ref().post_error(
-                                    wl_shm::Error::InvalidStride as u32,
-                                    "Invalid damage region".to_owned(),
-                                );
-                                return None;
-                            }
-                            let mut w = untrusted_size.w.min(width - untrusted_loc.x);
-                            let mut h = untrusted_size.w.min(height - untrusted_loc.y);
-                            let (x, y) = (untrusted_loc.x, untrusted_loc.y);
-                            // MEGA-HACK FOR QUBES
-                            //
-                            // Qubes CANNOT render outside of the bounding box.  Move the window!
-                            let (source_x, source_y) = if let Some(geometry) = geometry {
-                                let x = if geometry.loc.x > 0 && w > geometry.loc.x {
-                                    w -= geometry.loc.x;
-                                    x + geometry.loc.x
-                                } else {
-                                    x
-                                };
-                                let y = if geometry.loc.y > 0 && h > geometry.loc.y {
-                                    h -= geometry.loc.y;
-                                    y + geometry.loc.y
-                                } else {
-                                    y
-                                };
-                                (x, y)
-                            } else {
-                                (x, y)
-                            };
+                    let mut w = untrusted_size.w.min(width - untrusted_loc.x);
+                    let mut h = untrusted_size.w.min(height - untrusted_loc.y);
+                    let (x, y) = (untrusted_loc.x, untrusted_loc.y);
+                    // MEGA-HACK FOR QUBES
+                    //
+                    // Qubes CANNOT render outside of the bounding box.  Move the window!
+                    let (source_x, source_y) = if let Some(geometry) = geometry {
+                        let x = if geometry.loc.x > 0 && w > geometry.loc.x {
+                            w -= geometry.loc.x;
+                            x + geometry.loc.x
+                        } else {
+                            x
+                        };
+                        let y = if geometry.loc.y > 0 && h > geometry.loc.y {
+                            h -= geometry.loc.y;
+                            y + geometry.loc.y
+                        } else {
+                            y
+                        };
+                        (x, y)
+                    } else {
+                        (x, y)
+                    };
 
-                            let subslice = &untrusted_slice[(offset
-                                + BYTES_PER_PIXEL * source_x
-                                + source_y * stride)
-                                .try_into()
-                                .expect("checked above")..];
-                            // trace!(data.log, "Copying data!");
-                            let bytes_to_write: usize = (BYTES_PER_PIXEL * w).try_into().unwrap();
-                            for i in 0..h {
-                                let start_offset = (i * stride).try_into().unwrap();
-                                let offset_in_dest_buffer = (BYTES_PER_PIXEL
-                                    * (x + (i + y) * width))
-                                    .try_into()
-                                    .unwrap();
-                                qbuf.write(
-                                    &subslice[start_offset..bytes_to_write + start_offset],
-                                    offset_in_dest_buffer,
-                                );
-                            }
-                        }
-                        return Some((width, height, std::mem::replace(&mut attrs.damage, vec![])));
-                    },
-                ) {
-                    Ok(Some((width, height, damage))) => {
-                        if self.buffer_swapped {
-                            let msg = self
-                                .buffer
-                                .as_ref()
-                                .expect("buffer_swapped never set unless a buffer is present; qed")
-                                .1
-                                .msg();
-                            agent
-                                .send_raw(msg, self.window, qubes_gui::MSG_WINDOW_DUMP)
-                                .unwrap();
-                            let Size { w, h, .. } = geometry
-                                .map(|g| g.size.to_physical(self.buffer_scale))
-                                .unwrap_or_else(|| {
-                                    self.buffer_dimensions.expect(
-                                        "buffer_dimensions are Some if a buffer is present; qed",
-                                    )
-                                });
-                            let msg = qubes_gui::Configure {
-                                rectangle: qubes_gui::Rectangle {
-                                    top_left: self.coordinates,
-                                    size: qubes_gui::WindowSize {
-                                        width: w
-                                            .try_into()
-                                            .expect("negative sizes rejected earlier; qed"),
-                                        height: h
-                                            .try_into()
-                                            .expect("negative sizes rejected earlier; qed"),
-                                    },
-                                },
-                                override_redirect: 0,
-                            };
-                            agent.send(&msg, self.window.into()).expect("TODO");
-                        }
-                        for i in damage {
-                            let (loc, size) = match i {
-                                Damage::Surface(r) => {
-                                    let r = r.to_buffer(self.buffer_scale);
-                                    (r.loc, r.size)
-                                }
-                                Damage::Buffer(Rectangle { loc, size }) => (loc, size),
-                            };
-                            let w = size.w.min(width - loc.x);
-                            let h = size.w.min(height - loc.y);
-                            let (x, y) = (loc.x, loc.y);
-                            let output_message = qubes_gui::ShmImage {
-                                rectangle: qubes_gui::Rectangle {
-                                    top_left: qubes_gui::Coordinates {
-                                        x: x as u32,
-                                        y: y as u32,
-                                    },
-                                    size: qubes_gui::WindowSize {
-                                        width: w as u32,
-                                        height: h as u32,
-                                    },
-                                },
-                            };
-                            agent
-                                .send(&output_message, self.window.into())
-                                .expect("TODO");
-                        }
+                    let subslice = &untrusted_slice[(offset
+                        + BYTES_PER_PIXEL * source_x
+                        + source_y * stride)
+                        .try_into()
+                        .expect("checked above")..];
+                    // trace!(data.log, "Copying data!");
+                    let bytes_to_write: usize = (BYTES_PER_PIXEL * w).try_into().unwrap();
+                    for i in 0..h {
+                        let start_offset = (i * stride).try_into().unwrap();
+                        let offset_in_dest_buffer = (BYTES_PER_PIXEL * (x + (i + y) * width))
+                            .try_into()
+                            .unwrap();
+                        qbuf.write(
+                            &subslice[start_offset..bytes_to_write + start_offset],
+                            offset_in_dest_buffer,
+                        );
                     }
-                    Err(shm::BufferAccessError::NotManaged) => panic!("strange shm buffer"),
-                    Err(shm::BufferAccessError::BadMap) | Ok(None) => return,
                 }
-            }
+                return Some((width, height, std::mem::replace(&mut attrs.damage, vec![])));
+            },
+        ) {
+            Err(shm::BufferAccessError::NotManaged) => panic!("strange shm buffer"),
+            Err(shm::BufferAccessError::BadMap) | Ok(None) => return,
+            Ok(Some(d)) => d,
+        };
+        if self.buffer_swapped {
+            let msg = self
+                .buffer
+                .as_ref()
+                .expect("buffer_swapped never set unless a buffer is present; qed")
+                .1
+                .msg();
+            agent
+                .send_raw(msg, self.window, qubes_gui::MSG_WINDOW_DUMP)
+                .unwrap();
+            let Size { w, h, .. } = geometry
+                .map(|g| g.size.to_physical(self.buffer_scale))
+                .unwrap_or_else(|| {
+                    self.buffer_dimensions
+                        .expect("buffer_dimensions are Some if a buffer is present; qed")
+                });
+            let msg = qubes_gui::Configure {
+                rectangle: qubes_gui::Rectangle {
+                    top_left: self.coordinates,
+                    size: qubes_gui::WindowSize {
+                        width: w.try_into().expect("negative sizes rejected earlier; qed"),
+                        height: h.try_into().expect("negative sizes rejected earlier; qed"),
+                    },
+                },
+                override_redirect: 0,
+            };
+            agent.send(&msg, self.window.into()).expect("TODO");
+        }
+        for i in damage {
+            let (loc, size) = match i {
+                Damage::Surface(r) => {
+                    let r = r.to_buffer(self.buffer_scale);
+                    (r.loc, r.size)
+                }
+                Damage::Buffer(Rectangle { loc, size }) => (loc, size),
+            };
+            let w = size.w.min(width - loc.x);
+            let h = size.w.min(height - loc.y);
+            let (x, y) = (loc.x, loc.y);
+            let output_message = qubes_gui::ShmImage {
+                rectangle: qubes_gui::Rectangle {
+                    top_left: qubes_gui::Coordinates {
+                        x: x as u32,
+                        y: y as u32,
+                    },
+                    size: qubes_gui::WindowSize {
+                        width: w as u32,
+                        height: h as u32,
+                    },
+                },
+            };
+            agent
+                .send(&output_message, self.window.into())
+                .expect("TODO");
         }
     }
 
