@@ -22,7 +22,7 @@ qubes-gui-agent-proto = { path = "gui-rust/qubes-gui-agent-proto" }
 [dependencies.smithay]
 path = "smithay"
 default-features = false
-features = [ "wayland_frontend", "slog-stdlog", "use_system_lib"]
+features = [ "wayland_frontend", "slog-stdlog"]
 
 [dependencies.x11rb]
 optional = true
@@ -43,9 +43,7 @@ path = "gui-rust/qubes-castable"
 path = "gui-rust/qubes-gui-gntalloc"
 
 [features]
-#default = ["smithay/use_system_lib"]
 default = []
-
 xwayland = [ "smithay/xwayland", "x11rb" ]
 debug = [ "fps_ticker" ]
 test_all_features = ["default", "debug"]
