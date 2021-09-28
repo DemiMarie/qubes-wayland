@@ -504,11 +504,7 @@ impl SurfaceData {
             None => return,
         };
         if let Some(geometry) = geometry {
-            if geometry.loc.x < 0
-                || geometry.loc.y < 0
-                || geometry.size.w < 0
-                || geometry.size.h < 0
-            {
+            if geometry.size.w <= 0 || geometry.size.h <= 0 {
                 buffer
                     .as_ref()
                     .post_error(3, "TODO: find a better error for negative geometry".into());
