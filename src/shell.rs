@@ -689,64 +689,63 @@ fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
     #[cfg(feature = "xwayland")]
     super::xwayland::commit_hook(surface);
 
-    if !is_sync_subsurface(surface) {
-        // Update the buffer of all child surfaces
-        with_surface_tree_downward(
-            surface,
-            None,
-            |_surface: &WlSurface,
-             surface_data: &compositor::SurfaceData,
-             &parent: &Option<NonZeroU32>| {
-                surface_data
-                    .data_map
-                    .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
-                        let data = RefCell::new(QubesData::data(backend_data.clone()));
-                        let msg = qubes_gui::Create {
-                            rectangle: qubes_gui::Rectangle {
-                                top_left: qubes_gui::Coordinates { x: 0, y: 0 },
-                                size: qubes_gui::WindowSize {
-                                    width: 256,
-                                    height: 256,
-                                },
-                            },
-                            parent,
-                            override_redirect: 0,
-                        };
-                        backend_data
-                            .borrow_mut()
-                            .agent
-                            .send(&msg, data.borrow().window)
-                            .expect("TODO: send errors");
-                        data
-                    });
-                let res: Option<NonZeroU32> = surface_data
-                    .data_map
-                    .get::<RefCell<SurfaceData>>()
-                    .unwrap()
-                    .borrow()
-                    .window
-                    .into();
-                TraversalAction::DoChildren(res)
-            },
-            |_surface: &WlSurface,
-             states: &compositor::SurfaceData,
-             &_parent: &Option<NonZeroU32>| {
-                let geometry = states
-                    .cached_state
-                    .current::<xdg::SurfaceCachedState>()
-                    .geometry;
-                states
-                    .data_map
-                    .get::<RefCell<SurfaceData>>()
-                    .unwrap()
-                    .borrow_mut()
-                    .update_buffer(
-                        &mut *states.cached_state.current::<SurfaceAttributes>(),
-                        &mut *backend_data.borrow_mut(),
-                        geometry,
-                    );
-            },
-            |_surface: &WlSurface, _surface_data, _| true,
-        );
+    if is_sync_subsurface(surface) {
+        return;
     }
+    // Update the buffer of all child surfaces
+    with_surface_tree_downward(
+        surface,
+        None,
+        |_surface: &WlSurface,
+         surface_data: &compositor::SurfaceData,
+         &parent: &Option<NonZeroU32>| {
+            surface_data
+                .data_map
+                .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
+                    let data = RefCell::new(QubesData::data(backend_data.clone()));
+                    let msg = qubes_gui::Create {
+                        rectangle: qubes_gui::Rectangle {
+                            top_left: qubes_gui::Coordinates { x: 0, y: 0 },
+                            size: qubes_gui::WindowSize {
+                                width: 256,
+                                height: 256,
+                            },
+                        },
+                        parent,
+                        override_redirect: 0,
+                    };
+                    backend_data
+                        .borrow_mut()
+                        .agent
+                        .send(&msg, data.borrow().window)
+                        .expect("TODO: send errors");
+                    data
+                });
+            let res: Option<NonZeroU32> = surface_data
+                .data_map
+                .get::<RefCell<SurfaceData>>()
+                .unwrap()
+                .borrow()
+                .window
+                .into();
+            TraversalAction::DoChildren(res)
+        },
+        |_surface: &WlSurface, states: &compositor::SurfaceData, &_parent: &Option<NonZeroU32>| {
+            let geometry = states
+                .cached_state
+                .current::<xdg::SurfaceCachedState>()
+                .geometry;
+            states
+                .data_map
+                .get::<RefCell<SurfaceData>>()
+                .unwrap()
+                .borrow_mut()
+                .update_buffer(
+                    &mut *states.cached_state.current::<SurfaceAttributes>(),
+                    &mut *backend_data.borrow_mut(),
+                    geometry,
+                );
+        },
+        |_surface: &WlSurface, _surface_data, _| true,
+    );
 }
