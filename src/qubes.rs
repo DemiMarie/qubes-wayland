@@ -626,10 +626,10 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                         (),
                         |_surface, _surface_data, ()| TraversalAction::DoChildren(()),
                         |_surface, states, ()| {
-                            SurfaceData::send_frame(
-                                &mut *states.cached_state.current::<SurfaceAttributes>(),
-                                time_spent,
-                            );
+                            let attrs = &mut *states.cached_state.current::<SurfaceAttributes>();
+                            for callback in attrs.frame_callbacks.drain(..) {
+                                callback.done(time_spent);
+                            }
                         },
                         |_surface, _surface_data, ()| true,
                     );

@@ -668,13 +668,6 @@ impl SurfaceData {
         self.buffer_dimensions
             .map(|dims| dims.to_logical(self.buffer_scale))
     }
-
-    /// Send the frame callback if it had been requested
-    pub fn send_frame(attrs: &mut SurfaceAttributes, time: u32) {
-        for callback in attrs.frame_callbacks.drain(..) {
-            callback.done(time);
-        }
-    }
 }
 
 fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
