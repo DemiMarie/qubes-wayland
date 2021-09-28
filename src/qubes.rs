@@ -619,27 +619,6 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             dead_surfaces.push(*key);
                             continue;
                         }
-                        Some(s) if !s.as_ref().is_alive() => {
-                            info!(log, "Pushing toplevel with dead surface onto dead list");
-                            dead_surfaces.push(*key);
-                            match with_states(s, |data| {
-                                data.data_map
-                                    .get::<RefCell<SurfaceData>>()
-                                    .map(RefCell::borrow_mut)
-                                    .map(|mut surface_data| {
-                                        surface_data.buffer = None;
-                                        surface_data.geometry = None;
-                                        surface_data.buffer_dimensions = None;
-                                    })
-                            }) {
-                                Ok(Some(())) => s,
-                                Ok(None) => s,
-                                Err(e) => {
-                                    info!(log, "Got an error: {}", e);
-                                    s
-                                }
-                            }
-                        }
                         Some(s) => s,
                     };
                     with_surface_tree_upward(
