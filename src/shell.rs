@@ -34,11 +34,6 @@ pub struct ShellHandles {
 }
 
 struct QubesClient(Rc<RefCell<BTreeMap<u32, ()>>>);
-impl Drop for QubesClient {
-    fn drop(&mut self) {
-        eprintln!("Dropped client")
-    }
-}
 
 pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHandles {
     // Create the compositor
@@ -374,13 +369,6 @@ pub struct SurfaceData {
     pub buffer_swapped: bool,
     pub buffer_scale: i32,
     pub window: std::num::NonZeroU32,
-    // pub qubes: Rc<RefCell<QubesData>>,
-}
-
-impl Drop for SurfaceData {
-    fn drop(&mut self) {
-        eprintln!("SurfaceData destroyed!");
-    }
 }
 
 impl SurfaceData {
