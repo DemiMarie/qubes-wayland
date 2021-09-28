@@ -19,7 +19,7 @@ use smithay::{
     },
     utils::{Logical, Point},
     wayland::{
-        compositor::{with_states, with_surface_tree_upward, SurfaceAttributes, TraversalAction},
+        compositor::{with_states, SurfaceAttributes},
         seat::{AxisFrame, FilterResult},
         shell::xdg::{PopupSurface, ShellClient, ToplevelSurface},
         SERIAL_COUNTER,
@@ -613,26 +613,20 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                 let ref mut qubes = agent_full.backend_data.borrow_mut();
                 let mut dead_surfaces = vec![];
                 for (key, value) in qubes.map.iter_mut() {
-                    let surface = match value.surface.get_surface() {
+                    match value.surface.get_surface() {
                         None => {
                             info!(log, "Pushing toplevel with no surface onto dead list");
                             dead_surfaces.push(*key);
                             continue;
                         }
-                        Some(s) => s,
-                    };
-                    with_surface_tree_upward(
-                        &surface,
-                        (),
-                        |_surface, _surface_data, ()| TraversalAction::DoChildren(()),
-                        |_surface, states, ()| {
+                        Some(s) => with_states(s, |states| {
                             let attrs = &mut *states.cached_state.current::<SurfaceAttributes>();
                             for callback in attrs.frame_callbacks.drain(..) {
                                 callback.done(time_spent);
                             }
-                        },
-                        |_surface, _surface_data, ()| true,
-                    );
+                        })
+                        .expect("get_surface() only returns live resources; qed"),
+                    }
                 }
                 for i in dead_surfaces.iter() {
                     trace!(log, "Destroying window"; "window" => u32::from(*i));
