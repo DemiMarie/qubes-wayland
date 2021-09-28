@@ -717,7 +717,6 @@ fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
                 surface_data
                     .data_map
                     .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
-                        assert!(parent.is_none());
                         let data = RefCell::new(QubesData::data(backend_data.clone()));
                         let msg = qubes_gui::Create {
                             rectangle: qubes_gui::Rectangle {
