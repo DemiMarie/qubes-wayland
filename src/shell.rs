@@ -456,21 +456,34 @@ impl SurfaceData {
                     Some(data) => data,
                 };
                 self.buffer_scale = scale;
-                let qbuf = match connection.alloc_buffer(w as _, h as _) {
-                    Err(_) => {
-                        // 2 is no_memory
-                        buffer
-                            .as_ref()
-                            .post_error(2, "Failed to allocate Xen shared memory".into());
-                        return;
+                if let Some((old_buffer, qbuf)) = &mut self.buffer {
+                    if qbuf.width() as i32 != w || qbuf.height() as i32 != h {
+                        *qbuf = match connection.alloc_buffer(w as _, h as _) {
+                            Err(_) => {
+                                // 2 is no_memory
+                                buffer
+                                    .as_ref()
+                                    .post_error(2, "Failed to allocate Xen shared memory".into());
+                                return;
+                            }
+                            Ok(qbuf) => qbuf,
+                        };
+                        self.buffer_swapped = true;
                     }
-                    Ok(qbuf) => qbuf,
-                };
-                self.buffer_swapped = true;
-                if let Some(old_buffer) = std::mem::replace(&mut self.buffer, Some((buffer, qbuf)))
-                {
-                    old_buffer.0.release();
-                    drop(old_buffer.1);
+                    std::mem::replace(old_buffer, buffer).release();
+                } else {
+                    let qbuf = match connection.alloc_buffer(w as _, h as _) {
+                        Err(_) => {
+                            // 2 is no_memory
+                            buffer
+                                .as_ref()
+                                .post_error(2, "Failed to allocate Xen shared memory".into());
+                            return;
+                        }
+                        Ok(qbuf) => qbuf,
+                    };
+                    self.buffer = Some((buffer, qbuf));
+                    self.buffer_swapped = true;
                 }
             }
             BufferAssignment::Removed => {
