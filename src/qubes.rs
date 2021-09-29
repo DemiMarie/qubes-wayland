@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell, collections::BTreeMap, convert::TryInto, num::NonZeroU32, os::unix::io::AsRawFd,
-    rc::Rc, sync::atomic::Ordering, task::Poll, time::Duration,
+    rc::Rc, sync::atomic::Ordering, sync::Mutex, task::Poll, time::Duration,
 };
 
 use qubes_gui_agent_proto::DaemonToAgentEvent;
@@ -21,7 +21,7 @@ use smithay::{
     wayland::{
         compositor::{with_states, SurfaceAttributes},
         seat::{AxisFrame, FilterResult},
-        shell::xdg::{PopupSurface, ShellClient, ToplevelSurface},
+        shell::xdg,
         SERIAL_COUNTER,
     },
 };
@@ -47,9 +47,9 @@ pub struct QubesData {
 /// Surface kinds
 pub enum Kind {
     /// xdg-toplevel
-    Toplevel(ToplevelSurface),
+    Toplevel(xdg::ToplevelSurface),
     /// Popup
-    Popup(PopupSurface),
+    Popup(xdg::PopupSurface),
 }
 
 impl Kind {
@@ -74,7 +74,7 @@ impl Kind {
         }
     }
 
-    fn client(&self) -> Option<ShellClient> {
+    fn client(&self) -> Option<xdg::ShellClient> {
         match self {
             Self::Toplevel(t) => t.client(),
             Self::Popup(t) => t.client(),
@@ -612,7 +612,12 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                 timer_handle.add_timeout(std::time::Duration::from_millis(time.into()), ());
                 let ref mut qubes = agent_full.backend_data.borrow_mut();
                 let mut dead_surfaces = vec![];
-                for (key, value) in qubes.map.iter_mut() {
+                let QubesData {
+                    ref mut agent,
+                    ref mut map,
+                    ..
+                } = &mut **qubes;
+                for (key, value) in map.iter_mut() {
                     match value.surface.get_surface() {
                         None => {
                             info!(log, "Pushing toplevel with no surface onto dead list");
@@ -620,6 +625,18 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             continue;
                         }
                         Some(s) => with_states(s, |states| {
+                            if let Some(title) = states
+                                .data_map
+                                .get::<Mutex<xdg::XdgToplevelSurfaceRoleAttributes>>()
+                                .and_then(|d| d.lock().expect("Poisoned?").title.clone())
+                            {
+                                let title: &[u8] = title.as_bytes();
+                                let mut title_buf = [0u8; 128];
+                                title_buf[..title.len().min(128)].copy_from_slice(title);
+                                agent
+                                    .send_raw(&mut title_buf, *key, qubes_gui::MSG_SET_TITLE)
+                                    .unwrap();
+                            }
                             let attrs = &mut *states.cached_state.current::<SurfaceAttributes>();
                             for callback in attrs.frame_callbacks.drain(..) {
                                 callback.done(time_spent);
