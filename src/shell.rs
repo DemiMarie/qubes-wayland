@@ -538,7 +538,7 @@ impl SurfaceData {
                  format: _,
              }| {
                 debug!(log, "Updating buffer with damaged areas");
-                if !attrs.damage.is_empty() && true {
+                if !attrs.damage.is_empty() && self.buffer_swapped {
                     attrs.damage.clear();
                     attrs.damage.push(Damage::Buffer(Rectangle {
                         loc: (0, 0).into(),
