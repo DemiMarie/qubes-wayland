@@ -584,8 +584,8 @@ impl SurfaceData {
                             .into(),
                     };
                     // SANITIZE END
-                    assert!(damage.loc.y + damage.size.h <= height);
-                    assert!(damage.loc.x + damage.size.w <= width);
+                    debug_assert!(damage.loc.y + damage.size.h <= height);
+                    debug_assert!(damage.loc.x + damage.size.w <= width);
 
                     let (damage, dest_loc) = if let Some(geometry) = self.geometry {
                         let geometry = geometry.to_buffer(self.buffer_scale);
