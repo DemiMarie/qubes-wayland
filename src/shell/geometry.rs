@@ -21,6 +21,9 @@ fn adjust_damage_source_single(x: i32, w: i32, min_x: i32) -> Option<(i32, i32)>
     })
 }
 
+/// Crop and translate the given damage for the window geometry.  Returns an
+/// offset relative to the source buffer, or [`None`] if the damage is
+/// entirely outside the visible portion of the window.
 pub(crate) fn adjust_damage_source(
     damage: Rectangle<i32, Buffer>,
     geometry: Rectangle<i32, Buffer>,
@@ -35,6 +38,9 @@ pub(crate) fn adjust_damage_source(
     })
 }
 
+/// Crop and translate the given damage for the window geometry.  Returns an
+/// position relative to the destination buffer, or [`None`] if the damage is
+/// entirely outside the visible portion of the window.
 pub(crate) fn adjust_damage_destination(
     damage: Rectangle<i32, Buffer>,
     geometry: Rectangle<i32, Buffer>,
