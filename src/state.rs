@@ -40,6 +40,7 @@ pub struct AnvilState {
     pub display: Rc<RefCell<Display>>,
     pub handle: LoopHandle<'static, AnvilState>,
     pub log: slog::Logger,
+    pub output: Output,
     // input-related fields
     pub pointer: PointerHandle,
     pub keyboard: KeyboardHandle,
@@ -130,7 +131,7 @@ impl AnvilState {
             make: String::from("Qubes OS"),
             model: String::from("Virtual Monitor"),
         };
-        let (_output, _) = Output::new(
+        let (output, _) = Output::new(
             &mut display.borrow_mut(),
             output_name,
             monitor_properties,
@@ -196,6 +197,7 @@ impl AnvilState {
             seat_name,
             seat,
             grab_surface: None,
+            output,
             #[cfg(feature = "xwayland")]
             xwayland,
         }

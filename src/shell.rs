@@ -37,6 +37,29 @@ pub struct ShellHandles {
 
 struct QubesClient(Rc<RefCell<BTreeMap<u32, ()>>>);
 
+fn send_window_flags(
+    anvil_state: &mut AnvilState,
+    surface: xdg::ToplevelSurface,
+    msg: qubes_gui::WindowFlags,
+) {
+    let surface = if let Some(surface) = surface.get_surface() {
+        surface
+    } else {
+        // If there is no underlying surface just ignore the request
+        return;
+    };
+    with_states(&surface, |data| {
+        let mut anvil_state = anvil_state.backend_data.borrow_mut();
+        let state = data
+            .data_map
+            .get::<RefCell<SurfaceData>>()
+            .unwrap()
+            .borrow();
+        anvil_state.agent.send(&msg, state.window).unwrap()
+    })
+    .expect("get_surface() only returns live resources")
+}
+
 pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHandles {
     // Create the compositor
     compositor_init(
@@ -64,6 +87,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             return;
                         }
                     };
+                    anvil_state.output.enter(raw_surface);
                     let (id, size) = with_states(raw_surface, |data| {
                         let toplevel_data = data
                             .data_map
@@ -152,6 +176,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             return;
                         }
                     };
+                    anvil_state.output.enter(raw_surface);
                     let (id, geometry) = with_states(raw_surface, |data| {
                         let popup_data = data
                             .data_map
@@ -275,28 +300,15 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                 }
                 XdgRequest::Fullscreen {
                     surface, output: _, ..
-                } => {
-                    // QUBES HOOK: ask daemon to make surface fullscreen
-                    // NOTE: This is only one part of the solution. We can set the
-                    // location and configure size here, but the surface should be rendered fullscreen
-                    // independently from its buffer size
-                    let _wl_surface = if let Some(surface) = surface.get_surface() {
-                        surface
-                    } else {
-                        // If there is no underlying surface just ignore the request
-                        return;
-                    };
-                    let _msg = qubes_gui::WindowFlags { set: 1, unset: 0 };
-                }
-                XdgRequest::UnMaximize { surface } => {
-                    let _wl_surface = if let Some(surface) = surface.get_surface() {
-                        surface
-                    } else {
-                        // If there is no underlying surface just ignore the request
-                        return;
-                    };
-                    let _msg = qubes_gui::WindowFlags { set: 0, unset: 1 };
-                }
+                } => send_window_flags(
+                    anvil_state,
+                    surface,
+                    qubes_gui::WindowFlags {
+                        set: qubes_gui::WindowFlag::Fullscreen as _,
+                        unset: 0,
+                    },
+                ),
+                XdgRequest::UnMaximize { surface: _ } => { /* not implemented */ }
                 XdgRequest::NewClient { client } => {
                     info!(anvil_state.log, "New client connected!");
                     client
@@ -337,12 +349,22 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                 XdgRequest::Maximize { surface: _ } => {
                     // not yet implemented
                 }
-                XdgRequest::UnFullscreen { surface: _ } => {
-                    // not yet implemented
-                }
-                XdgRequest::Minimize { surface: _ } => {
-                    // not yet implemented
-                }
+                XdgRequest::UnFullscreen { surface } => send_window_flags(
+                    anvil_state,
+                    surface,
+                    qubes_gui::WindowFlags {
+                        set: 0,
+                        unset: qubes_gui::WindowFlag::Fullscreen as _,
+                    },
+                ),
+                XdgRequest::Minimize { surface } => send_window_flags(
+                    anvil_state,
+                    surface,
+                    qubes_gui::WindowFlags {
+                        set: qubes_gui::WindowFlag::Minimize as _,
+                        unset: 0,
+                    },
+                ),
                 XdgRequest::ShowWindowMenu {
                     surface: _,
                     seat: _,
