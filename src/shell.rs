@@ -12,7 +12,7 @@ use smithay::{
         protocol::{wl_buffer, wl_shm, wl_surface::WlSurface},
         Display,
     },
-    utils::{Logical, Physical, Point, Rectangle, Size},
+    utils::{Buffer, Logical, Physical, Point, Rectangle, Size},
     wayland::{
         compositor::{
             self, compositor_init, is_sync_subsurface, with_states, with_surface_tree_downward,
@@ -386,7 +386,7 @@ const BYTES_PER_PIXEL: i32 = qubes_gui::DUMMY_DRV_FB_BPP as i32 / 8;
 
 pub struct SurfaceData {
     pub buffer: Option<(wl_buffer::WlBuffer, qubes_gui_gntalloc::Buffer)>,
-    pub geometry: Option<Rectangle<i32, Logical>>,
+    pub geometry: Option<Rectangle<i32, Buffer>>,
     pub buffer_dimensions: Option<Size<i32, Physical>>,
     pub coordinates: qubes_gui::Coordinates,
     pub buffer_swapped: bool,
@@ -540,14 +540,25 @@ impl SurfaceData {
             None => return,
         };
         if let Some(geometry) = geometry {
+            let mut geometry = geometry.to_buffer(self.buffer_scale);
             if geometry.size.w <= 0 || geometry.size.h <= 0 {
                 buffer
                     .as_ref()
                     .post_error(3, "TODO: find a better error for negative geometry".into());
                 return;
             }
+            if geometry.loc.x < 0i32 {
+                geometry.size.w = (geometry.size.w + geometry.loc.x).max(0i32);
+                geometry.loc.x = 0;
+            }
+            if geometry.loc.y < 0i32 {
+                geometry.size.h = (geometry.size.h + geometry.loc.y).max(0i32);
+                geometry.loc.y = 0;
+            }
+            self.geometry = Some(geometry);
+        } else {
+            self.geometry = None;
         }
-        self.geometry = geometry;
         debug!(data.log, "Performing damage calculation");
         let log = data.log.clone();
         let damage = match shm::with_buffer_contents(
@@ -610,7 +621,14 @@ impl SurfaceData {
                     debug_assert!(damage.loc.x + damage.size.w <= width);
 
                     let (damage, dest_loc) = if let Some(geometry) = self.geometry {
-                        let geometry = geometry.to_buffer(self.buffer_scale);
+                        debug_assert!(geometry.loc.x >= 0);
+                        debug_assert!(geometry.loc.y >= 0);
+                        debug_assert!(geometry.size.w >= 0);
+                        debug_assert!(geometry.size.h >= 0);
+                        debug_assert!(damage.loc.x >= 0);
+                        debug_assert!(damage.loc.y >= 0);
+                        debug_assert!(damage.size.w >= 0);
+                        debug_assert!(damage.size.h >= 0);
                         match geometry::adjust_damage_source(damage, geometry) {
                             None => continue,
                             Some(damage) => (damage, damage.loc - geometry.loc),
@@ -694,11 +712,8 @@ impl SurfaceData {
             let Rectangle {
                 loc: Point { x, y, .. },
                 size: Size { w, h, .. },
-            } = if let Some(geometry) = geometry {
-                match geometry::adjust_damage_destination(
-                    Rectangle { loc, size },
-                    geometry.to_buffer(self.buffer_scale),
-                ) {
+            } = if let Some(geometry) = self.geometry {
+                match geometry::adjust_damage_destination(Rectangle { loc, size }, geometry) {
                     Some(damage) => damage,
                     None => continue,
                 }
