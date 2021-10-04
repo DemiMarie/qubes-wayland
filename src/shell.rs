@@ -55,7 +55,15 @@ fn send_window_flags(
             .get::<RefCell<SurfaceData>>()
             .unwrap()
             .borrow();
-        anvil_state.agent.send(&msg, state.window).unwrap()
+        anvil_state
+            .agent
+            .send(
+                &msg,
+                state
+                    .window
+                    .expect("Toplevel windows always have an ID; qed"),
+            )
+            .unwrap()
     })
     .expect("get_surface() only returns live resources")
 }
@@ -109,7 +117,8 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             .get::<RefCell<SurfaceData>>()
                             .expect("this data was just inserted above, so it will be present; qed")
                             .borrow()
-                            .window;
+                            .window
+                            .expect("Surface is freshly created, so there will be a window; qed");
                         assert!(anvil_state
                             .backend_data
                             .borrow_mut()
@@ -197,12 +206,15 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             .borrow_mut();
                         mut_data.coordinates.x = geometry.loc.x as _;
                         mut_data.coordinates.y = geometry.loc.y as _;
+                        let window = mut_data
+                            .window
+                            .expect("Popup surfaces have no parent, so this will be present; qed");
                         assert!(anvil_state
                             .backend_data
                             .borrow_mut()
                             .map
                             .insert(
-                                mut_data.window,
+                                window,
                                 super::qubes::QubesBackendData {
                                     surface: Kind::Popup(surface.clone()),
                                     has_configured: false,
@@ -210,7 +222,7 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                                 }
                             )
                             .is_none());
-                        (mut_data.window, geometry)
+                        (window, geometry)
                     })
                     .expect("TODO: handling dead clients");
                     let ref mut agent = anvil_state.backend_data.borrow_mut().agent;
@@ -274,7 +286,15 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                             },
                             override_redirect: 0,
                         };
-                        anvil_state.agent.send(msg, state.window).unwrap()
+                        anvil_state
+                            .agent
+                            .send(
+                                msg,
+                                state
+                                    .window
+                                    .expect("There is a window on a toplevel or popup; qed"),
+                            )
+                            .unwrap()
                     })
                     .unwrap()
                 }
@@ -391,7 +411,7 @@ pub struct SurfaceData {
     pub coordinates: qubes_gui::Coordinates,
     pub buffer_swapped: bool,
     pub buffer_scale: i32,
-    pub window: std::num::NonZeroU32,
+    pub window: Option<std::num::NonZeroU32>,
 }
 
 impl SurfaceData {
@@ -524,6 +544,7 @@ impl SurfaceData {
         geometry: Option<Rectangle<i32, Logical>>,
     ) {
         debug!(data.log, "Updating buffer with {:?}", attrs);
+        let window = self.window.expect("TODO: re-creating window");
         if let Some(assignment) = attrs.buffer.take() {
             self.process_new_buffers(assignment, data, attrs.buffer_scale)
         }
@@ -663,7 +684,7 @@ impl SurfaceData {
                 .1
                 .msg();
             agent
-                .send_raw(msg, self.window, qubes_gui::MSG_WINDOW_DUMP)
+                .send_raw(msg, window, qubes_gui::MSG_WINDOW_DUMP)
                 .unwrap();
         }
         if let Some(Size { w, h, .. }) = geometry
@@ -680,7 +701,7 @@ impl SurfaceData {
                 },
                 override_redirect: 0,
             };
-            agent.send(&msg, self.window.into()).expect("TODO");
+            agent.send(&msg, window).expect("TODO");
         }
         self.buffer_swapped = false;
         for i in damage {
@@ -717,9 +738,7 @@ impl SurfaceData {
                     },
                 },
             };
-            agent
-                .send(&output_message, self.window.into())
-                .expect("TODO");
+            agent.send(&output_message, window).expect("TODO");
         }
     }
 
@@ -766,7 +785,7 @@ fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
                     backend_data
                         .borrow_mut()
                         .agent
-                        .send(&msg, data.borrow().window)
+                        .send(&msg, data.borrow().window.expect("TODO: no surface"))
                         .expect("TODO: send errors");
                     data
                 });
