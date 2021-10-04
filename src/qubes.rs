@@ -313,6 +313,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
         event_loop.handle(),
         data,
         log.clone(),
+        conf,
         true,
     );
     let handle = event_loop.handle();

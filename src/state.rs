@@ -9,7 +9,7 @@ use std::{
 
 use smithay::{
     reexports::{
-        calloop::{generic::Generic, Interest, LoopHandle, Mode, PostAction},
+        calloop::{self, generic::Generic, Interest, LoopHandle, PostAction},
         wayland_server::{
             protocol::{
                 wl_data_device_manager::DndAction, wl_output::Subpixel, wl_surface::WlSurface,
@@ -19,7 +19,7 @@ use smithay::{
     },
     wayland::{
         data_device::{init_data_device, set_data_device_focus},
-        output::{xdg::init_xdg_output_manager, Output, PhysicalProperties},
+        output::{self, xdg::init_xdg_output_manager, Output, PhysicalProperties},
         seat::{CursorImageStatus, KeyboardHandle, PointerHandle, Seat, XkbConfig},
         shm::init_shm_global,
         tablet_manager::{init_tablet_manager_global, TabletSeatTrait},
@@ -59,12 +59,17 @@ impl AnvilState {
         handle: LoopHandle<'static, AnvilState>,
         backend_data: QubesData,
         log: slog::Logger,
+        conf: qubes_gui::XConf,
         listen_on_socket: bool,
     ) -> AnvilState {
         // init the wayland connection
         handle
             .insert_source(
-                Generic::from_fd(display.borrow().get_poll_fd(), Interest::READ, Mode::Level),
+                Generic::from_fd(
+                    display.borrow().get_poll_fd(),
+                    Interest::READ,
+                    calloop::Mode::Level,
+                ),
                 move |_, _, state: &mut AnvilState| {
                     let display = state.display.clone();
                     let mut display = display.borrow_mut();
@@ -137,6 +142,17 @@ impl AnvilState {
             monitor_properties,
             log.clone(),
         );
+
+        assert!(
+            conf.size.width <= i32::MAX as u32 && conf.size.height <= i32::MAX as u32,
+            "bogus config"
+        );
+        let mode = output::Mode {
+            size: (conf.size.width as _, conf.size.height as _).into(),
+            refresh: 60000,
+        };
+        output.set_preferred(mode);
+        output.change_current_state(Some(mode), None, None, None);
 
         let cursor_status = Arc::new(Mutex::new(CursorImageStatus::Default));
 
