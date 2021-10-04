@@ -102,7 +102,6 @@ impl QubesData {
     }
     pub fn data(qubes: Rc<RefCell<Self>>) -> SurfaceData {
         let window = (*qubes).borrow_mut().id();
-        eprintln!("SurfaceData created!");
         SurfaceData {
             buffer: None,
             geometry: None,
@@ -385,9 +384,9 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             let location = (event.coordinates.x.into(), event.coordinates.y.into()).into();
                             trace!(
                                 agent_full.log,
-                                "Sending motion event {:?} to window {}",
-                                location,
-                                window
+                                "Motion event";
+                                "location" => ?location,
+                                "window" => window,
                             );
                             agent_full.pointer.motion(
                                 location,
@@ -397,7 +396,10 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             )
                         }
                         DaemonToAgentEvent::Crossing { window, event } => {
-                            trace!(agent_full.log, "Crossing event for window {}: {:?}", window, event)
+                            trace!(agent_full.log,
+                                   "Crossing event";
+                                   "window" => window,
+                                   "event" => ?event)
                         }
                         DaemonToAgentEvent::Close { window } => {
                             trace!(agent_full.log, "Got a close event!");
@@ -417,7 +419,9 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                         DaemonToAgentEvent::Keypress { window, event } => {
                             let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
                             if event.keycode < 8 || event.keycode >= 0x108 {
-                                error!(agent_full.log, "Bad keycode from X11: {}", event.keycode);
+                                error!(agent_full.log,
+                                       "Bad keycode from X11";
+                                       "code" => event.keycode);
                                 return Ok(calloop::PostAction::Continue);
                             }
                             // NOT A GOOD IDEA: this is sensitive information
@@ -426,7 +430,9 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 2 => KeyState::Pressed,
                                 3 => KeyState::Released,
                                 strange => {
-                                    error!(agent_full.log, "GUI daemon bug: strange key event type {}", strange);
+                                    error!(agent_full.log,
+                                           "GUI daemon bug: strange key event";
+                                           "type" => strange);
                                     continue
                                 }
                             };
@@ -437,7 +443,6 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 time_spent,
                                 |_, _| FilterResult::Forward,
                             );
-                            trace!(agent_full.log, "Keypress sent to client");
                             if let Some(surface) = window
                                 .try_into()
                                 .ok()
@@ -456,7 +461,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 4 => ButtonState::Pressed,
                                 5 => ButtonState::Released,
                                 strange => {
-                                    error!(agent_full.log, "GUI daemon bug: strange button event type {}", strange);
+                                    error!(agent_full.log, "GUI daemon bug: strange button event"; "type" => strange);
                                     continue
                                 }
                             };
@@ -552,17 +557,24 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                     error!(
                                         agent_full.log,
                                         #"daemon-bug",
-                                        "bad Focus event type";
+                                        "bad Focus event";
+                                        "window" => window,
                                         "type" => bad_focus,
                                     );
                                     continue
                                 }
                             };
                             if event.detail > 7 {
-                                error!(agent_full.log, #"daemon-bug", "bad X11 Detail"; "detail" => event.detail);
+                                error!(agent_full.log,
+                                       #"daemon-bug",
+                                       "bad X11 Detail";
+                                       "detail" => event.detail);
                                 continue
                             }
-                            trace!(agent_full.log, "Focus event"; "event" => ?event, "window" => window);
+                            trace!(agent_full.log,
+                                   "Focus event";
+                                   "event" => ?event,
+                                   "window" => window);
                             let window = qubes.map.get(&window.try_into().unwrap());
                             let serial = SERIAL_COUNTER.next_serial();
                             // agent_full.pointer.set_focus(window, serial);
@@ -590,7 +602,10 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             agent_full.keyboard.set_focus(if has_focus { surface } else { None }, serial);
                         }
                         DaemonToAgentEvent::WindowFlags { window, flags } => {
-                            trace!(agent_full.log, "Window manager flags for {} are now {:?}", window, flags);
+                            trace!(agent_full.log,
+                                   "Window manager flags changed";
+                                   "window" => window,
+                                   "new_flags" => ?flags);
                         }
                         _ => warn!(agent_full.log, "Ignoring unknown event!"),
                     }
