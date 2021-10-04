@@ -19,7 +19,7 @@ use smithay::{
     },
     utils::{Logical, Point},
     wayland::{
-        compositor::{self, with_states, SurfaceAttributes},
+        compositor::{with_states, SurfaceAttributes},
         seat::{AxisFrame, FilterResult},
         shell::xdg,
         SERIAL_COUNTER,
@@ -107,7 +107,7 @@ impl QubesData {
             geometry: None,
             buffer_dimensions: None,
             buffer_scale: 0,
-            window: Some(window),
+            window,
             buffer_swapped: false,
             coordinates: Default::default(),
         }
@@ -662,40 +662,12 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                     }
                 }
                 for i in dead_surfaces.iter() {
-                    info!(log, "Destroying window"; "window" => u32::from(*i));
-                    let backend_surface: QubesBackendData = qubes
+                    trace!(log, "Destroying window"; "window" => u32::from(*i));
+                    qubes.agent.send(&qubes_gui::Destroy {}, *i).unwrap();
+                    let _: QubesBackendData = qubes
                         .map
                         .remove(i)
                         .expect("these were keys in the map; qed");
-                    if let Some(surface) = backend_surface.surface.get_surface() {
-                        info!(log, "Destroying subsurfaces");
-                        compositor::with_surface_tree_upward(
-                            surface,
-                            None,
-                            |surface: &WlSurface,
-                             surface_data: &compositor::SurfaceData,
-                             _: &Option<()>| {
-                                compositor::TraversalAction::DoChildren(None)
-                            },
-                            |surface: &WlSurface, states: &compositor::SurfaceData, _| {
-                                states
-                                    .data_map
-                                    .get::<RefCell<SurfaceData>>()
-                                    .map(|d| d.borrow_mut())
-                                    .map(|mut d| {
-                                        if let Some(window) = d.window.take() {
-                                            info!(log, "Destroying subwindow"; "window" => u32::from(window));
-                                            qubes
-                                                .agent
-                                                .send(&qubes_gui::Destroy {}, window)
-                                                .unwrap()
-                                        }
-                                    });
-                            },
-                            |_: &WlSurface, _: &compositor::SurfaceData, _| true,
-                        );
-                    }
-                    qubes.agent.send(&qubes_gui::Destroy {}, *i).unwrap();
                     trace!(log, "Destruct successful"; "window" => u32::from(*i));
                 }
             })
