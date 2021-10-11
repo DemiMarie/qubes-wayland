@@ -178,14 +178,30 @@ pub fn init_shell(display: Rc<RefCell<Display>>, log: ::slog::Logger) -> ShellHa
                     };
                     anvil_state.output.enter(raw_surface);
                     let (id, geometry) = with_states(raw_surface, |data| {
-                        let popup_data = data
+                        let mut geometry = positioner.get_geometry();
+                        if let Some(window_geometry) = data
                             .data_map
                             .get::<Mutex<xdg::XdgPopupSurfaceRoleAttributes>>()
                             .expect("Smithay always creates this data; qed")
                             .lock()
-                            .expect("Poisoned?");
-                        let geometry = (*popup_data).current.geometry;
-                        drop(popup_data);
+                            .expect("Poisoned?")
+                            .parent
+                            .as_ref()
+                            .and_then(|parent| {
+                                with_states(parent, |data| {
+                                    let mut mut_data = data
+                                        .data_map
+                                        .get::<RefCell<SurfaceData>>()
+                                        .expect("the parent must have committed, so this will be present")
+                                        .borrow_mut();
+                                    geometry.loc.x =
+                                        geometry.loc.x.saturating_add(mut_data.coordinates.x as i32);
+                                    geometry.loc.y =
+                                        geometry.loc.y.saturating_add(mut_data.coordinates.y as i32);
+                                })
+                                .ok()
+                            })
+                        {}
                         data.data_map
                             .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
                                 RefCell::new(QubesData::data(anvil_state.backend_data.clone()))
