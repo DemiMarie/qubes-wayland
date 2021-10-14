@@ -3,3 +3,8 @@
 \#*#
 .#*
 /report
+/cbits/build
+/cbits/qubes-compositor
+strace.out
+*.rej
+*.orig

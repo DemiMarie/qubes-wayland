@@ -335,7 +335,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                 let ref mut qubes = agent_full.backend_data.borrow_mut();
                 qubes.agent.wait();
                 loop {
-                    match loop {
+                    let (window, ev) = loop {
                         match qubes.agent.read_header().map(Result::unwrap) {
                             Poll::Pending => return Ok(calloop::PostAction::Continue),
                             Poll::Ready((hdr, body)) => match DaemonToAgentEvent::parse(hdr, body).unwrap() {
@@ -343,8 +343,9 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 Some(ev) => break ev,
                             },
                         }
-                    } {
-                        DaemonToAgentEvent::Motion { window, mut event } => {
+                    };
+                    match ev {
+                        DaemonToAgentEvent::Motion { mut event } => {
                             let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
                             debug!(agent_full.log, "Motion event: {:?}", event);
                             let surface = window.try_into().ok().and_then(|s| qubes.map.get(&s));
@@ -396,13 +397,13 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 time_spent,
                             )
                         }
-                        DaemonToAgentEvent::Crossing { window, event } => {
+                        DaemonToAgentEvent::Crossing { event } => {
                             trace!(agent_full.log,
                                    "Crossing event";
                                    "window" => window,
                                    "event" => ?event)
                         }
-                        DaemonToAgentEvent::Close { window } => {
+                        DaemonToAgentEvent::Close => {
                             trace!(agent_full.log, "Got a close event!");
                             if window == 1 {
                                 info!(agent_full.log, "Got close event for our window, exiting!");
@@ -417,7 +418,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 Some(w) => w.surface.send_close(),
                             };
                         }
-                        DaemonToAgentEvent::Keypress { window, event } => {
+                        DaemonToAgentEvent::Keypress { event } => {
                             let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
                             if event.keycode < 8 || event.keycode >= 0x108 {
                                 error!(agent_full.log,
@@ -456,7 +457,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 }
                             }
                         }
-                        DaemonToAgentEvent::Button { window: _, event } => {
+                        DaemonToAgentEvent::Button { event } => {
                             let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
                             let state = match event.ty {
                                 4 => ButtonState::Pressed,
@@ -522,7 +523,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 );
                             }
                         }
-                        DaemonToAgentEvent::Redraw { window, portion_to_redraw } => {
+                        DaemonToAgentEvent::Redraw { portion_to_redraw } => {
                             trace!(
                                 agent_full.log,
                                 #"qubes-event",
@@ -531,7 +532,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 "window" => ?window,
                             );
                         }
-                        DaemonToAgentEvent::Configure { window, new_size_and_position } => {
+                        DaemonToAgentEvent::Configure { new_size_and_position } => {
                             trace!(
                                 agent_full.log,
                                 #"qubes-event",
@@ -541,7 +542,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                             );
                             qubes.process_configure(new_size_and_position, window)?
                         }
-                        DaemonToAgentEvent::Focus { window, event } => {
+                        DaemonToAgentEvent::Focus { event } => {
                             if event.mode != 0 {
                                 error!(
                                     agent_full.log,
@@ -602,7 +603,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                                 });
                             agent_full.keyboard.set_focus(if has_focus { surface } else { None }, serial);
                         }
-                        DaemonToAgentEvent::WindowFlags { window, flags } => {
+                        DaemonToAgentEvent::WindowFlags { flags } => {
                             trace!(agent_full.log,
                                    "Window manager flags changed";
                                    "window" => window,
