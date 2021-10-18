@@ -21,28 +21,19 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/util/log.h>
+#include <wlr/allocator/wlr_allocator.h>
+#include <wlr/allocator/interface.h>
 #include <xkbcommon/xkbcommon.h>
-#include "qubes_compositor_output.h"
-
-#define QUBES_MAGIC(a, b, c, d) \
-	((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 | (uint32_t)(d))
+#include "qubes_output.h"
+#include "qubes_allocator.h"
 
 /* NOT IMPLEMENTABLE:
  *
  * - MSG_DOCK: involves a D-Bus listener, out of scope for initial
  *             implementation
- * - MSG_WMCLASS: has no analogue in Wayland
  * - MSG_MFNDUMP: obsolete
  * - MSG_CURSOR: requires some sort of image recognition
  */
-
-enum {
-	QUBES_VIEW_MAGIC = QUBES_MAGIC('v', 'i', 'e', 'w'),
-	QUBES_KEYBOARD_MAGIC = QUBES_MAGIC('k', 'e', 'y', 'b'),
-	QUBES_SERVER_MAGIC = QUBES_MAGIC('s', 'e', 'r', 'v'),
-};
-
-#undef QUBES_MAGIC
 
 /* For brevity's sake, struct members are annotated where they are used. */
 enum tinywl_cursor_mode {
@@ -55,6 +46,7 @@ struct tinywl_server {
 	struct wl_display *wl_display;
 	struct wlr_backend *backend;
 	struct wlr_renderer *renderer;
+	struct wlr_allocator *allocator;
 
 	struct wlr_xdg_shell *xdg_shell;
 	struct wl_listener new_xdg_surface;
@@ -89,28 +81,6 @@ struct tinywl_output {
 	struct tinywl_server *server;
 	struct wlr_output *wlr_output;
 	struct wl_listener frame;
-};
-
-struct tinywl_view {
-	struct wl_list link;
-	struct tinywl_server *server;
-	struct wlr_xdg_surface *xdg_surface;
-	struct wl_listener map;
-	struct wl_listener unmap;
-	struct wl_listener destroy;
-	struct wl_listener new_popup;
-	struct wl_listener request_maximize;
-	struct wl_listener request_fullscreen;
-	struct wl_listener request_minimize;
-	struct wl_listener request_move;
-	struct wl_listener request_resize;
-	struct wl_listener set_title;
-	struct wl_listener commit;
-	struct wlr_output output;
-	int x, y;
-	uint32_t window_id;
-	uint32_t magic;
-	bool mapped;
 };
 
 struct tinywl_keyboard {
@@ -885,7 +855,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
    wl_signal_add(&xdg_surface->surface->events.commit, &view->commit);
 
 	/* Add wlr_output */
-	wlr_output_init(&view->output, server->backend, &qubes_wlr_output_impl, server->wl_display);
+	qubes_output_init(&view->output, server->backend, server->wl_display);
 
 	/* Add it to the list of views. */
 	wl_list_insert(&server->views, &view->link);
@@ -896,22 +866,55 @@ int main(int argc, char *argv[]) {
 	char *startup_cmd = NULL;
 
 	int c;
+	if (argc < 1) {
+		fputs("NULL argv[0] passed\n", stderr);
+		return 1;
+	}
+
 	while ((c = getopt(argc, argv, "s:h")) != -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
 			break;
 		default:
-			printf("Usage: %s [-s startup command]\n", argv[0]);
+			printf("Usage: %s [-s startup command] [--] domid\n", argv[0]);
 			return 0;
 		}
 	}
-	if (optind < argc) {
-		printf("Usage: %s [-s startup command]\n", argv[0]);
+	if (optind != argc - 1) {
+		printf("Usage: %s [-s startup command] [--] domid\n", argv[0]);
 		return 0;
 	}
+	const char *domid_str = argv[argc - 1];
+	if (domid_str[0] < '0' || domid_str[0] > '9') {
+bad_domid:
+		fprintf(stderr, "%s: %s is not a valid domain ID\n", argv[0], domid_str);
+		return 1;
+	}
+	bool octal_domid = domid_str[0] == '0' && (domid_str[1] != 'x' && domid_str[1] != '\0');
+	errno = 0;
+	char *endptr = NULL;
+	unsigned long raw_domid = strtoul(domid_str, &endptr, 0);
+	uint16_t domid;
+	if (endptr && *endptr == '\0') {
+		if (raw_domid && octal_domid) {
+			fprintf(stderr, "%s: Sorry, but octal domain ID %s isn't allowed\n", argv[0], domid_str);
+			return 1;
+		}
+		if (errno == ERANGE || raw_domid > UINT16_MAX) {
+			fprintf(stderr, "%s: Sorry, domain ID %s is too large (maximum is 65535)\n", argv[0], domid_str);
+			return 1;
+		}
+		if (errno)
+			goto bad_domid;
+		domid = raw_domid;
+	} else goto bad_domid;
 
 	struct tinywl_server *server = calloc(1, sizeof(*server));
+	if (!server) {
+		wlr_log(WLR_ERROR, "Cannot create tinywl_server");
+		return 1;
+	}
 	server->magic = QUBES_SERVER_MAGIC;
 
 	/* The Wayland display is managed by libwayland. It handles accepting
@@ -940,6 +943,14 @@ int main(int argc, char *argv[]) {
 
 	wlr_renderer_init_wl_display(server->renderer, server->wl_display);
 
+	/* The allocator is the bridge between the renderer and the backend.
+	 * It handles the buffer managment between the two, allowing wlroots
+	 * to render onto the screen */
+	if (!(server->allocator = qubes_allocator_create(domid))) {
+		wlr_log(WLR_ERROR, "Cannot create Qubes allocator");
+		return 1;
+	}
+
 	/* This creates some hands-off wlroots interfaces. The compositor is
 	 * necessary for clients to allocate surfaces and the data device manager
 	 * handles the clipboard. Each of these wlroots interfaces has room for you
@@ -951,8 +962,10 @@ int main(int argc, char *argv[]) {
 
 	/* Creates an output layout, which a wlroots utility for working with an
 	 * arrangement of screens in a physical layout. */
-	if (!(server->output_layout = wlr_output_layout_create()))
-		abort();
+	if (!(server->output_layout = wlr_output_layout_create())) {
+		wlr_log(WLR_ERROR, "Cannot create output layout");
+		return 1;
+	}
 
 	/* Configure a listener to be notified when new outputs are available on the
 	 * backend. */

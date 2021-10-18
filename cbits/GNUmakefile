@@ -19,6 +19,7 @@ CFLAGS ::= -O2 -g3 \
 	-Wp,-D_FORTIFY_SOURCE=2 \
 	-Wp,-D_GLIBCXX_ASSERTIONS \
 	-Wp,-D_POSIX_C_SOURCE=200112l \
+	-Wp,-D_GNU_SOURCE \
 	-Wp,-UNDEBUG \
 	-Iprotocols
 
@@ -40,7 +41,7 @@ protocols/%-protocol.h: /usr/share/wayland-protocols/stable/%/%.xml
 	@mkdir -p -m 0700 protocols
 	@wayland-scanner --include-core-only --strict -- server-header $< $@
 
-qubes-compositor: $(OUTDIR)main.o
+qubes-compositor: $(OUTDIR)main.o $(OUTDIR)qubes_output.o $(OUTDIR)qubes_allocator.o
 	@flags=$$(pkg-config --libs wlroots pixman-1 wayland-protocols wayland-server xkbcommon) &&
 	case $$flags in (*\*\?\['
 		') exit 1;; esac &&

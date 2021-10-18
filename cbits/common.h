@@ -25,4 +25,15 @@ static_assert(INT_MIN == INT32_MIN, "wrong INT_MIN");
 static_assert(LONG_MIN == INTPTR_MIN, "wrong UINTPTR_MIN");
 static_assert(LLONG_MIN == INT64_MIN, "wrong LLONG_MIN");
 #define QUBES_UNUSED __attribute__((unused))
+
+#define QUBES_MAGIC(a, b, c, d) \
+	((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 | (uint32_t)(d))
+
+enum {
+	QUBES_VIEW_MAGIC = QUBES_MAGIC('v', 'i', 'e', 'w'),
+	QUBES_KEYBOARD_MAGIC = QUBES_MAGIC('k', 'e', 'y', 'b'),
+	QUBES_SERVER_MAGIC = QUBES_MAGIC('s', 'e', 'r', 'v'),
+};
+
+#undef QUBES_MAGIC
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_COMMON_H */
