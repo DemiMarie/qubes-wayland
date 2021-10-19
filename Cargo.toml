@@ -1,34 +1,17 @@
 [package]
-name = "anvil"
+name = "qubes-gui-rust-parts"
 version = "0.0.1"
 authors = ["Victor Berger <victor.berger@m4x.org>", "Drakulix (Victor Brekenfeld)"]
 license = "MIT"
 publish = false
 edition = "2018"
 
+[lib]
+name = "qubes_gui_rust"
+crate-type = ["staticlib"]
+
 [dependencies]
-bitflags = "1.2.1"
-thiserror = "1"
-fps_ticker = { version = "1.0.0", optional = true }
-rand = "0.8"
-slog = "2.1.1"
-slog-term = "2.8"
-slog-async = "2.2"
-slog-stdlog = "4.1.0"
-slog-scope = "4.4.0"
-xkbcommon = { version = "0.4.0", default-features = false }
 qubes-gui-agent-proto = { path = "gui-rust/qubes-gui-agent-proto" }
-
-[dependencies.smithay]
-path = "smithay"
-default-features = false
-features = [ "wayland_frontend", "slog-stdlog", "use_system_lib"]
-
-[dependencies.x11rb]
-optional = true
-version = "0.8"
-default-features = false
-features = [ "composite" ]
 
 [dependencies.qubes-gui-client]
 path = "gui-rust/qubes-gui-client"
@@ -44,9 +27,6 @@ path = "gui-rust/qubes-gui-gntalloc"
 
 [features]
 default = []
-xwayland = [ "smithay/xwayland", "x11rb" ]
-debug = [ "fps_ticker" ]
-test_all_features = ["default", "debug"]
 
 [patch.crates-io]
 # wayland-sys = { path = "wayland-rs/wayland-sys" }

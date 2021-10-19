@@ -931,7 +931,7 @@ bad_domid:
 	 * output hardware. The autocreate option will choose the most suitable
 	 * backend based on the current environment, such as opening an X11 window
 	 * if an X11 server is running. */
-	if (!(server->backend = qubes_backend_create(server->wl_display))) {
+	if (!(server->backend = qubes_backend_create(server->wl_display, domid))) {
 		wlr_log(WLR_ERROR, "Cannot create wlr_backend");
 		return 1;
 	}
