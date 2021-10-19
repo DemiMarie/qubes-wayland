@@ -323,7 +323,7 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                 raw_fd,
                 Interest {
                     readable: true,
-                    writable: true,
+                    writable: false,
                 },
                 calloop::Mode::Edge,
             ),
