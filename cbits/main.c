@@ -25,6 +25,7 @@
 #include <wlr/allocator/interface.h>
 #include <xkbcommon/xkbcommon.h>
 #include "qubes_output.h"
+#include "qubes_backend.h"
 #include "qubes_allocator.h"
 
 /* NOT IMPLEMENTABLE:
@@ -116,6 +117,7 @@ static void focus_view(struct tinywl_view *view, struct wlr_surface *surface) {
 		wlr_xdg_toplevel_set_activated(previous, false);
 	}
 	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
+	assert(keyboard);
 	/* Move the view to the front */
 	wl_list_remove(&view->link);
 	wl_list_insert(&server->views, &view->link);
@@ -126,6 +128,7 @@ static void focus_view(struct tinywl_view *view, struct wlr_surface *surface) {
 	 * track of this and automatically send key events to the appropriate
 	 * clients without additional work on your part.
 	 */
+	assert(view->xdg_surface);
 	wlr_seat_keyboard_notify_enter(seat, view->xdg_surface->surface,
 		keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
 }
@@ -800,9 +803,9 @@ static void qubes_set_title(
 static void qubes_surface_commit(
 		struct wl_listener *listener, void *data __attribute__((unused))) {
 	/* QUBES HOOK: MSG_WINDOW_HINTS, plus do a bunch of actual rendering stuff :) */
-	struct tinywl_view *view = wl_container_of(listener, view, set_title);
+	struct tinywl_view *view = wl_container_of(listener, view, commit);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	wlr_log(WLR_ERROR, "set title: not implemented");
+	wlr_log(WLR_ERROR, "commit: not implemented");
 }
 
 static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
@@ -928,7 +931,7 @@ bad_domid:
 	 * output hardware. The autocreate option will choose the most suitable
 	 * backend based on the current environment, such as opening an X11 window
 	 * if an X11 server is running. */
-	if (!(server->backend = wlr_backend_autocreate(server->wl_display))) {
+	if (!(server->backend = qubes_backend_create(server->wl_display))) {
 		wlr_log(WLR_ERROR, "Cannot create wlr_backend");
 		return 1;
 	}

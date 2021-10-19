@@ -21,6 +21,7 @@ CFLAGS ::= -O2 -g3 \
 	-Wp,-D_POSIX_C_SOURCE=200112l \
 	-Wp,-D_GNU_SOURCE \
 	-Wp,-UNDEBUG \
+	-fsanitize=address \
 	-Iprotocols
 
 CC ::= gcc
@@ -41,12 +42,12 @@ protocols/%-protocol.h: /usr/share/wayland-protocols/stable/%/%.xml
 	@mkdir -p -m 0700 protocols
 	@wayland-scanner --include-core-only --strict -- server-header $< $@
 
-qubes-compositor: $(OUTDIR)main.o $(OUTDIR)qubes_output.o $(OUTDIR)qubes_allocator.o
+qubes-compositor: $(OUTDIR)main.o $(OUTDIR)qubes_output.o $(OUTDIR)qubes_allocator.o $(OUTDIR)qubes_backend.o
 	@flags=$$(pkg-config --libs wlroots pixman-1 wayland-protocols wayland-server xkbcommon) &&
 	case $$flags in (*\*\?\['
 		') exit 1;; esac &&
 	$(CC) -L/usr/local/lib64 $(CFLAGS) -o $@ $^ -Wl,-rpath,/usr/local/lib64 $${flags}
 
-$(OUTDIR)%.o: %.c protocols/xdg-shell-protocol.h
+$(OUTDIR)%.o: %.c protocols/xdg-shell-protocol.h GNUmakefile
 	@mkdir -p -m 0700 $(OUTDIR)
 	$(CC) $(CFLAGS) -c -o $@ $< -MD -MP -MF $@.dep
