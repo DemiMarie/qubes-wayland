@@ -241,15 +241,6 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 	wlr_seat_set_selection(server->seat, event->source, event->serial);
 }
 
-/* Used to move all of the data necessary to render a surface from the top-level
- * frame handler to the per-surface render function. */
-struct render_data {
-	struct wlr_output *output;
-	struct wlr_renderer *renderer;
-	struct tinywl_view *view;
-	struct timespec *when;
-};
-
 static void server_new_output(struct wl_listener *listener, void *data) {
 	/* This event is raised by the backend when a new output (aka a display oe
 	 * monitor) becomes available. */
@@ -296,6 +287,7 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	struct tinywl_view *view = wl_container_of(listener, view, unmap);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	view->mapped = false;
+	wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, view->window_id);
 	struct msg_hdr header = {
 		.type = MSG_UNMAP,
 		.window = view->window_id,
@@ -309,14 +301,15 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	wl_list_remove(&view->link);
+	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, view->window_id);
 	struct msg_hdr header = {
 		.type = MSG_DESTROY,
 		.window = view->window_id,
 		.untrusted_len = 0,
 	};
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, &header));
-	wlr_scene_node_destroy(view->scene_subsurface_tree);
-	wlr_scene_output_destroy(view->scene_output);
+	if (view->scene_subsurface_tree)
+		wlr_scene_node_destroy(view->scene_subsurface_tree);
 	free(view);
 }
 
@@ -420,7 +413,8 @@ static void qubes_set_title(
 	struct tinywl_view *view = wl_container_of(listener, view, set_title);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	assert(view->window_id);
-	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
+	assert(view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL);
+	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
 	struct {
 		struct msg_hdr header;
 		struct msg_wmname title;
@@ -434,6 +428,7 @@ static void qubes_set_title(
 			.data = { 0 },
 		},
 	};
+	strncpy(msg.title.data, view->xdg_surface->toplevel->title, sizeof(msg.title.data) - 1);
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
 }
 
@@ -463,8 +458,9 @@ static void qubes_surface_commit(
 	if (!view->mapped)
 		return;
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
-	wlr_scene_output_commit(view->scene_output);
+	assert(view->scene_output->output == &view->output.output);
 	if (need_configure) {
+		wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
 		struct {
 			struct msg_hdr header;
 			struct msg_configure configure;
@@ -484,6 +480,7 @@ static void qubes_surface_commit(
 		};
 		assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
 	}
+	wlr_log(WLR_DEBUG, "Sending MSG_MAP (0x%x) to window %" PRIu32, MSG_MAP, view->window_id);
 
 	struct {
 		struct msg_hdr header;
@@ -499,7 +496,9 @@ static void qubes_surface_commit(
 			.override_redirect = 0,
 		},
 	};
+	wlr_scene_output_commit(view->scene_output);
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
 	struct {
 		struct msg_hdr header;
 		struct msg_shmimage shmimage;

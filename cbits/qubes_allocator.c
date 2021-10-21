@@ -112,6 +112,7 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 		wlr_log(WLR_ERROR, "Refusing allocation because width %d and/or height %d is bad", width, height);
 		return NULL;
 	}
+	wlr_log(WLR_DEBUG, "Allocating array of dimensions %dx%d", width, height);
 	/* the remaining computations cannot overflow */
 	const int32_t pixels = (int32_t)width * (int32_t)height;
 	const int32_t bytes = pixels * sizeof(uint32_t);

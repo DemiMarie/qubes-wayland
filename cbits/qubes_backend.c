@@ -19,10 +19,12 @@
 
 static const struct wlr_backend_impl qubes_backend_impl;
 
+#ifdef QUBES_BACKEND_CUSTOM_RENDERER
 static struct wlr_renderer *
 qubes_backend_get_renderer(struct wlr_backend *backend __attribute__((unused))) {
 	return wlr_pixman_renderer_create();
 }
+#endif
 
 static uint32_t
 qubes_backend_get_buffer_caps(struct wlr_backend *backend __attribute__((unused))) {
@@ -52,7 +54,11 @@ extern void qubes_rust_backend_on_fd_ready(struct qubes_rust_backend *backend, b
 static const struct wlr_backend_impl qubes_backend_impl = {
 	.start = qubes_backend_start,
 	.destroy = qubes_backend_handle_wlr_destroy,
+#ifdef QUBES_BACKEND_CUSTOM_RENDERER
 	.get_renderer = qubes_backend_get_renderer,
+#else
+	.get_renderer = NULL,
+#endif
 	.get_session = NULL,
 	.get_presentation_clock = NULL,
 	.get_drm_fd = NULL,
@@ -84,6 +90,7 @@ static bool qubes_backend_start(struct wlr_backend *raw_backend) {
 
 static int qubes_backend_on_fd(int fd __attribute__((unused)), uint32_t mask, void *data) {
 	struct qubes_backend *backend = data;
+	assert(!(mask & WL_EVENT_WRITABLE));
 	qubes_rust_backend_on_fd_ready(backend->rust_backend, mask & WL_EVENT_READABLE);
 	return 0;
 }
@@ -148,6 +155,7 @@ qubes_backend_create(struct wl_display *display, uint16_t domid) {
 	backend->display = display;
 	backend->keyboard_input = keyboard_input;
 	backend->pointer_input = pointer_input;
+	backend->backend.has_own_renderer = true;
 	wlr_backend_init(&backend->backend, &qubes_backend_impl);
 	wlr_output_init(backend->output, &backend->backend, &qubes_backend_output_impl, display);
 	wlr_keyboard_init(keyboard, &qubes_keyboard_impl);

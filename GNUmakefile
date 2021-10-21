@@ -22,11 +22,11 @@ CFLAGS ::= -O2 -g3 \
 	-Wp,-D_GNU_SOURCE \
 	-Wp,-UNDEBUG \
 	-fsanitize=address \
-	-Iprotocols \
+	-Icbits/protocols \
 	-pthread
 
 CC ::= gcc
-override OUTDIR ::= build/
+override OUTDIR ::= cbits/build/
 define newline :=
 
 
@@ -37,24 +37,23 @@ endef
 #all: protocols/xdg-shell-protocol.h
 all: $(OUTDIR)qubes.o qubes-compositor
 clean:
-	rm -rf $(OUTDIR) &&
-	cd .. && cargo clean
+	rm -rf $(OUTDIR) && cargo clean
 
-protocols/%-protocol.h: /usr/share/wayland-protocols/stable/%/%.xml
+cbits/protocols/%-protocol.h: /usr/share/wayland-protocols/stable/%/%.xml
 	@mkdir -p -m 0700 protocols
 	@wayland-scanner --include-core-only --strict -- server-header $< $@
 
-qubes-compositor: $(OUTDIR)main.o $(OUTDIR)qubes_output.o $(OUTDIR)qubes_allocator.o $(OUTDIR)qubes_backend.o ../target/release/libqubes_gui_rust.a
+qubes-compositor: $(OUTDIR)main.o $(OUTDIR)qubes_output.o $(OUTDIR)qubes_allocator.o $(OUTDIR)qubes_backend.o $(PWD)/target/release/libqubes_gui_rust.a
 	@flags=$$(pkg-config --libs wlroots pixman-1 wayland-protocols wayland-server xkbcommon) &&
 	case $$flags in (*\*\?\['
 		') exit 1;; esac &&
-	$(CC) -L/usr/local/lib64 -L../target/release $(CFLAGS) -o $@ $^ -Wl,-rpath,/usr/local/lib64 $${flags} -lqubes_gui_rust -lm -lvchan-xen -pthread -ldl
+	$(CC) -L/usr/local/lib64 -Ltarget/release $(CFLAGS) -o $@ $^ -Wl,-rpath,/usr/local/lib64 $${flags} -lqubes_gui_rust -lm -lvchan-xen -pthread -ldl
 
-$(OUTDIR)%.o: %.c protocols/xdg-shell-protocol.h GNUmakefile
+$(OUTDIR)%.o: cbits/%.c cbits/protocols/xdg-shell-protocol.h GNUmakefile
 	@mkdir -p -m 0700 $(OUTDIR)
-	$(CC) $(CFLAGS) -c -o $@ $< -MD -MP -MF $@.dep
+	$(CC) $(CFLAGS) -c -o '$(subst ','\'',$@)' $< -MD -MP -MF '$(subst ','\'',$@).dep'
 -include $(OUTDIR)*.dep
--include ../target/release/libqubes_gui_rust.d
+-include $(PWD)/target/release/libqubes_gui_rust.d
 
-../target/release/libqubes_gui_rust.a:
-	bash -c 'cd .. && dir=$${PWD//\\/\\\\} && dir=$${dir//^/\\^} && dir=$${dir//$$/\\$$} && dir=$${dir//\[/\\\[} && dir=$${dir//\*/\\\*} && dir=$${dir//./\\.} && cargo build --release && sed "s/$${dir//\//\\/}/../g" target/release/libqubes_gui_rust.d > cbits/$(OUTDIR)rust.dep'
+$(PWD)/target/release/libqubes_gui_rust.a: GNUmakefile Cargo.toml
+	cargo build --release && touch -- '$(subst ','\'',$@)'

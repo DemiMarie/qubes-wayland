@@ -33,12 +33,13 @@ struct tinywl_view {
 	struct wl_listener request_resize;
 	struct wl_listener set_title;
 	struct wl_listener commit;
+	struct wl_listener frame;
 	struct qubes_output output;
 	int x, y;
 	int last_width, last_height;
 	uint32_t window_id;
 	uint32_t magic;
-	bool mapped;
+	bool mapped, need_configure;
 };
 
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
