@@ -8,11 +8,15 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <wlr/util/log.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/allocator/interface.h>
 #include <wlr/allocator/wlr_allocator.h>
 #include <wlr/types/wlr_buffer.h>
 #include <xen/gntalloc.h>
+#include <qubes-gui-protocol.h>
+#include <drm/drm_fourcc.h>
+
 #include "qubes_allocator.h"
 
 struct qubes_allocator;
@@ -29,37 +33,22 @@ static const struct wlr_allocator_interface qubes_allocator_impl = {
 	.destroy = qubes_allocator_destroy,
 };
 
+static void qubes_buffer_end_data_ptr_access(struct wlr_buffer *raw_buffer __attribute__((unused))) {}
+
 static const struct wlr_buffer_impl qubes_buffer_impl = {
 	.destroy = qubes_buffer_destroy,
 	.get_dmabuf = NULL,
 	.get_shm = NULL,
 	.begin_data_ptr_access = qubes_buffer_begin_data_ptr_access,
-	.end_data_ptr_access = NULL,
+	.end_data_ptr_access = qubes_buffer_end_data_ptr_access,
 };
+const struct wlr_buffer_impl *qubes_buffer_impl_addr = &qubes_buffer_impl;
 
 struct qubes_allocator {
 	struct wlr_allocator inner;
 	uint64_t refcount;
 	int xenfd;
 	uint16_t domid;
-};
-
-struct qubes_buffer {
-	struct wlr_buffer inner;
-	void *ptr;
-	struct qubes_allocator *alloc;
-	uint64_t index;
-	size_t size;
-	uint32_t window_id, format;
-	union {
-		struct ioctl_gntalloc_alloc_gref xen; /* only used during initialization */
-		struct {
-			uint32_t dump_type;
-			uint32_t width;
-			uint32_t height;
-			uint32_t bpp;
-		} qubes;
-	};
 };
 
 static void qubes_allocator_destroy(struct wlr_allocator *allocator) {
@@ -108,23 +97,29 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 	if (format->cap & ~(size_t)WLR_BUFFER_CAP_DATA_PTR)
 		return NULL;
 	/* Only ARGB8888 and XRGB8888 are supported */
-	if (format->format > 1)
+	if (format->format != DRM_FORMAT_XRGB8888) {
+		wlr_log(WLR_ERROR, "Refusing allocation because format %" PRIu32 " is not supported", format->format);
 		return NULL;
+	}
 	/* Format modifiers aren’t supported */
-	if (format->len)
+	if (format->len) {
+		wlr_log(WLR_ERROR, "Refusing allocation because of format modifiers");
 		return NULL;
+	}
 	/* Check for excessive sizes */
-	if (width <= 0 || width > 16384 || height <= 0 || height > 6144)
+	if (width <= 0 || width > MAX_WINDOW_WIDTH ||
+	    height <= 0 || height > MAX_WINDOW_HEIGHT) {
+		wlr_log(WLR_ERROR, "Refusing allocation because width %d and/or height %d is bad", width, height);
 		return NULL;
+	}
 	/* the remaining computations cannot overflow */
 	const int32_t pixels = (int32_t)width * (int32_t)height;
 	const int32_t bytes = pixels * sizeof(uint32_t);
-	const int32_t pages = (bytes + XC_PAGE_SIZE - 1) / XC_PAGE_SIZE;
+	const int32_t pages = NUM_PAGES(bytes);
 
-	struct qubes_buffer *buffer = calloc((size_t)pages * sizeof(uint32_t) +
-	                                     offsetof(struct qubes_buffer, qubes.bpp) +
-													 sizeof(buffer->qubes.bpp),
-	                                     1);
+	struct qubes_buffer *buffer = malloc((size_t)pages * SIZEOF_GRANT_REF +
+	                                     offsetof(struct qubes_buffer, qubes) +
+													 sizeof(buffer->qubes));
 	if (!buffer)
 		return NULL;
 	buffer->xen.domid = qalloc->domid;
@@ -138,7 +133,7 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 	}
 	buffer->index = buffer->xen.index;
 	buffer->size = (size_t)bytes;
-	buffer->qubes.dump_type = 0; /* WINDOW_DUMP_TYPE_GRANT_REFS */
+	buffer->qubes.type = 0; /* WINDOW_DUMP_TYPE_GRANT_REFS */
 	buffer->qubes.width = (uint32_t)width;
 	buffer->qubes.height = (uint32_t)height;
 	buffer->qubes.bpp = 24;
@@ -182,7 +177,7 @@ static void qubes_buffer_destroy(struct wlr_buffer *raw_buffer) {
 	struct qubes_buffer *buffer = wl_container_of(raw_buffer, buffer, inner);
 	struct ioctl_gntalloc_dealloc_gref dealloc = {
 		.index = buffer->index,
-		.count = (size_t)(buffer->size + 4095) & ~(size_t)4096,
+		.count = NUM_PAGES(buffer->size),
 	};
 	assert(munmap(buffer->ptr, buffer->size) == 0);
 	if (buffer->alloc->xenfd != -1)

@@ -5,10 +5,14 @@
 #include <time.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
+
+#include <wlr/allocator/interface.h>
+#include <wlr/allocator/wlr_allocator.h>
 #include <wlr/backend.h>
+#include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/wlr_renderer.h>
-#include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
@@ -16,17 +20,19 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/interfaces/wlr_output.h>
 #include <wlr/util/log.h>
-#include <wlr/allocator/wlr_allocator.h>
-#include <wlr/allocator/interface.h>
+
 #include <xkbcommon/xkbcommon.h>
+
+#include <qubes-gui-protocol.h>
 #include "qubes_output.h"
 #include "qubes_backend.h"
 #include "qubes_allocator.h"
+#include "main.h"
 
 /* NOT IMPLEMENTABLE:
  *
@@ -35,47 +41,6 @@
  * - MSG_MFNDUMP: obsolete
  * - MSG_CURSOR: requires some sort of image recognition
  */
-
-/* For brevity's sake, struct members are annotated where they are used. */
-enum tinywl_cursor_mode {
-	TINYWL_CURSOR_PASSTHROUGH,
-	TINYWL_CURSOR_MOVE,
-	TINYWL_CURSOR_RESIZE,
-};
-
-struct tinywl_server {
-	struct wl_display *wl_display;
-	struct wlr_backend *backend;
-	struct wlr_renderer *renderer;
-	struct wlr_allocator *allocator;
-
-	struct wlr_xdg_shell *xdg_shell;
-	struct wl_listener new_xdg_surface;
-	struct wl_list views;
-
-	struct wlr_cursor *cursor;
-	struct wl_listener cursor_motion;
-	struct wl_listener cursor_motion_absolute;
-	struct wl_listener cursor_button;
-	struct wl_listener cursor_axis;
-	struct wl_listener cursor_frame;
-
-	struct wlr_seat *seat;
-	struct wl_listener new_input;
-	struct wl_listener request_cursor;
-	struct wl_listener request_set_selection;
-	struct wl_list keyboards;
-	enum tinywl_cursor_mode cursor_mode;
-	struct tinywl_view *grabbed_view;
-	double grab_x, grab_y;
-	struct wlr_box grab_geobox;
-	uint32_t resize_edges;
-
-	struct wlr_output_layout *output_layout;
-	struct wl_list outputs;
-	struct wl_listener new_output;
-	uint32_t magic;
-};
 
 struct tinywl_output {
 	struct wl_list link;
@@ -172,7 +137,7 @@ static void keyboard_handle_key(
 
 static void server_new_keyboard(struct tinywl_server *server,
 		struct wlr_input_device *device) {
-	/* QUBES UNREACHABLE HOOK: not reachable */
+	assert(device->keyboard);
 	struct tinywl_keyboard *keyboard =
 		calloc(1, sizeof(struct tinywl_keyboard));
 	keyboard->magic = QUBES_KEYBOARD_MAGIC;
@@ -185,10 +150,12 @@ static void server_new_keyboard(struct tinywl_server *server,
 	struct xkb_keymap *keymap = xkb_keymap_new_from_names(context, NULL,
 		XKB_KEYMAP_COMPILE_NO_FLAGS);
 
-	wlr_keyboard_set_keymap(device->keyboard, keymap);
-	xkb_keymap_unref(keymap);
+	if (keymap && device->keyboard) {
+		wlr_keyboard_set_keymap(device->keyboard, keymap);
+		xkb_keymap_unref(keymap);
+		wlr_keyboard_set_repeat_info(device->keyboard, 0, 0);
+	}
 	xkb_context_unref(context);
-	wlr_keyboard_set_repeat_info(device->keyboard, 25, 600);
 
 	/* Here we set up listeners for keyboard events. */
 	keyboard->modifiers.notify = keyboard_handle_modifiers;
@@ -209,13 +176,13 @@ static void server_new_pointer(struct tinywl_server *server,
 	 * opportunity to do libinput configuration on the device to set
 	 * acceleration, etc. */
 	/* QUBES UNREACHABLE HOOK: remove this */
-	wlr_cursor_attach_input_device(server->cursor, device);
+	if (server->cursor)
+		wlr_cursor_attach_input_device(server->cursor, device);
 }
 
 static void server_new_input(struct wl_listener *listener, void *data) {
 	/* This event is raised by the backend when a new input device becomes
 	 * available. */
-	/* QUBES UNREACHABLE HOOK: this is not reachable */
 	struct tinywl_server *server =
 		wl_container_of(listener, server, new_input);
 	struct wlr_input_device *device = data;
@@ -283,147 +250,13 @@ struct render_data {
 	struct timespec *when;
 };
 
-static void render_surface(struct wlr_surface *surface,
-		int sx, int sy, void *data) {
-	/* This function is called for every surface that needs to be rendered. */
-	/* QUBES HOOK: MSG_SHMIMAGE and MSG_WINDOW_DUMP: send damage */
-	struct render_data *rdata = data;
-	struct tinywl_view *view = rdata->view;
-	struct wlr_output *output = rdata->output;
-
-	/* We first obtain a wlr_texture, which is a GPU resource. wlroots
-	 * automatically handles negotiating these with the client. The underlying
-	 * resource could be an opaque handle passed from the client, or the client
-	 * could have sent a pixel buffer which we copied to the GPU, or a few other
-	 * means. You don't have to worry about this, wlroots takes care of it. */
-	struct wlr_texture *texture = wlr_surface_get_texture(surface);
-	if (texture == NULL)
-		return;
-
-	/* The view has a position in layout coordinates. If you have two displays,
-	 * one next to the other, both 1080p, a view on the rightmost display might
-	 * have layout coordinates of 2000,100. We need to translate that to
-	 * output-local coordinates, or (2000 - 1920). */
-	double ox = 0, oy = 0;
-	wlr_output_layout_output_coords(
-			view->server->output_layout, output, &ox, &oy);
-	ox += view->x + sx, oy += view->y + sy;
-
-	/* We also have to apply the scale factor for HiDPI outputs. This is only
-	 * part of the puzzle, TinyWL does not fully support HiDPI. */
-	struct wlr_box box = {
-		.x = ox * output->scale,
-		.y = oy * output->scale,
-		.width = surface->current.width * output->scale,
-		.height = surface->current.height * output->scale,
-	};
-
-	/*
-	 * Those familiar with OpenGL are also familiar with the role of matricies
-	 * in graphics programming. We need to prepare a matrix to render the view
-	 * with. wlr_matrix_project_box is a helper which takes a box with a desired
-	 * x, y coordinates, width and height, and an output geometry, then
-	 * prepares an orthographic projection and multiplies the necessary
-	 * transforms to produce a model-view-projection matrix.
-	 *
-	 * Naturally you can do this any way you like, for example to make a 3D
-	 * compositor.
-	 */
-	float matrix[9];
-	enum wl_output_transform transform =
-		wlr_output_transform_invert(surface->current.transform);
-	wlr_matrix_project_box(matrix, &box, transform, 0,
-		output->transform_matrix);
-
-	/* This takes our matrix, the texture, and an alpha, and performs the actual
-	 * rendering on the GPU. */
-	wlr_render_texture_with_matrix(rdata->renderer, texture, matrix, 1);
-
-	/* This lets the client know that we've displayed that frame and it can
-	 * prepare another one now if it likes. */
-	wlr_surface_send_frame_done(surface, rdata->when);
-}
-
-static void output_frame(struct wl_listener *listener, void *data __attribute__((unused))) {
-	/* This function is called every time an output is ready to display a frame,
-	 * generally at the output's refresh rate (e.g. 60Hz). */
-	/* QUBES HOOK: not sure what the best option is */
-	struct tinywl_output *output =
-		wl_container_of(listener, output, frame);
-	struct wlr_renderer *renderer = output->server->renderer;
-
-	struct timespec now;
-	clock_gettime(CLOCK_MONOTONIC, &now);
-
-	/* wlr_output_attach_render makes the OpenGL context current. */
-	if (!wlr_output_attach_render(output->wlr_output, NULL)) {
-		return;
-	}
-	/* The "effective" resolution can change if you rotate your outputs. */
-	int width, height;
-	wlr_output_effective_resolution(output->wlr_output, &width, &height);
-	/* Begin the renderer (calls glViewport and some other GL sanity checks) */
-	wlr_renderer_begin(renderer, width, height);
-
-	float color[4] = {0.3, 0.3, 0.3, 1.0};
-	wlr_renderer_clear(renderer, color);
-
-	/* Each subsequent window we render is rendered on top of the last. Because
-	 * our view list is ordered front-to-back, we iterate over it backwards. */
-	struct tinywl_view *view;
-	wl_list_for_each_reverse(view, &output->server->views, link) {
-		if (!view->mapped) {
-			/* An unmapped view should not be rendered. */
-			continue;
-		}
-		struct render_data rdata = {
-			.output = output->wlr_output,
-			.view = view,
-			.renderer = renderer,
-			.when = &now,
-		};
-		/* This calls our render_surface function for each surface among the
-		 * xdg_surface's toplevel and popups. */
-		wlr_xdg_surface_for_each_surface(view->xdg_surface,
-				render_surface, &rdata);
-	}
-
-	/* Hardware cursors are rendered by the GPU on a separate plane, and can be
-	 * moved around without re-rendering what's beneath them - which is more
-	 * efficient. However, not all hardware supports hardware cursors. For this
-	 * reason, wlroots provides a software fallback, which we ask it to render
-	 * here. wlr_cursor handles configuring hardware vs software cursors for you,
-	 * and this function is a no-op when hardware cursors are in use. */
-	wlr_output_render_software_cursors(output->wlr_output, NULL);
-
-	/* Conclude rendering and swap the buffers, showing the final frame
-	 * on-screen. */
-	wlr_renderer_end(renderer);
-	wlr_output_commit(output->wlr_output);
-}
-
 static void server_new_output(struct wl_listener *listener, void *data) {
-	/* This event is raised by the backend when a new output (aka a display or
+	/* This event is raised by the backend when a new output (aka a display oe
 	 * monitor) becomes available. */
-	/* QUBES HOOK: assert(false) as this cannot happen */
 	struct tinywl_server *server =
 		wl_container_of(listener, server, new_output);
 	struct wlr_output *wlr_output = data;
 	assert(QUBES_SERVER_MAGIC == server->magic);
-
-	/* Some backends don't have modes. DRM+KMS does, and we need to set a mode
-	 * before we can use the output. The mode is a tuple of (width, height,
-	 * refresh rate), and each monitor supports only a specific set of modes. We
-	 * just pick the monitor's preferred mode, a more sophisticated compositor
-	 * would let the user configure it. */
-	if (!wl_list_empty(&wlr_output->modes)) {
-		struct wlr_output_mode *mode = wlr_output_preferred_mode(wlr_output);
-		wlr_output_set_mode(wlr_output, mode);
-		wlr_output_enable(wlr_output, true);
-		if (!wlr_output_commit(wlr_output)) {
-			return;
-		}
-	}
 
 	/* Allocates and configures our state for this output */
 	struct tinywl_output *output =
@@ -431,7 +264,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	output->wlr_output = wlr_output;
 	output->server = server;
 	/* Sets up a listener for the frame notify event. */
-	output->frame.notify = output_frame;
+	// output->frame.notify = output_frame;
 	wl_signal_add(&wlr_output->events.frame, &output->frame);
 	wl_list_insert(&server->outputs, &output->link);
 
@@ -452,6 +285,7 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
 	struct tinywl_view *view = wl_container_of(listener, view, map);
 	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(view->window_id);
 	view->mapped = true;
 	focus_view(view, view->xdg_surface->surface);
 }
@@ -462,14 +296,27 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	struct tinywl_view *view = wl_container_of(listener, view, unmap);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	view->mapped = false;
+	struct msg_hdr header = {
+		.type = MSG_UNMAP,
+		.window = view->window_id,
+		.untrusted_len = 0,
+	};
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, &header));
 }
 
 static void xdg_surface_destroy(struct wl_listener *listener, void *data __attribute__((unused))) {
 	/* Called when the surface is destroyed and should never be shown again. */
-	/* QUBES HOOK: MSG_DESTROY: destroy the corresponding window */
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	wl_list_remove(&view->link);
+	struct msg_hdr header = {
+		.type = MSG_DESTROY,
+		.window = view->window_id,
+		.untrusted_len = 0,
+	};
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, &header));
+	wlr_scene_node_destroy(view->scene_subsurface_tree);
+	wlr_scene_output_destroy(view->scene_output);
 	free(view);
 }
 
@@ -537,11 +384,9 @@ static void xdg_toplevel_request_resize(
 
 static void qubes_new_popup(
 		struct wl_listener *listener, void *data) {
-	/* QUBES HOOK: MSG_CREATE: ask GUI daemon to create a popup */
 	struct tinywl_view *view = wl_container_of(listener, view, new_popup);
 	struct wlr_xdg_popup *popup __attribute__((unused)) = data;
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	wlr_log(WLR_ERROR, "popup creation: not implemented");
 }
 
 static void qubes_request_maximize(
@@ -566,6 +411,7 @@ static void qubes_request_fullscreen(
 	struct tinywl_view *view = wl_container_of(listener, view, request_fullscreen);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	wlr_log(WLR_ERROR, "window fullscreen: not implemented");
+	/* qubes_rust_set_window_flags(view->window_id) */
 }
 
 static void qubes_set_title(
@@ -573,7 +419,22 @@ static void qubes_set_title(
 	/* QUBES HOOK: MSG_WMNAME: ask GUI daemon to set window title */
 	struct tinywl_view *view = wl_container_of(listener, view, set_title);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	wlr_log(WLR_ERROR, "set title: not implemented");
+	assert(view->window_id);
+	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
+	struct {
+		struct msg_hdr header;
+		struct msg_wmname title;
+	} msg = {
+		.header = {
+			.type = MSG_WMNAME,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_wmname),
+		},
+		.title = {
+			.data = { 0 },
+		},
+	};
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
 }
 
 static void qubes_surface_commit(
@@ -581,7 +442,81 @@ static void qubes_surface_commit(
 	/* QUBES HOOK: MSG_WINDOW_HINTS, plus do a bunch of actual rendering stuff :) */
 	struct tinywl_view *view = wl_container_of(listener, view, commit);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	wlr_log(WLR_ERROR, "commit: not implemented");
+	assert(view->scene_output);
+	struct wlr_box box;
+	wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+	bool need_configure = false;
+	if (view->x != box.x || view->y != box.y) {
+		view->x = box.x;
+		view->y = box.y;
+		need_configure = true;
+		wlr_scene_output_set_position(view->scene_output, view->x, view->y);
+	}
+	if (view->last_width != box.width || view->last_height != box.height) {
+		need_configure = true;
+		view->last_width = box.width;
+		view->last_height = box.height;
+	}
+	if (box.width <= 0 || box.height <= 0 || box.width > MAX_WINDOW_WIDTH || box.height > MAX_WINDOW_HEIGHT)
+		return;
+	wlr_output_enable(&view->output.output, view->mapped);
+	if (!view->mapped)
+		return;
+	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
+	wlr_scene_output_commit(view->scene_output);
+	if (need_configure) {
+		struct {
+			struct msg_hdr header;
+			struct msg_configure configure;
+		} msg = {
+			.header = {
+				.type = MSG_CONFIGURE,
+				.window = view->window_id,
+				.untrusted_len = sizeof(struct msg_configure),
+			},
+			.configure = {
+				.x = box.x,
+				.y = box.y,
+				.width = box.width,
+				.height = box.height,
+				.override_redirect = 0,
+			},
+		};
+		assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+	}
+
+	struct {
+		struct msg_hdr header;
+		struct msg_map_info info;
+	} msg = {
+		.header = {
+			.type = MSG_MAP,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_map_info),
+		},
+		.info = {
+			.transient_for = 0,
+			.override_redirect = 0,
+		},
+	};
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+	struct {
+		struct msg_hdr header;
+		struct msg_shmimage shmimage;
+	} new_msg = {
+		.header = {
+			.type = MSG_SHMIMAGE,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_shmimage),
+		},
+		.shmimage = {
+			.x = 0,
+			.y = 0,
+			.width = box.width,
+			.height = box.height,
+		},
+	};
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg));
 }
 
 static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
@@ -598,10 +533,26 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	/* QUBES HOOK: MSG_CREATE: create toplevel window */
 
 	/* Allocate a tinywl_view for this surface */
-	struct tinywl_view *view =
-		calloc(1, sizeof(struct tinywl_view));
-	view->magic = QUBES_VIEW_MAGIC;
+	struct tinywl_view *view = calloc(1, sizeof(struct tinywl_view));
+	if (!view)
+		goto cleanup;
+	assert(view);
 	view->server = server;
+	/* Add wlr_output */
+	qubes_output_init(&view->output, &server->backend->backend, server->wl_display);
+	assert(wlr_output_set_allocator(&view->output.output, server->allocator));
+	view->output.output.allocator->render_formats = view->output.formats;
+	if (!(view->scene = wlr_scene_create()))
+		goto cleanup;
+
+	assert(view->output.output.allocator);
+
+	if (!(view->scene_output = wlr_scene_output_create(view->scene, &view->output.output)))
+		goto cleanup;
+	if (!(view->scene_subsurface_tree = wlr_scene_subsurface_tree_create(&view->scene_output->scene->node, xdg_surface->surface)))
+		goto cleanup;
+
+	view->magic = QUBES_VIEW_MAGIC;
 	view->xdg_surface = xdg_surface;
 
 	/* Listen to the various events it can emit */
@@ -633,11 +584,53 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
    view->commit.notify = qubes_surface_commit;
    wl_signal_add(&xdg_surface->surface->events.commit, &view->commit);
 
-	/* Add wlr_output */
-	qubes_output_init(&view->output, server->backend, server->wl_display);
-
 	/* Add it to the list of views. */
 	wl_list_insert(&server->views, &view->link);
+
+	/* Get the window ID */
+	assert(view->window_id == 0);
+	view->window_id = qubes_rust_generate_id(view->server->backend->rust_backend);
+	assert(view->window_id);
+
+	/* Tell GUI daemon to create window */
+	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, view->window_id);
+	struct wlr_box box;
+	wlr_xdg_surface_get_geometry(xdg_surface, &box);
+	if (box.width <= 0)
+		box.width = 1;
+	if (box.height <= 0)
+		box.height = 1;
+	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
+	struct {
+		struct msg_hdr header;
+		struct msg_create create;
+	} msg = {
+		.header = {
+			.type = MSG_CREATE,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_create),
+		},
+		.create = {
+			.x = box.x,
+			.y = box.y,
+			.width = box.width,
+			.height = box.height,
+			.parent = 0,
+			.override_redirect = 0,
+		},
+	};
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+	return;
+cleanup:
+	wl_resource_post_no_memory(xdg_surface->resource);
+	if (view) {
+		if (view->scene_subsurface_tree)
+			wlr_scene_node_destroy(view->scene_subsurface_tree);
+		if (view->scene_output)
+			wlr_scene_output_destroy(view->scene_output);
+		free(view);
+	}
+	return;
 }
 
 int main(int argc, char *argv[]) {
@@ -695,6 +688,7 @@ bad_domid:
 		return 1;
 	}
 	server->magic = QUBES_SERVER_MAGIC;
+	server->domid = domid;
 
 	/* The Wayland display is managed by libwayland. It handles accepting
 	 * clients from the Unix socket, manging Wayland globals, and so on. */
@@ -715,7 +709,7 @@ bad_domid:
 	/* If we don't provide a renderer, autocreate makes a GLES2 renderer for us.
 	 * The renderer is responsible for defining the various pixel formats it
 	 * supports for shared memory, this configures that for clients. */
-	if (!(server->renderer = wlr_backend_get_renderer(server->backend))) {
+	if (!(server->renderer = wlr_backend_get_renderer(&server->backend->backend))) {
 		wlr_log(WLR_ERROR, "No renderer from wlr_backend");
 		return 1;
 	}
@@ -750,7 +744,7 @@ bad_domid:
 	 * backend. */
 	wl_list_init(&server->outputs);
 	server->new_output.notify = server_new_output;
-	wl_signal_add(&server->backend->events.new_output, &server->new_output);
+	wl_signal_add(&server->backend->backend.events.new_output, &server->new_output);
 
 	/* Set up our list of views and the xdg-shell. The xdg-shell is a Wayland
 	 * protocol which is used for application windows. For more detail on
@@ -776,7 +770,7 @@ bad_domid:
 	 */
 	wl_list_init(&server->keyboards);
 	server->new_input.notify = server_new_input;
-	wl_signal_add(&server->backend->events.new_input, &server->new_input);
+	wl_signal_add(&server->backend->backend.events.new_input, &server->new_input);
 	if (!(server->seat = wlr_seat_create(server->wl_display, "seat0"))) {
 		wlr_log(WLR_ERROR, "Cannot create wlr_seat");
 		return 1;
@@ -793,14 +787,14 @@ bad_domid:
 	const char *socket = wl_display_add_socket_auto(server->wl_display);
 	if (!socket) {
 		wlr_log(WLR_ERROR, "Cannot listen on Wayland socket");
-		wlr_backend_destroy(server->backend);
+		wlr_backend_destroy(&server->backend->backend);
 		return 1;
 	}
 
 	/* Start the backend. This will enumerate outputs and inputs, become the DRM
 	 * master, etc */
-	if (!wlr_backend_start(server->backend)) {
-		wlr_backend_destroy(server->backend);
+	if (!wlr_backend_start(&server->backend->backend)) {
+		wlr_backend_destroy(&server->backend->backend);
 		wl_display_destroy(server->wl_display);
 		return 1;
 	}

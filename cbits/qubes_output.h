@@ -9,6 +9,8 @@ struct qubes_output {
 	struct wlr_output output;
 	struct wl_listener buffer_destroy;
 	struct wlr_buffer *buffer; /* *not* owned by the compositor */
+	struct wl_listener frame;
+	const struct wlr_drm_format_set *formats; /* global */
 };
 
 struct tinywl_server;
@@ -17,6 +19,9 @@ struct tinywl_view {
 	struct wl_list link;
 	struct tinywl_server *server;
 	struct wlr_xdg_surface *xdg_surface;
+	struct wlr_scene *scene;
+	struct wlr_scene_output *scene_output;
+	struct wlr_scene_node *scene_subsurface_tree;
 	struct wl_listener map;
 	struct wl_listener unmap;
 	struct wl_listener destroy;
@@ -30,6 +35,7 @@ struct tinywl_view {
 	struct wl_listener commit;
 	struct qubes_output output;
 	int x, y;
+	int last_width, last_height;
 	uint32_t window_id;
 	uint32_t magic;
 	bool mapped;

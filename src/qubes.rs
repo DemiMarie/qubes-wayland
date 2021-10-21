@@ -1,9 +1,6 @@
 use std::{
-    cell::RefCell, collections::BTreeMap, convert::TryInto, num::NonZeroU32, os::unix::io::AsRawFd,
-    rc::Rc, sync::atomic::Ordering, sync::Mutex, task::Poll, time::Duration,
+    collections::BTreeMap, convert::TryInto, num::NonZeroU32, os::unix::io::AsRawFd, task::Poll,
 };
-
-use qubes_gui_agent_proto::DaemonToAgentEvent;
 
 pub const OUTPUT_NAME: &str = "qubes";
 
@@ -49,6 +46,19 @@ impl QubesData {
 type RustBackend = QubesData;
 
 #[no_mangle]
+pub unsafe extern "C" fn qubes_rust_generate_id(backend: *mut std::os::raw::c_void) -> u32 {
+    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).id()) {
+        Ok(e) => e.into(),
+        Err(e) => {
+            drop(std::panic::catch_unwind(|| {
+                eprintln!("Unexpected panic");
+            }));
+            std::process::abort();
+        }
+    }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn qubes_rust_backend_fd(
     backend: *mut std::os::raw::c_void,
 ) -> std::os::raw::c_int {
@@ -86,6 +96,28 @@ pub unsafe extern "C" fn qubes_rust_backend_on_fd_ready(
         Err(e) => {
             drop(std::panic::catch_unwind(|| {
                 eprintln!("Error in Rust event handler");
+            }));
+            std::process::abort();
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn qubes_rust_send_message(
+    backend: *mut std::os::raw::c_void,
+    header: &qubes_gui::Header,
+) -> bool {
+    // untrusted_len is actually trusted here
+    let slice = core::slice::from_raw_parts(
+        header as *const _ as *const u8,
+        header.untrusted_len as usize + core::mem::size_of::<qubes_gui::Header>(),
+    );
+    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).agent.send_raw_bytes(slice))
+    {
+        Ok(e) => e.is_ok(),
+        Err(_) => {
+            core::mem::forget(std::panic::catch_unwind(|| {
+                eprintln!("Unexpected panic");
             }));
             std::process::abort();
         }
