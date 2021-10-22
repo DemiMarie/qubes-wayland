@@ -3,12 +3,14 @@
 
 #include "common.h"
 #include <wlr/backend.h>
+#include <wlr/types/wlr_output.h>
 #include <wayland-server-core.h>
 
 struct qubes_rust_backend;
 struct qubes_backend {
 	struct wlr_backend backend;
 	struct wl_display *display;
+	struct wlr_output_mode mode;
 	struct wlr_output *output;
 	struct wlr_input_device *keyboard_input, *pointer_input;
 	struct qubes_rust_backend *rust_backend;

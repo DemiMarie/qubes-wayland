@@ -21,8 +21,8 @@ CFLAGS ::= -O2 -g3 \
 	-Wp,-D_POSIX_C_SOURCE=200112l \
 	-Wp,-D_GNU_SOURCE \
 	-Wp,-UNDEBUG \
-	-fsanitize=address \
 	-Icbits/protocols \
+	-fsanitize=address,undefined \
 	-pthread
 
 CC ::= gcc

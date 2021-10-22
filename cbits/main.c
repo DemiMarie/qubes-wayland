@@ -254,11 +254,9 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 		calloc(1, sizeof(struct tinywl_output));
 	output->wlr_output = wlr_output;
 	output->server = server;
-	/* Sets up a listener for the frame notify event. */
-	// output->frame.notify = output_frame;
-	wl_signal_add(&wlr_output->events.frame, &output->frame);
 	wl_list_insert(&server->outputs, &output->link);
 
+	// assert(!wl_list_empty(&wlr_output->modes));
 	/* Adds this to the output layout. The add_auto function arranges outputs
 	 * from left-to-right in the order they appear. A more sophisticated
 	 * compositor would let the user configure the arrangement of outputs in the
@@ -511,11 +509,15 @@ static void qubes_surface_commit(
 		.shmimage = {
 			.x = 0,
 			.y = 0,
-			.width = box.width,
-			.height = box.height,
+			.width = INT32_MAX,
+			.height = INT32_MAX,
 		},
 	};
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg));
+	struct timespec now;
+	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
+	wlr_output_send_frame(&view->output.output);
+	wlr_surface_send_frame_done(view->xdg_surface->surface, &now);
 }
 
 static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
@@ -550,6 +552,9 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		goto cleanup;
 	if (!(view->scene_subsurface_tree = wlr_scene_subsurface_tree_create(&view->scene_output->scene->node, xdg_surface->surface)))
 		goto cleanup;
+	wlr_scene_node_set_enabled(&view->scene_output->scene->node, true);
+	wlr_scene_node_set_enabled(view->scene_subsurface_tree, true);
+	wlr_scene_node_raise_to_top(view->scene_subsurface_tree);
 
 	view->magic = QUBES_VIEW_MAGIC;
 	view->xdg_surface = xdg_surface;
@@ -580,8 +585,8 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	wl_signal_add(&toplevel->events.set_title, &view->set_title);
 
 	/* Listen to surface events */
-   view->commit.notify = qubes_surface_commit;
-   wl_signal_add(&xdg_surface->surface->events.commit, &view->commit);
+	view->commit.notify = qubes_surface_commit;
+	wl_signal_add(&xdg_surface->surface->events.commit, &view->commit);
 
 	/* Add it to the list of views. */
 	wl_list_insert(&server->views, &view->link);
@@ -600,6 +605,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	if (box.height <= 0)
 		box.height = 1;
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
+	wlr_output_enable(&view->output.output, true);
 	struct {
 		struct msg_hdr header;
 		struct msg_create create;

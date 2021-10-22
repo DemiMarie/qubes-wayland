@@ -121,7 +121,8 @@ static const struct wlr_input_device_impl qubes_input_device_impl = {
 };
 
 static bool qubes_backend_output_commit(struct wlr_output *unused __attribute__((unused))) {
-	assert(0 && "BUG: qubes_backend_output_commit should never be called!");
+	assert(1 && "BUG: qubes_backend_output_commit should never be called!");
+	return true;
 }
 
 static const struct wlr_output_impl qubes_backend_output_impl = {
@@ -151,13 +152,31 @@ qubes_backend_create(struct wl_display *display, uint16_t domid) {
 		wlr_log(WLR_ERROR, "Cannot create Rust backend for domain %" PRIu16, domid);
 		goto fail;
 	}
+	backend->mode.width = 1920;
+	backend->mode.height = 1080;
+	backend->mode.refresh = 60000;
+	backend->mode.preferred = true;
+	wl_list_init(&backend->mode.link);
 	backend->output = output;
 	backend->display = display;
 	backend->keyboard_input = keyboard_input;
 	backend->pointer_input = pointer_input;
 	backend->backend.has_own_renderer = true;
 	wlr_backend_init(&backend->backend, &qubes_backend_impl);
-	wlr_output_init(backend->output, &backend->backend, &qubes_backend_output_impl, display);
+	strncpy(output->make, "Qubes OS Virtual Output", sizeof output->make - 1);
+	strncpy(output->model, "GUI Agent", sizeof output->model - 1);
+	strncpy(output->serial, "1.0", sizeof output->model - 1);
+	output->phys_width = 344, output->phys_height = 194;
+	wlr_output_init(output, &backend->backend, &qubes_backend_output_impl, display);
+	wlr_output_set_description(output, "Qubes OS Virtual Output Device");
+	assert(wl_list_empty(&output->modes));
+	wlr_output_set_mode(output, &backend->mode);
+	wlr_output_enable(output, true);
+	wl_list_insert(&output->modes, &backend->mode.link);
+	assert(wlr_output_commit(output));
+	output->current_mode = &backend->mode;
+	assert(!wl_list_empty(&output->modes));
+	assert(output->current_mode);
 	wlr_keyboard_init(keyboard, &qubes_keyboard_impl);
 	wlr_pointer_init(pointer, &qubes_pointer_impl);
 	wlr_input_device_init(keyboard_input, WLR_INPUT_DEVICE_KEYBOARD, &qubes_input_device_impl,
