@@ -779,35 +779,39 @@ fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
         |_surface: &WlSurface,
          surface_data: &compositor::SurfaceData,
          &parent: &Option<NonZeroU32>| {
-            surface_data
-                .data_map
-                .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
-                    let data = RefCell::new(QubesData::data(backend_data.clone()));
-                    let msg = qubes_gui::Create {
-                        rectangle: qubes_gui::Rectangle {
-                            top_left: qubes_gui::Coordinates { x: 0, y: 0 },
-                            size: qubes_gui::WindowSize {
-                                width: 256,
-                                height: 256,
+            let res: Option<NonZeroU32> = if cfg!(feature = "broken-subwindows") {
+                surface_data
+                    .data_map
+                    .insert_if_missing::<RefCell<SurfaceData>, _>(|| {
+                        let data = RefCell::new(QubesData::data(backend_data.clone()));
+                        let msg = qubes_gui::Create {
+                            rectangle: qubes_gui::Rectangle {
+                                top_left: qubes_gui::Coordinates { x: 0, y: 0 },
+                                size: qubes_gui::WindowSize {
+                                    width: 256,
+                                    height: 256,
+                                },
                             },
-                        },
-                        parent,
-                        override_redirect: 0,
-                    };
-                    backend_data
-                        .borrow_mut()
-                        .agent
-                        .send(&msg, data.borrow().window)
-                        .expect("TODO: send errors");
-                    data
-                });
-            let res: Option<NonZeroU32> = surface_data
-                .data_map
-                .get::<RefCell<SurfaceData>>()
-                .unwrap()
-                .borrow()
-                .window
-                .into();
+                            parent,
+                            override_redirect: 0,
+                        };
+                        backend_data
+                            .borrow_mut()
+                            .agent
+                            .send(&msg, data.borrow().window)
+                            .expect("TODO: send errors");
+                        data
+                    });
+                surface_data
+                    .data_map
+                    .get::<RefCell<SurfaceData>>()
+                    .unwrap()
+                    .borrow()
+                    .window
+                    .into()
+            } else {
+                None
+            };
             TraversalAction::DoChildren(res)
         },
         |_surface: &WlSurface, states: &compositor::SurfaceData, &_parent: &Option<NonZeroU32>| {
