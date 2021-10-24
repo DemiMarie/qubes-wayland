@@ -815,20 +815,20 @@ fn surface_commit(surface: &WlSurface, backend_data: &Rc<RefCell<QubesData>>) {
             TraversalAction::DoChildren(res)
         },
         |_surface: &WlSurface, states: &compositor::SurfaceData, &_parent: &Option<NonZeroU32>| {
+            if _parent.is_some() {
+                return;
+            }
             let geometry = states
                 .cached_state
                 .current::<xdg::SurfaceCachedState>()
                 .geometry;
-            states
-                .data_map
-                .get::<RefCell<SurfaceData>>()
-                .unwrap()
-                .borrow_mut()
-                .update_buffer(
+            if let Some(state) = states.data_map.get::<RefCell<SurfaceData>>() {
+                state.borrow_mut().update_buffer(
                     &mut *states.cached_state.current::<SurfaceAttributes>(),
                     &mut *backend_data.borrow_mut(),
                     geometry,
-                );
+                )
+            }
         },
         |_surface: &WlSurface, _surface_data, _| true,
     );
