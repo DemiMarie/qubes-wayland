@@ -1,6 +1,10 @@
 [submodule "gui-rust"]
 	path = gui-rust
-	url = git+ssh://git@github.com/QubesOS/gui-rust.git
+	url = https://github.com/QubesOS/gui-rust.git
 [submodule "smithay"]
 	path = smithay
-	url = git+ssh://git@github.com/Smithay/smithay.git
+	url = https://github.com/Smithay/smithay.git
+[submodule "wlroots"]
+	path = wlroots
+	url = https://github.com/DemiMarie/wlroots.git
+	branch = qubes
