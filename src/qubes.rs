@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell, collections::BTreeMap, convert::TryInto, num::NonZeroU32, os::unix::io::AsRawFd,
-    rc::Rc, sync::atomic::Ordering, sync::Mutex, task::Poll, time::Duration,
+    rc::Rc, sync::atomic::AtomicBool, sync::atomic::Ordering, sync::Mutex, task::Poll,
+    time::Duration,
 };
 
 use qubes_gui_agent_proto::DaemonToAgentEvent;
@@ -20,7 +21,7 @@ use smithay::{
     utils::{Logical, Point},
     wayland::{
         compositor::{with_states, SurfaceAttributes},
-        seat::{AxisFrame, FilterResult},
+        seat::{AxisFrame, FilterResult, KeyboardHandle, PointerHandle},
         shell::xdg,
         SERIAL_COUNTER,
     },
@@ -73,13 +74,6 @@ impl Kind {
             Self::Popup(t) => t.get_surface(),
         }
     }
-
-    fn client(&self) -> Option<xdg::ShellClient> {
-        match self {
-            Self::Toplevel(t) => t.client(),
-            Self::Popup(t) => t.client(),
-        }
-    }
 }
 
 pub struct QubesBackendData {
@@ -113,7 +107,7 @@ impl QubesData {
         }
     }
 
-    fn process_configure(&mut self, m: qubes_gui::Configure, window: u32) -> std::io::Result<()> {
+    fn process_configure(&mut self, m: qubes_gui::Configure, window: u32) {
         let window = window.try_into().expect("Configure event for window 0?");
         if window == 1.try_into().unwrap() {
             self.agent.send(&m, window).unwrap();
@@ -123,11 +117,7 @@ impl QubesData {
         }
     }
 
-    fn process_client_configure(
-        &mut self,
-        m: qubes_gui::Configure,
-        window: NonZeroU32,
-    ) -> std::io::Result<()> {
+    fn process_client_configure(&mut self, m: qubes_gui::Configure, window: NonZeroU32) {
         let qubes_gui::WindowSize { width, height } = m.rectangle.size;
         let window = window
             .try_into()
@@ -138,15 +128,17 @@ impl QubesData {
             ref mut has_configured,
             ref mut coordinates,
         } = match data {
-            None => return Ok(()),
+            None => return,
             Some(data) => data,
         };
-        self.agent.send(
-            &qubes_gui::ShmImage {
-                rectangle: m.rectangle,
-            },
-            window,
-        )?;
+        self.agent
+            .send(
+                &qubes_gui::ShmImage {
+                    rectangle: m.rectangle,
+                },
+                window,
+            )
+            .unwrap();
         self.agent.send(&m, window).unwrap();
         let qubes_gui::Coordinates { x, y } = m.rectangle.top_left;
         *coordinates = (x as i32, y as i32).into();
@@ -199,18 +191,13 @@ impl QubesData {
             }
             Err(_) => warn!(self.log, "Ignoring MSG_CONFIGURE on dead window"),
         }
-        Ok(())
     }
 
-    fn process_self_configure(
-        &mut self,
-        m: qubes_gui::Configure,
-        window: NonZeroU32,
-    ) -> std::io::Result<()> {
+    fn process_self_configure(&mut self, m: qubes_gui::Configure, window: NonZeroU32) {
         let qubes_gui::WindowSize { width, height } = m.rectangle.size;
         if width == self.last_width && height == self.last_height {
             // no redraw needed
-            return Ok(());
+            return;
         }
         let mut need_dump = false;
         if self.last_width * self.last_height != width * height {
@@ -235,12 +222,291 @@ impl QubesData {
                 .send_raw(self.buf.msg(), window, qubes_gui::MSG_WINDOW_DUMP)
                 .unwrap();
         }
-        let client = &mut self.agent;
-        client.send(&m, window)?;
+        self.agent.send(&m, window).unwrap();
         let output_message = qubes_gui::ShmImage {
             rectangle: m.rectangle,
         };
-        client.send(&output_message, window)
+        self.agent.send(&output_message, window).unwrap();
+    }
+}
+
+fn process_motion(
+    window: u32,
+    mut event: qubes_gui::Motion,
+    time_spent: u32,
+    qubes: &mut core::cell::RefMut<'_, QubesData>,
+    log: &slog::Logger,
+    pointer: &mut PointerHandle,
+) {
+    debug!(log, "Motion event: {:?}", event);
+    let surface = window.try_into().ok().and_then(|s| qubes.map.get(&s));
+    let focus = surface.and_then(|surface| {
+        surface.surface.get_surface().and_then(|s| {
+            with_states(s, |data| {
+                let geometry = data
+                    .data_map
+                    .get::<RefCell<SurfaceData>>()
+                    .expect("this data was just inserted above, so it will be present; qed")
+                    .borrow()
+                    .geometry;
+                if let Some(geometry) = geometry {
+                    event.coordinates.x = event
+                        .coordinates
+                        .x
+                        .saturating_add(surface.coordinates.x.max(0) as _)
+                        .saturating_add(geometry.loc.x as u32);
+                    event.coordinates.y = event
+                        .coordinates
+                        .y
+                        .saturating_add(surface.coordinates.y.max(0) as _)
+                        .saturating_add(geometry.loc.y as u32);
+                } else {
+                    event.coordinates.x = event
+                        .coordinates
+                        .x
+                        .saturating_add(surface.coordinates.x.max(0) as _);
+                    event.coordinates.y = event
+                        .coordinates
+                        .y
+                        .saturating_add(surface.coordinates.y.max(0) as _);
+                }
+            })
+            .ok()
+            .map(|()| (s.clone(), surface.coordinates))
+        })
+    });
+    let location = (event.coordinates.x.into(), event.coordinates.y.into()).into();
+    trace!(
+        log,
+        "Motion event";
+        "location" => ?location,
+        "window" => window,
+    );
+    pointer.motion(location, focus, SERIAL_COUNTER.next_serial(), time_spent)
+}
+
+fn process_focus(
+    window: u32,
+    event: qubes_gui::Focus,
+    log: &slog::Logger,
+    keyboard: &mut KeyboardHandle,
+    qubes: &mut core::cell::RefMut<'_, QubesData>,
+) {
+    if event.mode != 0 {
+        error!(log, #"daemon-bug", "mode not zero"; "window" => window, "mode" => event.mode)
+    }
+    let has_focus = match event.ty {
+        9 /* FocusIn */ => true,
+        10 /* FocusOut */ => false,
+        bad_focus => {
+            error!(log, #"daemon-bug", "bad Focus event"; "window" => window, "type" => bad_focus);
+            return
+        }
+    };
+    if event.detail > 7 {
+        error!(log, #"daemon-bug", "bad X11 Detail"; "detail" => event.detail);
+        return;
+    }
+    trace!(log, "Focus event"; "event" => ?event, "window" => window);
+    let window = qubes.map.get(&window.try_into().unwrap());
+    let serial = SERIAL_COUNTER.next_serial();
+    // pointer.set_focus(window, serial);
+    let surface = window.and_then(|QubesBackendData { surface, .. }| {
+        if let Ok(true) = match surface {
+            Kind::Toplevel(surface) => surface.with_pending_state(|state| {
+                if has_focus {
+                    state.states.set(xdg_toplevel::State::Activated)
+                } else {
+                    state.states.unset(xdg_toplevel::State::Activated)
+                }
+            }),
+            Kind::Popup(surface) => {
+                if !has_focus {
+                    info!(log, "Dismissing popup because it no longer has focus");
+                    surface.send_popup_done()
+                }
+                Ok(true)
+            }
+        } {
+            surface.send_configure();
+        }
+        surface.get_surface()
+    });
+    keyboard.set_focus(if has_focus { surface } else { None }, serial);
+}
+
+fn process_button(
+    event: qubes_gui::Button,
+    instant: std::time::Instant,
+    log: &slog::Logger,
+    pointer: &mut PointerHandle,
+) {
+    let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
+    let state = match event.ty {
+        4 => ButtonState::Pressed,
+        5 => ButtonState::Released,
+        strange => {
+            error!(log, "GUI daemon bug: strange button event"; "type" => strange);
+            return;
+        }
+    };
+    // info!(log, "Sending button event: {:?}", event);
+    match event.button {
+        4 | 5 | 6 | 7 => {
+            let frame = AxisFrame::new(time_spent).source(AxisSource::Wheel);
+            let frame = match event.button {
+                4 => frame.value(Axis::VerticalScroll, -10f64),
+                5 => frame.value(Axis::VerticalScroll, 10f64),
+                6 => frame.value(Axis::HorizontalScroll, -10f64),
+                7 => frame.value(Axis::HorizontalScroll, 10f64),
+                _ => unreachable!(),
+            };
+            pointer.axis(frame)
+        }
+        1 | 2 | 3 => {
+            let button = match event.button {
+                1 => 0x110,
+                2 => 0x112,
+                3 => 0x111,
+                _ => unreachable!(),
+            };
+            pointer.button(button, state, SERIAL_COUNTER.next_serial(), time_spent);
+        }
+        _ => {}
+    }
+}
+
+fn process_keyboard(
+    event: qubes_gui::Keypress,
+    instant: std::time::Instant,
+    log: &slog::Logger,
+    keyboard: &mut KeyboardHandle,
+) {
+    let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
+    if event.keycode < 8 || event.keycode >= 0x108 {
+        error!(log,
+           "Bad keycode from X11";
+           "code" => event.keycode);
+        return;
+    }
+    // NOT A GOOD IDEA: this is sensitive information
+    // info!(log, "Key pressed: {:?}", event);
+    let state = match event.ty {
+        2 => KeyState::Pressed,
+        3 => KeyState::Released,
+        strange => {
+            error!(log,
+               "GUI daemon bug: strange key event";
+               "type" => strange);
+            return;
+        }
+    };
+    keyboard.input::<(), _>(
+        event.keycode - 8,
+        state,
+        SERIAL_COUNTER.next_serial(),
+        time_spent,
+        |_, _| FilterResult::Forward,
+    );
+}
+
+fn process_events(
+    instant: std::time::Instant,
+    qubes: &mut core::cell::RefMut<'_, QubesData>,
+    log: &slog::Logger,
+    keyboard: &mut KeyboardHandle,
+    pointer: &mut PointerHandle,
+    running: &AtomicBool,
+) {
+    loop {
+        let (window, ev) = loop {
+            match qubes.agent.read_header().map(Result::unwrap) {
+                Poll::Pending => return,
+                Poll::Ready((hdr, body)) => match DaemonToAgentEvent::parse(hdr, body).unwrap() {
+                    None => {}
+                    Some(ev) => break ev,
+                },
+            }
+        };
+        match ev {
+            DaemonToAgentEvent::Motion { event } => {
+                let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
+                process_motion(window, event, time_spent, qubes, log, pointer)
+            }
+            DaemonToAgentEvent::Crossing { event } => {
+                trace!(log,
+                   "Crossing event";
+                   "window" => window,
+                   "event" => ?event)
+            }
+            DaemonToAgentEvent::Close => {
+                trace!(log, "Got a close event!");
+                if window == 1 {
+                    info!(log, "Got close event for our window, exiting!");
+                    running.store(false, Ordering::SeqCst);
+                    return;
+                }
+                match qubes.map.get(&window.try_into().unwrap()) {
+                    None => warn!(log, "Close event for unknown window {}", window),
+                    Some(w) => w.surface.send_close(),
+                };
+            }
+            DaemonToAgentEvent::Keypress { event } => {
+                process_keyboard(event, instant, log, keyboard)
+            }
+            DaemonToAgentEvent::Button { event } => process_button(event, instant, log, pointer),
+            DaemonToAgentEvent::Copy => {
+                trace!(log, "clipboard data requested!")
+            }
+            DaemonToAgentEvent::Paste { untrusted_data: _ } => {
+                trace!(log, "clipboard data reply!")
+            }
+            DaemonToAgentEvent::Keymap { new_keymap } => {
+                trace!(log, "Keymap notification: {:?}", new_keymap);
+                let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
+                let serial = SERIAL_COUNTER.next_serial();
+                for i in 0x0..0x100 {
+                    let state = match (new_keymap.keys[i / 32] >> (i % 8)) & 0x1 {
+                        1 => KeyState::Pressed,
+                        0 => KeyState::Released,
+                        _ => unreachable!(),
+                    };
+                    keyboard.input::<(), _>(i as _, state, serial, time_spent, |_, _| {
+                        FilterResult::Forward
+                    });
+                }
+            }
+            DaemonToAgentEvent::Redraw { portion_to_redraw } => {
+                trace!(
+                    log,
+                    #"qubes-event",
+                    "Map event";
+                    "portion_to_redraw" => ?portion_to_redraw,
+                    "window" => ?window,
+                );
+            }
+            DaemonToAgentEvent::Configure {
+                new_size_and_position,
+            } => {
+                trace!(log,
+                    #"qubes-event",
+                    "Configure";
+                    "event" => ?new_size_and_position,
+                    "window" => window,
+                );
+                qubes.process_configure(new_size_and_position, window)
+            }
+            DaemonToAgentEvent::Focus { event } => {
+                process_focus(window, event, log, keyboard, qubes)
+            }
+            DaemonToAgentEvent::WindowFlags { flags } => {
+                trace!(log,
+                   "Window manager flags changed";
+                   "window" => window,
+                   "new_flags" => ?flags);
+            }
+            _ => warn!(log, "Ignoring unknown event!"),
+        }
     }
 }
 
@@ -327,291 +593,19 @@ pub fn run_qubes(log: Logger, args: std::env::ArgsOs) {
                 },
                 calloop::Mode::Edge,
             ),
-            move |readiness: calloop::Readiness, _fd, agent_full| {
-                if !readiness.readable && !readiness.writable {
-                    panic!("No readiness?");
-                    // return Ok(calloop::PostAction::Continue);
-                }
-                let ref mut qubes = agent_full.backend_data.borrow_mut();
+            move |_: calloop::Readiness, _fd, agent_full| {
+                let AnvilState {
+                    ref log,
+                    ref mut keyboard,
+                    ref mut pointer,
+                    ref backend_data,
+                    ref running,
+                    ..
+                } = agent_full;
+                let ref mut qubes = backend_data.borrow_mut();
                 qubes.agent.wait();
-                loop {
-                    let (window, ev) = loop {
-                        match qubes.agent.read_header().map(Result::unwrap) {
-                            Poll::Pending => return Ok(calloop::PostAction::Continue),
-                            Poll::Ready((hdr, body)) => match DaemonToAgentEvent::parse(hdr, body).unwrap() {
-                                None => {}
-                                Some(ev) => break ev,
-                            },
-                        }
-                    };
-                    match ev {
-                        DaemonToAgentEvent::Motion { mut event } => {
-                            let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
-                            debug!(agent_full.log, "Motion event: {:?}", event);
-                            let surface = window.try_into().ok().and_then(|s| qubes.map.get(&s));
-                            if surface.is_none() && false {
-                                warn!(
-                                    agent_full.log,
-                                    "Motion event for unknown window {}", window
-                                )
-                            }
-                            let focus = surface.and_then(|surface| {
-                                surface
-                                    .surface
-                                    .get_surface()
-                                    .and_then(|s| {
-                                        with_states(s, |data| {
-                                            let geometry = data
-                                                .data_map
-                                                .get::<RefCell<SurfaceData>>()
-                                                .expect("this data was just inserted above, so it will be present; qed")
-                                                .borrow()
-                                                .geometry;
-                                            if let Some(geometry) = geometry {
-                                                event.coordinates.x = event.coordinates.x
-                                                    .saturating_add(surface.coordinates.x.max(0) as _)
-                                                    .saturating_add(geometry.loc.x as u32);
-                                                event.coordinates.y = event.coordinates.y
-                                                    .saturating_add(surface.coordinates.y.max(0) as _)
-                                                    .saturating_add(geometry.loc.y as u32);
-                                            } else {
-                                                event.coordinates.x = event.coordinates.x
-                                                    .saturating_add(surface.coordinates.x.max(0) as _);
-                                                event.coordinates.y = event.coordinates.y
-                                                    .saturating_add(surface.coordinates.y.max(0) as _);
-                                            }
-                                        }).ok().map(|()| (s.clone(), surface.coordinates))
-                                    })
-                            });
-                            let location = (event.coordinates.x.into(), event.coordinates.y.into()).into();
-                            trace!(
-                                agent_full.log,
-                                "Motion event";
-                                "location" => ?location,
-                                "window" => window,
-                            );
-                            agent_full.pointer.motion(
-                                location,
-                                focus,
-                                SERIAL_COUNTER.next_serial(),
-                                time_spent,
-                            )
-                        }
-                        DaemonToAgentEvent::Crossing { event } => {
-                            trace!(agent_full.log,
-                                   "Crossing event";
-                                   "window" => window,
-                                   "event" => ?event)
-                        }
-                        DaemonToAgentEvent::Close => {
-                            trace!(agent_full.log, "Got a close event!");
-                            if window == 1 {
-                                info!(agent_full.log, "Got close event for our window, exiting!");
-                                agent_full.running.store(false, Ordering::SeqCst);
-                                return Ok(calloop::PostAction::Continue);
-                            }
-                            match qubes.map.get(&window.try_into().unwrap()) {
-                                None => warn!(
-                                    agent_full.log,
-                                    "Close event for unknown window {}", window
-                                ),
-                                Some(w) => w.surface.send_close(),
-                            };
-                        }
-                        DaemonToAgentEvent::Keypress { event } => {
-                            let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
-                            if event.keycode < 8 || event.keycode >= 0x108 {
-                                error!(agent_full.log,
-                                       "Bad keycode from X11";
-                                       "code" => event.keycode);
-                                return Ok(calloop::PostAction::Continue);
-                            }
-                            // NOT A GOOD IDEA: this is sensitive information
-                            // info!(agent_full.log, "Key pressed: {:?}", event);
-                            let state = match event.ty {
-                                2 => KeyState::Pressed,
-                                3 => KeyState::Released,
-                                strange => {
-                                    error!(agent_full.log,
-                                           "GUI daemon bug: strange key event";
-                                           "type" => strange);
-                                    continue
-                                }
-                            };
-                            agent_full.keyboard.input::<(), _>(
-                                event.keycode - 8,
-                                state,
-                                SERIAL_COUNTER.next_serial(),
-                                time_spent,
-                                |_, _| FilterResult::Forward,
-                            );
-                            if let Some(surface) = window
-                                .try_into()
-                                .ok()
-                                .and_then(|s| qubes.map.get(&s))
-                                .and_then(|s| s.surface.client())
-                            {
-                                if false && surface.send_ping(SERIAL_COUNTER.next_serial()).is_err()
-                                {
-                                    // ignore for now
-                                }
-                            }
-                        }
-                        DaemonToAgentEvent::Button { event } => {
-                            let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
-                            let state = match event.ty {
-                                4 => ButtonState::Pressed,
-                                5 => ButtonState::Released,
-                                strange => {
-                                    error!(agent_full.log, "GUI daemon bug: strange button event"; "type" => strange);
-                                    continue
-                                }
-                            };
-                            // info!(agent_full.log, "Sending button event: {:?}", event);
-                            match event.button {
-                                4|5|6|7 => {
-                                    let frame = AxisFrame::new(time_spent)
-                                        .source(AxisSource::Wheel);
-                                    let frame = match event.button {
-                                        4 => frame.value(Axis::VerticalScroll, -10f64),
-                                        5 => frame.value(Axis::VerticalScroll, 10f64),
-                                        6 => frame.value(Axis::HorizontalScroll, -10f64),
-                                        7 => frame.value(Axis::HorizontalScroll, 10f64),
-                                        _ => unreachable!(),
-                                    };
-                                    agent_full.pointer.axis(frame)
-                                }
-                                1|2|3 => {
-                                    let button = match event.button {
-                                        1 => 0x110,
-                                        2 => 0x112,
-                                        3 => 0x111,
-                                        _ => unreachable!(),
-                                    };
-                                    agent_full.pointer.button(
-                                        button,
-                                        state,
-                                        SERIAL_COUNTER.next_serial(),
-                                        time_spent,
-                                    );
-                                }
-                                _ => continue,
-                            }
-                        }
-                        DaemonToAgentEvent::Copy => {
-                            trace!(agent_full.log, "clipboard data requested!")
-                        }
-                        DaemonToAgentEvent::Paste { untrusted_data: _ } => {
-                            trace!(agent_full.log, "clipboard data reply!")
-                        }
-                        DaemonToAgentEvent::Keymap { new_keymap } => {
-                            trace!(agent_full.log, "Keymap notification: {:?}", new_keymap);
-                            let time_spent = (std::time::Instant::now() - instant).as_millis() as _;
-                            let serial = SERIAL_COUNTER.next_serial();
-                            for i in 0x0..0x100 {
-                                let state = match (new_keymap.keys[i / 32] >> (i % 8)) & 0x1 {
-                                    1 => KeyState::Pressed,
-                                    0 => KeyState::Released,
-                                    _ => unreachable!(),
-                                };
-                                agent_full.keyboard.input::<(), _>(
-                                    i as _,
-                                    state,
-                                    serial,
-                                    time_spent,
-                                    |_, _| FilterResult::Forward,
-                                );
-                            }
-                        }
-                        DaemonToAgentEvent::Redraw { portion_to_redraw } => {
-                            trace!(
-                                agent_full.log,
-                                #"qubes-event",
-                                "Map event";
-                                "portion_to_redraw" => ?portion_to_redraw,
-                                "window" => ?window,
-                            );
-                        }
-                        DaemonToAgentEvent::Configure { new_size_and_position } => {
-                            trace!(
-                                agent_full.log,
-                                #"qubes-event",
-                                "Configure";
-                                "event" => ?new_size_and_position,
-                                "window" => window,
-                            );
-                            qubes.process_configure(new_size_and_position, window)?
-                        }
-                        DaemonToAgentEvent::Focus { event } => {
-                            if event.mode != 0 {
-                                error!(
-                                    agent_full.log,
-                                    #"daemon-bug",
-                                    "mode not zero";
-                                    "window" => window,
-                                    "mode" => event.mode,
-                                )
-                            }
-                            let has_focus = match event.ty {
-                                9 /* FocusIn */ => true,
-                                10 /* FocusOut */ => false,
-                                bad_focus => {
-                                    error!(
-                                        agent_full.log,
-                                        #"daemon-bug",
-                                        "bad Focus event";
-                                        "window" => window,
-                                        "type" => bad_focus,
-                                    );
-                                    continue
-                                }
-                            };
-                            if event.detail > 7 {
-                                error!(agent_full.log,
-                                       #"daemon-bug",
-                                       "bad X11 Detail";
-                                       "detail" => event.detail);
-                                continue
-                            }
-                            trace!(agent_full.log,
-                                   "Focus event";
-                                   "event" => ?event,
-                                   "window" => window);
-                            let window = qubes.map.get(&window.try_into().unwrap());
-                            let serial = SERIAL_COUNTER.next_serial();
-                            // agent_full.pointer.set_focus(window, serial);
-                            let surface =
-                                window.and_then(|QubesBackendData { surface, .. }| {
-                                    if let Ok(true) = match surface {
-                                        Kind::Toplevel(surface) => surface.with_pending_state(|state| {
-                                        if has_focus {
-                                            state.states.set(xdg_toplevel::State::Activated)
-                                        } else {
-                                            state.states.unset(xdg_toplevel::State::Activated)
-                                        }}),
-                                        Kind::Popup(surface) => {
-                                            if !has_focus {
-                                                info!(agent_full.log, "Dismissing popup because it no longer has focus");
-                                                surface.send_popup_done()
-                                            }
-                                            Ok(true)
-                                        }
-                                    } {
-                                        surface.send_configure();
-                                    }
-                                    surface.get_surface()
-                                });
-                            agent_full.keyboard.set_focus(if has_focus { surface } else { None }, serial);
-                        }
-                        DaemonToAgentEvent::WindowFlags { flags } => {
-                            trace!(agent_full.log,
-                                   "Window manager flags changed";
-                                   "window" => window,
-                                   "new_flags" => ?flags);
-                        }
-                        _ => warn!(agent_full.log, "Ignoring unknown event!"),
-                    }
-                }
+                process_events(instant, qubes, log, keyboard, pointer, running);
+                Ok(calloop::PostAction::Continue)
             },
         )
         .unwrap();
