@@ -46,10 +46,14 @@ static void qubes_backend_handle_display_destroy(struct wl_listener *listener, v
 }
 
 static bool qubes_backend_start(struct wlr_backend *raw_backend);
+#ifdef BUILD_RUST
 extern void qubes_rust_backend_free(void *ptr);
 extern void *qubes_rust_backend_create(uint16_t domid);
 extern int qubes_rust_backend_fd(struct qubes_rust_backend *backend);
 extern void qubes_rust_backend_on_fd_ready(struct qubes_rust_backend *backend, bool);
+static int qubes_backend_on_fd(int, uint32_t, void *);
+#endif
+
 
 static const struct wlr_backend_impl qubes_backend_impl = {
 	.start = qubes_backend_start,
@@ -65,11 +69,10 @@ static const struct wlr_backend_impl qubes_backend_impl = {
 	.get_buffer_caps = qubes_backend_get_buffer_caps,
 };
 
-static int qubes_backend_on_fd(int, uint32_t, void *);
-
 static bool qubes_backend_start(struct wlr_backend *raw_backend) {
 	assert(raw_backend->impl == &qubes_backend_impl);
 	struct qubes_backend *backend = wl_container_of(raw_backend, backend, backend);
+#ifdef BUILD_RUST
 	int fd = qubes_rust_backend_fd(backend->rust_backend);
 	struct wl_event_loop *loop = wl_display_get_event_loop(backend->display);
 	struct wl_event_source *source = wl_event_loop_add_fd(loop, fd,
@@ -81,6 +84,7 @@ static bool qubes_backend_start(struct wlr_backend *raw_backend) {
 		return false;
 	}
 	backend->source = source;
+#endif
 	wl_signal_emit(&raw_backend->events.new_output, backend->output);
 	wl_signal_emit(&raw_backend->events.new_input, backend->keyboard_input);
 	wl_signal_emit(&raw_backend->events.new_input, backend->pointer_input);
@@ -88,22 +92,26 @@ static bool qubes_backend_start(struct wlr_backend *raw_backend) {
 	return true;
 }
 
+#ifdef BUILD_RUST
 static int qubes_backend_on_fd(int fd __attribute__((unused)), uint32_t mask, void *data) {
 	struct qubes_backend *backend = data;
 	assert(!(mask & WL_EVENT_WRITABLE));
 	qubes_rust_backend_on_fd_ready(backend->rust_backend, mask & WL_EVENT_READABLE);
 	return 0;
 }
+#endif
 
 static void
 qubes_backend_destroy(struct qubes_backend *backend) {
+#ifdef BUILD_RUST
 	// MUST come before freeing the Rust backend, as that closes the file descriptor.
 	if (backend->source)
 		wl_event_source_remove(backend->source);
+	qubes_rust_backend_free(backend->rust_backend);
+#endif
 	wlr_output_destroy(backend->output);
 	wlr_input_device_destroy(backend->keyboard_input);
 	wlr_input_device_destroy(backend->pointer_input);
-	qubes_rust_backend_free(backend->rust_backend);
 	free(backend);
 }
 
@@ -148,10 +156,14 @@ qubes_backend_create(struct wl_display *display, uint16_t domid) {
 	if (backend == NULL || keyboard == NULL || output == NULL ||
 	    pointer == NULL || keyboard_input == NULL || pointer_input == NULL)
 		goto fail;
+#ifdef BUILD_RUST
 	if (!(backend->rust_backend = qubes_rust_backend_create(domid))) {
 		wlr_log(WLR_ERROR, "Cannot create Rust backend for domain %" PRIu16, domid);
 		goto fail;
 	}
+#else
+	(void)domid;
+#endif
 	backend->mode.width = 1920;
 	backend->mode.height = 1080;
 	backend->mode.refresh = 60000;

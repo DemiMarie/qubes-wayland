@@ -274,7 +274,6 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
 	struct tinywl_view *view = wl_container_of(listener, view, map);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	assert(view->window_id);
 	view->mapped = true;
 	focus_view(view, view->xdg_surface->surface);
 }
@@ -286,12 +285,14 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	view->mapped = false;
 	wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, view->window_id);
+#ifdef BUILD_RUST
 	struct msg_hdr header = {
 		.type = MSG_UNMAP,
 		.window = view->window_id,
 		.untrusted_len = 0,
 	};
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, &header));
+#endif
 }
 
 static void xdg_surface_destroy(struct wl_listener *listener, void *data __attribute__((unused))) {
@@ -299,6 +300,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	wl_list_remove(&view->link);
+#ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, view->window_id);
 	struct msg_hdr header = {
 		.type = MSG_DESTROY,
@@ -306,6 +308,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		.untrusted_len = 0,
 	};
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, &header));
+#endif
 	if (view->scene_subsurface_tree)
 		wlr_scene_node_destroy(view->scene_subsurface_tree);
 	free(view);
@@ -412,6 +415,7 @@ static void qubes_set_title(
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	assert(view->window_id);
 	assert(view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL);
+#ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
 	struct {
 		struct msg_hdr header;
@@ -428,6 +432,7 @@ static void qubes_set_title(
 	};
 	strncpy(msg.title.data, view->xdg_surface->toplevel->title, sizeof(msg.title.data) - 1);
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+#endif
 }
 
 static void qubes_surface_commit(
@@ -457,6 +462,8 @@ static void qubes_surface_commit(
 		return;
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	assert(view->scene_output->output == &view->output.output);
+	wlr_scene_output_commit(view->scene_output);
+#ifdef BUILD_RUST
 	if (need_configure) {
 		wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
 		struct {
@@ -494,7 +501,6 @@ static void qubes_surface_commit(
 			.override_redirect = 0,
 		},
 	};
-	wlr_scene_output_commit(view->scene_output);
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
 	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
 	struct {
@@ -514,6 +520,9 @@ static void qubes_surface_commit(
 		},
 	};
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg));
+#else
+	(void)need_configure;
+#endif
 	struct timespec now;
 	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
 	wlr_output_send_frame(&view->output.output);
@@ -594,7 +603,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	/* Get the window ID */
 	assert(view->window_id == 0);
 	view->window_id = qubes_rust_generate_id(view->server->backend->rust_backend);
-	assert(view->window_id);
 
 	/* Tell GUI daemon to create window */
 	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, view->window_id);
@@ -606,6 +614,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		box.height = 1;
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	wlr_output_enable(&view->output.output, true);
+#ifdef BUILD_RUST
 	struct {
 		struct msg_hdr header;
 		struct msg_create create;
@@ -625,6 +634,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		},
 	};
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+#endif
 	return;
 cleanup:
 	wl_resource_post_no_memory(xdg_surface->resource);

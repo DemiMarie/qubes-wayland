@@ -29,12 +29,26 @@ static void qubes_unlink_buffer_listener(struct wl_listener *listener,
 	qubes_unlink_buffer(output);
 }
 
+static const struct wlr_output_impl qubes_wlr_output_impl;
+
 static void qubes_output_deinit(struct wlr_output *raw_output) {
+	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	qubes_unlink_buffer(output);
 }
 
+static bool qubes_output_test(struct wlr_output *raw_output) {
+	assert(raw_output->impl == &qubes_wlr_output_impl);
+	struct qubes_output *output = wl_container_of(raw_output, output, output);
+	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
+	    (raw_output->pending.buffer != NULL) &&
+	    (raw_output->pending.buffer->impl != qubes_buffer_impl_addr))
+		return false;
+	return true;
+}
+
 static bool qubes_output_commit(struct wlr_output *raw_output) {
+	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	struct tinywl_view *view = wl_container_of(output, view, output);
 	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
@@ -80,7 +94,7 @@ static const struct wlr_output_impl qubes_wlr_output_impl = {
 	.set_cursor = NULL,
 	.move_cursor = NULL,
 	.destroy = qubes_output_deinit,
-	.test = NULL,
+	.test = qubes_output_test,
 	.commit = qubes_output_commit,
 	.get_gamma_size = qubes_get_gamma_size,
 	.get_cursor_formats = NULL,

@@ -13,8 +13,10 @@ struct qubes_backend {
 	struct wlr_output_mode mode;
 	struct wlr_output *output;
 	struct wlr_input_device *keyboard_input, *pointer_input;
+#ifdef BUILD_RUST
 	struct qubes_rust_backend *rust_backend;
 	struct wl_event_source *source;
+#endif
 
 	struct wl_listener display_destroy;
 };

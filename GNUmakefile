@@ -1,4 +1,13 @@
 MAKEFLAGS ::= -rR
+BUILD_RUST ?= yes
+ifeq ($(BUILD_RUST),yes)
+override flags ::= '-DBUILD_RUST=_Pragma("GCC error \"should not be referenced\"")'
+else ifeq ($(BUILD_RUST),no)
+override flags ::= -UBUILD_RUST
+else
+$(error BUILD_RUST must be “yes” or “no”)
+endif
+
 CFLAGS ::= -O2 -g3 \
 	-fno-strict-aliasing \
 	-fno-strict-overflow \
@@ -23,7 +32,7 @@ CFLAGS ::= -O2 -g3 \
 	-Wp,-UNDEBUG \
 	-Icbits/protocols \
 	-fsanitize=address,undefined \
-	-pthread
+	-pthread $(flags)
 
 CC ::= gcc
 override OUTDIR ::= cbits/build/
@@ -43,11 +52,11 @@ cbits/protocols/%-protocol.h: /usr/share/wayland-protocols/stable/%/%.xml
 	@mkdir -p -m 0700 protocols
 	@wayland-scanner --include-core-only --strict -- server-header $< $@
 
-qubes-compositor: $(OUTDIR)main.o $(OUTDIR)qubes_output.o $(OUTDIR)qubes_allocator.o $(OUTDIR)qubes_backend.o $(PWD)/target/release/libqubes_gui_rust.a
+qubes-compositor: $(OUTDIR)main.o $(OUTDIR)qubes_output.o $(OUTDIR)qubes_allocator.o $(OUTDIR)qubes_backend.o$(and $(filter-out no,$(BUILD_RUST)), $(PWD)/target/release/libqubes_gui_rust.a)
 	@flags=$$(pkg-config --libs wlroots pixman-1 wayland-protocols wayland-server xkbcommon) &&
 	case $$flags in (*\*\?\['
 		') exit 1;; esac &&
-	$(CC) -L/usr/local/lib64 -Ltarget/release $(CFLAGS) -o $@ $^ -Wl,-rpath,/usr/local/lib64 $${flags} -lqubes_gui_rust -lm -lvchan-xen -pthread -ldl
+	$(CC) -L/usr/local/lib64 -Ltarget/release $(CFLAGS) -o $@ $^ -Wl,-rpath,/usr/local/lib64 $${flags}$(and $(filter-out no,$(BUILD_RUST)), -lqubes_gui_rust) -lm -lvchan-xen -pthread -ldl
 
 $(OUTDIR)%.o: cbits/%.c cbits/protocols/xdg-shell-protocol.h GNUmakefile
 	@mkdir -p -m 0700 $(OUTDIR)
