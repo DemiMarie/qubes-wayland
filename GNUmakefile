@@ -44,7 +44,7 @@ endef
 .PHONY: all clean
 .ONESHELL:
 #all: protocols/xdg-shell-protocol.h
-all: $(OUTDIR)qubes.o qubes-compositor
+all: qubes-compositor
 clean:
 	rm -rf $(OUTDIR) && cargo clean
 
