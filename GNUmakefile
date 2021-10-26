@@ -1,7 +1,7 @@
 MAKEFLAGS ::= -rR
 BUILD_RUST ?= no
 ifeq ($(BUILD_RUST),yes)
-override flags ::= '-DBUILD_RUST=_Pragma("GCC error \"should not be referenced\"")'
+override flags ::= '-DBUILD_RUST=_Pragma("GCC error \"should not be referenced\"")' -Werror
 else ifeq ($(BUILD_RUST),no)
 override flags ::= -UBUILD_RUST
 else
@@ -22,7 +22,7 @@ CFLAGS ::= -O2 -g3 \
 	-pedantic-errors \
 	-fasynchronous-unwind-tables \
 	-fexceptions \
-	-Wall -Wextra -Werror \
+	-Wall -Wextra \
 	$(shell pkg-config --cflags pixman-1 wayland-protocols) \
 	-Wp,-DWLR_USE_UNSTABLE \
 	-Wp,-D_FORTIFY_SOURCE=2 \

@@ -1,6 +1,6 @@
+#define _POSIX_C_SOURCE 200809L
 #include "common.h"
 #include <stdlib.h>
-
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>

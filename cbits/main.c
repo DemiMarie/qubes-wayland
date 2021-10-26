@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200112L
 #include "common.h"
 #include <getopt.h>
 #include <stdlib.h>
@@ -413,9 +414,9 @@ static void qubes_set_title(
 	/* QUBES HOOK: MSG_WMNAME: ask GUI daemon to set window title */
 	struct tinywl_view *view = wl_container_of(listener, view, set_title);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	assert(view->window_id);
 	assert(view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL);
 #ifdef BUILD_RUST
+	assert(view->window_id);
 	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
 	struct {
 		struct msg_hdr header;
