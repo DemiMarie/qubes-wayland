@@ -1,4 +1,5 @@
 #include "common.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wlr/types/wlr_output.h>
@@ -53,6 +54,15 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	struct tinywl_view *view = wl_container_of(output, view, output);
+
+	if (raw_output->pending.committed & WLR_OUTPUT_STATE_MODE) {
+		assert(raw_output->pending.mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
+		wlr_output_update_custom_mode(raw_output,
+			raw_output->pending.custom_mode.width,
+			raw_output->pending.custom_mode.height,
+			raw_output->pending.custom_mode.refresh);
+	}
+
 	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
 	    (output->buffer != raw_output->pending.buffer)) {
 		if (output->buffer)
@@ -71,10 +81,6 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 #endif
 		}
 	}
-	wlr_output_update_custom_mode(raw_output,
-			raw_output->pending.custom_mode.width,
-			raw_output->pending.custom_mode.height,
-			raw_output->pending.custom_mode.refresh);
 	wlr_output_update_enabled(raw_output, raw_output->pending.enabled);
 	return true;
 }
@@ -113,12 +119,16 @@ static const struct wlr_output_impl qubes_wlr_output_impl = {
 
 static void qubes_output_frame(struct wl_listener *listener, void *data __attribute__((unused))) {
 	struct qubes_output *output = wl_container_of(listener, output, frame);
-	abort();
 }
 
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend, struct wl_display *display) {
 	memset(output, 0, sizeof *output);
+
 	wlr_output_init(&output->output, backend, &qubes_wlr_output_impl, display);
+	wlr_output_update_custom_mode(&output->output, 1280, 720, 0);
+	wlr_output_update_enabled(&output->output, true);
+	wlr_output_set_description(&output->output, "Qubes OS virtual output");
+
 	output->buffer = NULL;
 	output->buffer_destroy.notify = qubes_unlink_buffer_listener;
 	output->formats = &global_formats;

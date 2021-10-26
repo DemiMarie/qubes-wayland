@@ -453,17 +453,17 @@ static void qubes_surface_commit(
 		need_configure = true;
 		wlr_scene_output_set_position(view->scene_output, view->x, view->y);
 	}
+#ifndef BUILD_RUST
+# define MAX_WINDOW_WIDTH (1 << 14)
+# define MAX_WINDOW_HEIGHT ((1 << 11) * 3)
+#endif
+	if (box.width <= 0 || box.height <= 0 || box.width > MAX_WINDOW_WIDTH || box.height > MAX_WINDOW_HEIGHT) {
+	}
 	if (view->last_width != box.width || view->last_height != box.height) {
 		need_configure = true;
 		view->last_width = box.width;
 		view->last_height = box.height;
 	}
-#ifndef BUILD_RUST
-# define MAX_WINDOW_WIDTH (1 << 14)
-# define MAX_WINDOW_HEIGHT ((1 << 11) * 3)
-#endif
-	if (box.width <= 0 || box.height <= 0 || box.width > MAX_WINDOW_WIDTH || box.height > MAX_WINDOW_HEIGHT)
-		return;
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	wlr_output_enable(&view->output.output, view->mapped);
 	if (!view->mapped)
