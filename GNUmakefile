@@ -1,5 +1,5 @@
 MAKEFLAGS ::= -rR
-BUILD_RUST ?= yes
+BUILD_RUST ?= no
 ifeq ($(BUILD_RUST),yes)
 override flags ::= '-DBUILD_RUST=_Pragma("GCC error \"should not be referenced\"")'
 else ifeq ($(BUILD_RUST),no)
