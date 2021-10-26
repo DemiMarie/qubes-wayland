@@ -1,12 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include "common.h"
-#ifndef BUILD_RUST
-#include "simple_allocator.c"
-#else
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -16,8 +12,6 @@
 #include <wlr/allocator/interface.h>
 #include <wlr/allocator/wlr_allocator.h>
 #include <wlr/types/wlr_buffer.h>
-#include <xen/gntalloc.h>
-#include <qubes-gui-protocol.h>
 #include <drm/drm_fourcc.h>
 
 #include "qubes_allocator.h"
@@ -56,8 +50,6 @@ struct qubes_allocator {
 
 static void qubes_allocator_destroy(struct wlr_allocator *allocator) {
 	struct qubes_allocator *qubes = wl_container_of(allocator, qubes, inner);
-	assert(close(qubes->xenfd) == 0 && "Closing a gntalloc handle always succeeds");
-	qubes->xenfd = -1;
 	qubes_allocator_decref(qubes);
 }
 
@@ -65,26 +57,17 @@ static void qubes_allocator_decref(struct qubes_allocator *allocator) {
 	assert(allocator->refcount > 0 && "use after free???");
 	allocator->refcount--;
 	if (allocator->refcount == 0) {
-		assert(allocator->xenfd == -1 && "Xen FD wasn’t closed by qubes_allocator_destroy?");
 		free(allocator);
 	}
 }
 
-struct wlr_allocator *qubes_allocator_create(uint16_t domid) {
+struct wlr_allocator *qubes_allocator_create(uint16_t domid __attribute__((unused))) {
 	struct qubes_allocator *qubes = calloc(sizeof(*qubes), 1);
 	if (!qubes)
 		return NULL;
-	qubes->domid = domid;
-	if ((qubes->xenfd = open("/dev/xen/gntalloc", O_RDWR | O_CLOEXEC | O_NOCTTY)) < 0) {
-		assert(qubes->xenfd == -1);
-		free(qubes);
-		return NULL;
-	} else {
-		assert(qubes->xenfd > 2 && "FD 0, 1, or 2 got closed earlier?");
-		qubes->refcount = 1;
-		wlr_allocator_init(&qubes->inner, &qubes_allocator_impl, WLR_BUFFER_CAP_DATA_PTR);
-		return &qubes->inner;
-	}
+	qubes->refcount = 1;
+	wlr_allocator_init(&qubes->inner, &qubes_allocator_impl, WLR_BUFFER_CAP_DATA_PTR);
+	return &qubes->inner;
 }
 #ifndef XC_PAGE_SIZE
 #define XC_PAGE_SIZE 4096
@@ -111,8 +94,8 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 		return NULL;
 	}
 	/* Check for excessive sizes */
-	if (width <= 0 || width > MAX_WINDOW_WIDTH ||
-	    height <= 0 || height > MAX_WINDOW_HEIGHT) {
+	if (width <= 0 || width > (1 << 14) ||
+	    height <= 0 || height > (2048 * 3)) {
 		wlr_log(WLR_ERROR, "Refusing allocation because width %d and/or height %d is bad", width, height);
 		return NULL;
 	}
@@ -120,43 +103,20 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 	/* the remaining computations cannot overflow */
 	const int32_t pixels = (int32_t)width * (int32_t)height;
 	const int32_t bytes = pixels * sizeof(uint32_t);
-	const int32_t pages = NUM_PAGES(bytes);
 
-	struct qubes_buffer *buffer = calloc((size_t)pages * SIZEOF_GRANT_REF +
-	                                     offsetof(struct qubes_buffer, qubes) +
-	                                     sizeof(buffer->qubes), 1);
+	struct qubes_buffer *buffer = calloc(sizeof(*buffer), 1);
 	if (!buffer)
 		return NULL;
-	buffer->xen.domid = qalloc->domid;
-	buffer->xen.flags = GNTALLOC_FLAG_WRITABLE;
-	buffer->xen.count = pages;
-	buffer->format = format->format;
-	int res = ioctl(qalloc->xenfd, IOCTL_GNTALLOC_ALLOC_GREF, &buffer->xen);
-	if (res) {
-		assert(res == -1);
-		goto fail;
-	}
-	buffer->index = buffer->xen.index;
 	buffer->size = (size_t)bytes;
-	buffer->qubes.type = 0; /* WINDOW_DUMP_TYPE_GRANT_REFS */
-	buffer->qubes.width = (uint32_t)width;
-	buffer->qubes.height = (uint32_t)height;
-	buffer->qubes.bpp = 24;
-	buffer->ptr = mmap(NULL, (size_t)bytes, PROT_READ|PROT_WRITE, MAP_SHARED, qalloc->xenfd, (off_t)buffer->index);
+	buffer->width = (uint32_t)width;
+	buffer->height = (uint32_t)height;
+	buffer->ptr = mmap(NULL, (size_t)bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
 	if (buffer->ptr != MAP_FAILED) {
 		wlr_buffer_init(&buffer->inner, &qubes_buffer_impl, width, height);
 		qalloc->refcount++;
 		assert(qalloc->refcount);
 		buffer->alloc = qalloc;
 		return &buffer->inner;
-	}
-fail:
-	if (buffer->size) {
-		struct ioctl_gntalloc_dealloc_gref dealloc = {
-			.index = buffer->index,
-			.count = pages,
-		};
-		assert(ioctl(qalloc->xenfd, IOCTL_GNTALLOC_DEALLOC_GREF, &dealloc) == 0);
 	}
 	free(buffer);
 	return NULL;
@@ -169,7 +129,7 @@ static bool qubes_buffer_begin_data_ptr_access(struct wlr_buffer *raw_buffer, ui
 		return false;
 	struct qubes_buffer *buffer = wl_container_of(raw_buffer, buffer, inner);
 	if (stride)
-		*stride = buffer->qubes.width * sizeof(uint32_t);
+		*stride = buffer->width * sizeof(uint32_t);
 	if (data)
 		*data = buffer->ptr;
 	if (format)
@@ -180,16 +140,9 @@ static bool qubes_buffer_begin_data_ptr_access(struct wlr_buffer *raw_buffer, ui
 static void qubes_buffer_destroy(struct wlr_buffer *raw_buffer) {
 	assert(raw_buffer->impl == &qubes_buffer_impl);
 	struct qubes_buffer *buffer = wl_container_of(raw_buffer, buffer, inner);
-	struct ioctl_gntalloc_dealloc_gref dealloc = {
-		.index = buffer->index,
-		.count = NUM_PAGES(buffer->size),
-	};
 	assert(munmap(buffer->ptr, buffer->size) == 0);
-	if (buffer->alloc->xenfd != -1)
-		assert(ioctl(buffer->alloc->xenfd, IOCTL_GNTALLOC_DEALLOC_GREF, &dealloc) == 0);
 	qubes_allocator_decref(buffer->alloc);
 	free(buffer);
 }
 
-#endif
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:

@@ -15,7 +15,9 @@
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/util/log.h>
 
+#ifdef BUILD_RUST
 #include <vchan-xen/libvchan.h>
+#endif
 
 static const struct wlr_backend_impl qubes_backend_impl;
 

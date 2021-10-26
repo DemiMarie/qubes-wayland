@@ -59,12 +59,14 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 		if (output->buffer) {
 			assert(output->buffer->impl == qubes_buffer_impl_addr);
 			wl_signal_add(&output->buffer->events.destroy, &output->buffer_destroy);
+#ifdef BUILD_RUST
 			wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32, MSG_WINDOW_DUMP, view->window_id);
 			struct qubes_buffer *buffer = wl_container_of(output->buffer, buffer, inner);
 			buffer->header.window = view->window_id;
 			buffer->header.type = MSG_WINDOW_DUMP;
 			buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
 			assert(qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header));
+#endif
 		}
 	}
 	return true;
