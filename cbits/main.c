@@ -463,6 +463,7 @@ static void qubes_surface_commit(
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	assert(view->scene_output->output == &view->output.output);
 	wlr_scene_output_commit(view->scene_output);
+	wlr_log(WLR_DEBUG, "Width is %" PRIu32 " height is %" PRIu32, (uint32_t)box.width, (uint32_t)box.height);
 #ifdef BUILD_RUST
 	if (need_configure) {
 		wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
