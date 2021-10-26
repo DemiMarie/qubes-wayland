@@ -5,7 +5,9 @@
 #include <wlr/render/drm_format_set.h>
 #include <wlr/util/log.h>
 #include <drm/drm_fourcc.h>
+#ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
+#endif
 #include "qubes_output.h"
 #include "qubes_allocator.h"
 #include "qubes_backend.h"

@@ -1,9 +1,14 @@
-#define _POSIX_C_SOURCE 200809L
+// #define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE 1
+#define _DEFAULT_SOURCE 1
+#include <sys/mman.h>
+#ifndef MAP_ANONYMOUS
+#error bug
+#endif
 #include "common.h"
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/mman.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -110,6 +115,7 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 	buffer->size = (size_t)bytes;
 	buffer->width = (uint32_t)width;
 	buffer->height = (uint32_t)height;
+	buffer->format = format->format;
 	buffer->ptr = mmap(NULL, (size_t)bytes, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
 	if (buffer->ptr != MAP_FAILED) {
 		wlr_buffer_init(&buffer->inner, &qubes_buffer_impl, width, height);

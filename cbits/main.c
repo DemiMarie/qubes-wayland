@@ -29,7 +29,9 @@
 
 #include <xkbcommon/xkbcommon.h>
 
+#ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
+#endif
 #include "qubes_output.h"
 #include "qubes_backend.h"
 #include "qubes_allocator.h"
@@ -285,8 +287,8 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	struct tinywl_view *view = wl_container_of(listener, view, unmap);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	view->mapped = false;
-	wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, view->window_id);
 #ifdef BUILD_RUST
+	wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, view->window_id);
 	struct msg_hdr header = {
 		.type = MSG_UNMAP,
 		.window = view->window_id,
@@ -456,6 +458,10 @@ static void qubes_surface_commit(
 		view->last_width = box.width;
 		view->last_height = box.height;
 	}
+#ifndef BUILD_RUST
+# define MAX_WINDOW_WIDTH (1 << 14)
+# define MAX_WINDOW_HEIGHT ((1 << 11) * 3)
+#endif
 	if (box.width <= 0 || box.height <= 0 || box.width > MAX_WINDOW_WIDTH || box.height > MAX_WINDOW_HEIGHT)
 		return;
 	wlr_output_enable(&view->output.output, view->mapped);
@@ -607,7 +613,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	view->window_id = qubes_rust_generate_id(view->server->backend->rust_backend);
 
 	/* Tell GUI daemon to create window */
-	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, view->window_id);
 	struct wlr_box box;
 	wlr_xdg_surface_get_geometry(xdg_surface, &box);
 	if (box.width <= 0)
@@ -617,6 +622,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	wlr_output_enable(&view->output.output, true);
 #ifdef BUILD_RUST
+	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, view->window_id);
 	struct {
 		struct msg_hdr header;
 		struct msg_create create;

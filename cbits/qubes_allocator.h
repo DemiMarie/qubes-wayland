@@ -3,8 +3,10 @@
 
 #include "common.h"
 #include <wlr/allocator/wlr_allocator.h>
+#ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
 #include <xen/gntalloc.h>
+#endif
 
 struct wlr_allocator *qubes_allocator_create(uint16_t domid);
 extern const struct wlr_buffer_impl *qubes_buffer_impl_addr;
@@ -28,7 +30,7 @@ struct qubes_buffer {
 		struct msg_window_dump_hdr qubes;
 	};
 #else
-	uint32_t width, height;
+	uint32_t format, width, height;
 #endif
 };
 #ifdef BUILD_RUST
