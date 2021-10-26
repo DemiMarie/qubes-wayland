@@ -464,10 +464,10 @@ static void qubes_surface_commit(
 #endif
 	if (box.width <= 0 || box.height <= 0 || box.width > MAX_WINDOW_WIDTH || box.height > MAX_WINDOW_HEIGHT)
 		return;
+	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	wlr_output_enable(&view->output.output, view->mapped);
 	if (!view->mapped)
 		return;
-	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	assert(view->scene_output->output == &view->output.output);
 	wlr_scene_output_commit(view->scene_output);
 	wlr_log(WLR_DEBUG, "Width is %" PRIu32 " height is %" PRIu32, (uint32_t)box.width, (uint32_t)box.height);

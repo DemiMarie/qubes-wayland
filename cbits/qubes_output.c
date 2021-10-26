@@ -71,6 +71,11 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 #endif
 		}
 	}
+	wlr_output_update_custom_mode(raw_output,
+			raw_output->pending.custom_mode.width,
+			raw_output->pending.custom_mode.height,
+			raw_output->pending.custom_mode.refresh);
+	wlr_output_update_enabled(raw_output, raw_output->pending.enabled);
 	return true;
 }
 
