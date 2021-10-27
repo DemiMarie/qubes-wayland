@@ -45,5 +45,7 @@ struct tinywl_view {
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
                        struct wl_display *display);
 
+void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
+
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_OUTPUT_H */
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:

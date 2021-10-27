@@ -311,6 +311,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		.untrusted_len = 0,
 	};
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, &header));
+	qubes_rust_delete_id(view->server->backend->rust_backend, view->window_id);
 #endif
 	if (view->scene_subsurface_tree)
 		wlr_scene_node_destroy(view->scene_subsurface_tree);
@@ -610,7 +611,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 	/* Get the window ID */
 	assert(view->window_id == 0);
-	view->window_id = qubes_rust_generate_id(view->server->backend->rust_backend);
+	view->window_id = qubes_rust_generate_id(view->server->backend->rust_backend, view);
 
 	/* Tell GUI daemon to create window */
 	struct wlr_box box;
@@ -651,6 +652,7 @@ cleanup:
 			wlr_scene_node_destroy(view->scene_subsurface_tree);
 		if (view->scene_output)
 			wlr_scene_output_destroy(view->scene_output);
+		qubes_rust_delete_id(view->server->backend->rust_backend, view->window_id);
 		free(view);
 	}
 	return;

@@ -2,9 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <wlr/types/wlr_output.h>
+
 #include <wlr/render/drm_format_set.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
+
 #include <drm/drm_fourcc.h>
 #ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
@@ -134,6 +138,202 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 	output->formats = &global_formats;
 	output->frame.notify = qubes_output_frame;
 	wl_signal_add(&output->output.events.frame, &output->frame);
+}
+
+static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
+{
+	struct msg_keypress keypress;
+	enum wl_keyboard_key_state state;
+	struct wlr_seat *seat = view->server->seat;
+
+	memcpy(&keypress, ptr, sizeof(keypress));
+	switch (keypress.type) {
+	case 2:
+		state = WL_KEYBOARD_KEY_STATE_RELEASED;
+		break;
+	case 3:
+		state = WL_KEYBOARD_KEY_STATE_PRESSED;
+		break;
+	default:
+		wlr_log(WLR_ERROR, "Bad keypress type " PRIu32, keypress.type);
+		return; /* bad state */
+	}
+
+	if (keypress.keycode < 0x8 || keypress.keycode >= 0x108) {
+		wlr_log(WLR_ERROR, "Bad keycode " PRIu32, keypress.keycode);
+		return; /* not valid in X11, which the GUI daemon uses */
+	}
+	uint8_t keycode = keypress.keycode - 0x8;
+	wlr_seat_keyboard_notify_key(seat, timestamp, keycode, state);
+}
+
+static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8_t *ptr)
+{
+	struct msg_button button;
+	enum wlr_button_state state;
+
+	memcpy(&button, ptr, sizeof(button));
+	switch (button.type) {
+	case 4:
+		state = WLR_BUTTON_PRESSED;
+		break;
+	case 5:
+		state = WLR_BUTTON_RELEASED;
+		break;
+	default:
+		wlr_log(WLR_ERROR, "Bad button type " PRIu32, button.type);
+		return; /* bad state */
+	}
+
+	switch (button.button) {
+	case 1:
+		wlr_seat_pointer_notify_button(seat, timestamp, 0x110, state);
+		break;
+	case 2:
+		wlr_seat_pointer_notify_button(seat, timestamp, 0x112, state);
+		break;
+	case 3:
+		wlr_seat_pointer_notify_button(seat, timestamp, 0x111, state);
+		break;
+	case 4:
+		wlr_seat_pointer_notify_axis(
+			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, -10.0, -10,
+			WLR_AXIS_SOURCE_WHEEL);
+		break;
+	case 5:
+		wlr_seat_pointer_notify_axis(
+			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, 10.0, 10,
+			WLR_AXIS_SOURCE_WHEEL);
+		break;
+	case 6:
+		wlr_seat_pointer_notify_axis(
+			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, -10.0, -10,
+			WLR_AXIS_SOURCE_WHEEL);
+		break;
+	case 7:
+		wlr_seat_pointer_notify_axis(
+			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, 10.0, 10,
+			WLR_AXIS_SOURCE_WHEEL);
+		break;
+	default:
+		wlr_log(WLR_DEBUG, "Unknown button event type %" PRIu32, button.button);
+		break;
+	}
+}
+
+static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
+{
+	struct msg_motion motion;
+	memcpy(&motion, ptr, sizeof motion);
+
+	int display_width = MAX_WINDOW_WIDTH;
+	int display_height = MAX_WINDOW_HEIGHT;
+	struct wlr_seat *seat = view->server->seat;
+
+	assert(display_width > 0 && display_height > 0);
+	assert(display_width <= MAX_WINDOW_WIDTH && display_height <= MAX_WINDOW_HEIGHT);
+	int32_t x = QUBES_MIN(motion.x, (uint32_t)display_width);
+	int32_t y = QUBES_MIN(motion.y, (uint32_t)display_height);
+	x = QUBES_MAX(view->x, QUBES_MIN(x, (int32_t)view->last_width + view->x));
+	y = QUBES_MAX(view->y, QUBES_MIN(y, (int32_t)view->last_height + view->y));
+
+	double sx = (double)(x - view->x)/(double)(view->last_width);
+	double sy = (double)(y - view->y)/(double)(view->last_height);
+	wlr_seat_pointer_notify_motion(seat, timestamp, sx, sy);
+}
+
+static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
+{
+	struct msg_motion motion;
+	struct wlr_seat *seat = view->server->seat;
+	int display_width = MAX_WINDOW_WIDTH;
+	int display_height = MAX_WINDOW_HEIGHT;
+
+	memcpy(&motion, ptr, sizeof motion);
+
+	assert(display_width > 0 && display_height > 0);
+	assert(display_width <= MAX_WINDOW_WIDTH && display_height <= MAX_WINDOW_HEIGHT);
+	int32_t x = QUBES_MIN(motion.x, (uint32_t)display_width);
+	int32_t y = QUBES_MIN(motion.y, (uint32_t)display_height);
+	x = QUBES_MAX(view->x, QUBES_MIN(x, (int32_t)view->last_width + view->x));
+	y = QUBES_MAX(view->y, QUBES_MIN(y, (int32_t)view->last_height + view->y));
+
+	double sx = (double)(x - view->x)/(double)(view->last_width);
+	double sy = (double)(y - view->y)/(double)(view->last_height);
+	wlr_seat_pointer_notify_enter(seat, view->xdg_surface->surface, sx, sy);
+}
+
+static void handle_focus(struct tinywl_view *view __attribute__((unused)), uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
+{
+	/* This is specifically *keyboard* focus */
+	struct msg_focus focus;
+
+	memcpy(&focus, ptr, sizeof focus);
+	//assert(!"not yet implemented: using the keyboard information that has already been received");
+	return;
+}
+
+void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
+{
+	struct tinywl_view *view = raw_view;
+	assert(hdr.window == view->window_id);
+	switch (hdr.type) {
+	case MSG_KEYPRESS:
+		assert(hdr.untrusted_len == sizeof(struct msg_keypress));
+		handle_keypress(view, timestamp, ptr);
+		break;
+	case MSG_CONFIGURE:
+		assert(hdr.untrusted_len == sizeof(struct msg_configure));
+		break;
+	case MSG_MAP:
+		break;
+	case MSG_BUTTON:
+		assert(hdr.untrusted_len == sizeof(struct msg_button));
+		handle_button(view->server->seat, timestamp, ptr);
+		break;
+	case MSG_MOTION:
+		assert(hdr.untrusted_len == sizeof(struct msg_motion));
+		handle_motion(view, timestamp, ptr);
+		break;
+	case MSG_CLOSE:
+		assert(hdr.untrusted_len == 0);
+		wlr_xdg_toplevel_send_close(view->xdg_surface);
+		break;
+	case MSG_CROSSING:
+		assert(hdr.untrusted_len == sizeof(struct msg_crossing));
+		handle_crossing(view, timestamp, ptr);
+		break;
+	case MSG_FOCUS:
+		assert(hdr.untrusted_len == sizeof(struct msg_focus));
+		handle_focus(view, timestamp, ptr);
+		break;
+	case MSG_CLIPBOARD_REQ:
+		assert(hdr.untrusted_len == 0);
+		break;
+	case MSG_CLIPBOARD_DATA:
+		break;
+	case MSG_KEYMAP_NOTIFY:
+		assert(hdr.untrusted_len == sizeof(struct msg_keymap_notify));
+		// handle_keymap(view, timestamp, ptr);
+		break;
+	case MSG_WINDOW_FLAGS:
+		assert(hdr.untrusted_len == sizeof(struct msg_window_flags));
+		// handle_window_flags(view, timestamp, ptr);
+		break;
+	case MSG_RESIZE:
+	case MSG_CREATE:
+	case MSG_DESTROY:
+	case MSG_UNMAP:
+	case MSG_MFNDUMP:
+	case MSG_SHMIMAGE:
+	case MSG_EXECUTE:
+	case MSG_WMNAME:
+	case MSG_WINDOW_DUMP:
+	case MSG_CURSOR:
+	default:
+		/* unknown events */
+		break;
+	}
 }
 
 /* vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8: */

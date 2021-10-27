@@ -1,5 +1,9 @@
 use std::{
-    collections::BTreeMap, convert::TryInto, num::NonZeroU32, os::unix::io::AsRawFd, task::Poll,
+    collections::BTreeMap,
+    convert::{TryFrom, TryInto},
+    num::NonZeroU32,
+    os::unix::io::AsRawFd,
+    task::Poll,
 };
 
 pub const OUTPUT_NAME: &str = "qubes";
@@ -8,23 +12,41 @@ pub struct QubesData {
     pub agent: qubes_gui_client::Client,
     pub connection: qubes_gui_gntalloc::Agent,
     wid: u32,
-    pub map: BTreeMap<NonZeroU32, ()>,
+    pub map: BTreeMap<NonZeroU32, *mut std::os::raw::c_void>,
     last_width: u32,
     last_height: u32,
     buf: qubes_gui_gntalloc::Buffer,
 }
 
 impl QubesData {
-    pub fn id(&mut self) -> NonZeroU32 {
+    fn id(&mut self, userdata: *mut std::os::raw::c_void) -> NonZeroU32 {
         let id = self.wid;
         self.wid = id
             .checked_add(1)
             .expect("not yet implemented: wid wrapping");
-        id.try_into()
-            .expect("IDs start at 2 and do not wrap, so they cannot be zero; qed")
+        let id = id
+            .try_into()
+            .expect("IDs start at 2 and do not wrap, so they cannot be zero; qed");
+        assert!(self.map.insert(id, userdata).is_none());
+        id
     }
 
-    fn on_fd_ready(&mut self, is_readable: bool) {
+    fn destroy_id(&mut self, id: u32) {
+        if let Ok(id) = NonZeroU32::try_from(id) {
+            self.map.remove(&id).expect("double free!");
+        }
+    }
+
+    unsafe fn on_fd_ready(
+        &mut self,
+        is_readable: bool,
+        callback: unsafe extern "C" fn(
+            *mut std::os::raw::c_void,
+            u32,
+            qubes_gui::Header,
+            *const u8,
+        ),
+    ) {
         if is_readable {
             self.agent.wait();
         }
@@ -36,6 +58,10 @@ impl QubesData {
                     assert_eq!(body.len() as u32, hdr.untrusted_len);
                     if hdr.window == 1 {
                         eprintln!("Got an event for our own window!");
+                    } else if let Ok(nz) = NonZeroU32::try_from(hdr.window) {
+                        if let Some(&userdata) = self.map.get(&nz) {
+                            callback(userdata, 0, hdr, body.as_ptr())
+                        }
                     }
                 }
             }
@@ -46,8 +72,24 @@ impl QubesData {
 type RustBackend = QubesData;
 
 #[no_mangle]
-pub unsafe extern "C" fn qubes_rust_generate_id(backend: *mut std::os::raw::c_void) -> u32 {
-    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).id()) {
+pub unsafe extern "C" fn qubes_rust_generate_id(
+    backend: *mut std::os::raw::c_void,
+    userdata: *mut std::os::raw::c_void,
+) -> u32 {
+    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).id(userdata)) {
+        Ok(e) => e.into(),
+        Err(e) => {
+            drop(std::panic::catch_unwind(|| {
+                eprintln!("Unexpected panic");
+            }));
+            std::process::abort();
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn qubes_rust_delete_id(backend: *mut std::os::raw::c_void, id: u32) {
+    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).destroy_id(id)) {
         Ok(e) => e.into(),
         Err(e) => {
             drop(std::panic::catch_unwind(|| {
@@ -90,8 +132,11 @@ pub extern "C" fn qubes_rust_backend_create(domid: u16) -> *mut std::os::raw::c_
 pub unsafe extern "C" fn qubes_rust_backend_on_fd_ready(
     backend: *mut std::os::raw::c_void,
     is_readable: bool,
+    callback: unsafe extern "C" fn(*mut std::os::raw::c_void, u32, qubes_gui::Header, *const u8),
 ) -> bool {
-    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).on_fd_ready(is_readable)) {
+    match std::panic::catch_unwind(|| {
+        (*(backend as *mut RustBackend)).on_fd_ready(is_readable, callback)
+    }) {
         Ok(()) => true,
         Err(e) => {
             drop(std::panic::catch_unwind(|| {
