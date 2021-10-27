@@ -17,6 +17,7 @@
 
 #ifdef BUILD_RUST
 #include <vchan-xen/libvchan.h>
+#include <qubes-gui-protocol.h>
 #endif
 
 static const struct wlr_backend_impl qubes_backend_impl;
@@ -116,6 +117,169 @@ qubes_backend_destroy(struct qubes_backend *backend) {
 	wlr_input_device_destroy(backend->pointer_input);
 	free(backend);
 }
+
+#if 0
+static void handle_keypress(struct wlr_keyboard *keyboard, uint32_t timestamp, const uint8_t *ptr)
+{
+	struct msg_keypress keypress;
+	struct wlr_event_keyboard_key event;
+
+	memcpy(&keypress, ptr, sizeof(keypress));
+	switch (keypress.type) {
+	case 2:
+		event.state = WL_KEYBOARD_KEY_STATE_RELEASED;
+	case 3:
+		event.state = WL_KEYBOARD_KEY_STATE_PRESSED;
+	default:
+		wlr_log(WLR_ERROR, "Bad keypress type " PRIu32, keypress.type);
+		return; /* bad state */
+	}
+
+	if (keypress.keycode < 0x8 || keypress.keycode >= 0x108) {
+		wlr_log(WLR_ERROR, "Bad keycode " PRIu32, keypress.keycode);
+		return; /* not valid in X11, which the GUI daemon uses */
+	}
+	event.keycode = keypress.keycode - 0x8;
+	event.update_state = true;
+	event.time_msec = timestamp;
+	wlr_keyboard_notify_key(keyboard, &event);
+}
+
+static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8_t *ptr)
+{
+	struct msg_button button;
+	enum wlr_button_state state;
+
+	assert(pointer_input->type == WLR_INPUT_DEVICE_POINTER);
+	memcpy(&button, ptr, sizeof(button));
+	switch (button.type) {
+	case 4:
+		state = WLR_BUTTON_PRESSED;
+		break;
+	case 5:
+		state = WLR_BUTTON_RELEASED;
+		break;
+	default:
+		wlr_log(WLR_ERROR, "Bad button type " PRIu32, button.type);
+		return; /* bad state */
+	}
+
+	switch (button.button) {
+	case 1:
+		wlr_seat_pointer_notify_button(seat, timestamp, 0x110, state);
+		break;
+	case 2:
+		wlr_seat_pointer_notify_button(seat, timestamp, 0x112, state);
+		break;
+	case 3:
+		wlr_seat_pointer_notify_button(seat, timestamp, 0x111, state);
+		break;
+	default:
+		abort();
+	}
+}
+
+static void handle_axis(struct wlr_seat *seat, uint32_t timestamp, const uint8_t *ptr)
+{
+	struct msg_button button;
+
+	memcpy(&button, ptr, sizeof(button));
+	switch (button.button) {
+	case 4:
+		wlr_seat_pointer_notify_axis(
+			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, -10.0, -10,
+			WLR_AXIS_SOURCE_WHEEL);
+		break;
+	case 5:
+		wlr_seat_pointer_notify_axis(
+			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, 10.0, 10,
+			WLR_AXIS_SOURCE_WHEEL);
+		break;
+	case 6:
+		wlr_seat_pointer_notify_axis(
+			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, -10.0, -10,
+			WLR_AXIS_SOURCE_WHEEL);
+		break;
+	case 7:
+		wlr_seat_pointer_notify_axis(
+			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, 10.0, 10,
+			WLR_AXIS_SOURCE_WHEEL);
+		break;
+	default:
+		abort();
+	}
+}
+
+static void handle_motion(struct wlr_seat, uint32_t timestamp, const uint8_t *ptr)
+{
+	struct msg_motion motion;
+
+	memcpy(&motion, ptr, sizeof motion);
+	/* TODO: compute x, y and propogate */
+}
+
+static void qubes_parse_event(struct qubes_backend *backend, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
+{
+	switch (hdr.type) {
+	case MSG_KEYPRESS:
+		assert(hdr.untrusted_len == sizeof(struct msg_keypress));
+		handle_keypress(&backend->keyboard, timestamp, ptr);
+		break;
+	case MSG_CONFIGURE:
+		assert(hdr.untrusted_len == sizeof(struct msg_configure));
+		break;
+	case MSG_MAP:
+		break;
+	case MSG_BUTTON:
+		assert(hdr.untrusted_len == sizeof(struct msg_button));
+		if (hdr.button < 1 || hdr.button > 7) {
+			wlr_log(WLR_DEBUG, "Unknown button event type %" PRIu32, hdr.button);
+		} else if (hdr.button <= 3) {
+			handle_button(&backend->pointer_input, timestamp, ptr);
+		} else {
+			handle_axis(&backend->pointer_input, timestamp, ptr);
+		}
+		break;
+	case MSG_MOTION:
+		assert(hdr.untrusted_len == sizeof(struct msg_motion));
+		handle_motion(&backend->pointer_input, timestamp, ptr);
+		break;
+	case MSG_CLOSE:
+		assert(hdr.untrusted_len == 0);
+		handle_close();
+		break;
+	case MSG_CROSSING:
+		assert(hdr.untrusted_len == sizeof(struct msg_crossing));
+		break;
+	case MSG_FOCUS:
+		assert(hdr.untrusted_len == sizeof(struct msg_focus));
+		break;
+	case MSG_CLIPBOARD_REQ:
+		break;
+	case MSG_CLIPBOARD_DATA:
+		break;
+	case MSG_KEYMAP_NOTIFY:
+		assert(hdr.untrusted_len == sizeof(struct msg_keymap_notify));
+		break;
+	case MSG_WINDOW_FLAGS:
+		assert(hdr.untrusted_len == sizeof(struct msg_window_flags));
+		break;
+	case MSG_RESIZE:
+	case MSG_CREATE:
+	case MSG_DESTROY:
+	case MSG_UNMAP:
+	case MSG_MFNDUMP:
+	case MSG_SHMIMAGE:
+	case MSG_EXECUTE:
+	case MSG_WMNAME:
+	case MSG_WINDOW_DUMP:
+	case MSG_CURSOR:
+	default:
+		/* unknown events */
+		break;
+	}
+}
+#endif
 
 static const struct wlr_keyboard_impl qubes_keyboard_impl = {
 	.destroy = NULL,
