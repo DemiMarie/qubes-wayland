@@ -324,7 +324,8 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribut
 			 */
 			struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(
 						seat->keyboard_state.focused_surface);
-			wlr_xdg_toplevel_set_activated(previous, false);
+			if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
+				wlr_xdg_toplevel_set_activated(previous, false);
 			seat->keyboard_state.focused_surface = NULL;
 		}
 		wlr_seat_keyboard_notify_clear_focus(seat);
@@ -342,7 +343,8 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 	if (configure.width == 0 || configure.height == 0)
 		return;
 	wlr_output_update_custom_mode(&view->output.output, configure.width, configure.height, 0);
-	wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
+	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
+		wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
 	view->need_configure = true;
 	view->left = configure.x;
 	view->top = configure.y;
@@ -373,7 +375,10 @@ void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, c
 		break;
 	case MSG_CLOSE:
 		assert(hdr.untrusted_len == 0);
-		wlr_xdg_toplevel_send_close(view->xdg_surface);
+		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
+			wlr_xdg_toplevel_send_close(view->xdg_surface);
+		else if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP)
+			wlr_xdg_popup_destroy(view->xdg_surface);
 		break;
 	case MSG_CROSSING:
 		assert(hdr.untrusted_len == sizeof(struct msg_crossing));

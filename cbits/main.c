@@ -83,21 +83,26 @@ void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface
 		 */
 		struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(
 					seat->keyboard_state.focused_surface);
-		wlr_xdg_toplevel_set_activated(previous, false);
+		if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+			wlr_xdg_toplevel_set_activated(previous, false);
+		} else if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+			wlr_xdg_popup_destroy(previous);
+		}
 	}
 	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
 	assert(keyboard);
+	assert(view->xdg_surface);
 	/* Move the view to the front */
 	wl_list_remove(&view->link);
 	wl_list_insert(&server->views, &view->link);
 	/* Activate the new surface */
-	wlr_xdg_toplevel_set_activated(view->xdg_surface, true);
+	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
+		wlr_xdg_toplevel_set_activated(view->xdg_surface, true);
 	/*
 	 * Tell the seat to have the keyboard enter this surface. wlroots will keep
 	 * track of this and automatically send key events to the appropriate
 	 * clients without additional work on your part.
 	 */
-	assert(view->xdg_surface);
 	wlr_seat_keyboard_notify_enter(seat, view->xdg_surface->surface,
 		keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
 }
