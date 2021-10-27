@@ -13,7 +13,6 @@
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_compositor.h>
-#include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
@@ -62,7 +61,7 @@ struct tinywl_keyboard {
 	uint32_t magic;
 };
 
-static void focus_view(struct tinywl_view *view, struct wlr_surface *surface) {
+void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface *surface) {
 	/* Note: this function only deals with keyboard focus. */
 	if (view == NULL) {
 		return;
@@ -172,17 +171,6 @@ static void server_new_keyboard(struct tinywl_server *server,
 	wl_list_insert(&server->keyboards, &keyboard->link);
 }
 
-static void server_new_pointer(struct tinywl_server *server,
-		struct wlr_input_device *device) {
-	/* We don't do anything special with pointers. All of our pointer handling
-	 * is proxied through wlr_cursor. On another compositor, you might take this
-	 * opportunity to do libinput configuration on the device to set
-	 * acceleration, etc. */
-	/* QUBES UNREACHABLE HOOK: remove this */
-	if (server->cursor)
-		wlr_cursor_attach_input_device(server->cursor, device);
-}
-
 static void server_new_input(struct wl_listener *listener, void *data) {
 	/* This event is raised by the backend when a new input device becomes
 	 * available. */
@@ -195,7 +183,6 @@ static void server_new_input(struct wl_listener *listener, void *data) {
 		server_new_keyboard(server, device);
 		break;
 	case WLR_INPUT_DEVICE_POINTER:
-		server_new_pointer(server, device);
 		break;
 	default:
 		break;
@@ -208,27 +195,6 @@ static void server_new_input(struct wl_listener *listener, void *data) {
 		caps |= WL_SEAT_CAPABILITY_KEYBOARD;
 	}
 	wlr_seat_set_capabilities(server->seat, caps);
-}
-
-static void seat_request_cursor(struct wl_listener *listener, void *data) {
-	struct tinywl_server *server = wl_container_of(
-			listener, server, request_cursor);
-	assert(QUBES_SERVER_MAGIC == server->magic);
-	/* This event is raised by the seat when a client provides a cursor image */
-	/* QUBES HOOK: somehow convert this to an X cursor to send to GUI daemon */
-	struct wlr_seat_pointer_request_set_cursor_event *event = data;
-	struct wlr_seat_client *focused_client =
-		server->seat->pointer_state.focused_client;
-	/* This can be sent by any client, so we check to make sure this one is
-	 * actually has pointer focus first. */
-	if (focused_client == event->seat_client) {
-		/* Once we've vetted the client, we can tell the cursor to use the
-		 * provided surface as the cursor image. It will set the hardware cursor
-		 * on the output that it's currently on and continue to do so as the
-		 * cursor moves between outputs. */
-		wlr_cursor_set_surface(server->cursor, event->surface,
-				event->hotspot_x, event->hotspot_y);
-	}
 }
 
 static void seat_request_set_selection(struct wl_listener *listener, void *data) {
@@ -278,7 +244,7 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 	struct tinywl_view *view = wl_container_of(listener, view, map);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	view->mapped = true;
-	focus_view(view, view->xdg_surface->surface);
+	qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
 }
 
 static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribute__((unused))) {
@@ -316,68 +282,6 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	if (view->scene_subsurface_tree)
 		wlr_scene_node_destroy(view->scene_subsurface_tree);
 	free(view);
-}
-
-static void begin_interactive(struct tinywl_view *view,
-		enum tinywl_cursor_mode mode, uint32_t edges) {
-	/* This function sets up an interactive move or resize operation, where the
-	 * compositor stops propegating pointer events to clients and instead
-	 * consumes them itself, to move or resize windows. */
-	struct tinywl_server *server = view->server;
-	struct wlr_surface *focused_surface =
-		server->seat->pointer_state.focused_surface;
-	if (view->xdg_surface->surface != focused_surface) {
-		/* Deny move/resize requests from unfocused clients. */
-		return;
-	}
-	server->grabbed_view = view;
-	server->cursor_mode = mode;
-
-	if (mode == TINYWL_CURSOR_MOVE) {
-		server->grab_x = server->cursor->x - view->x;
-		server->grab_y = server->cursor->y - view->y;
-	} else {
-		struct wlr_box geo_box;
-		wlr_xdg_surface_get_geometry(view->xdg_surface, &geo_box);
-
-		double border_x = (view->x + geo_box.x) + ((edges & WLR_EDGE_RIGHT) ? geo_box.width : 0);
-		double border_y = (view->y + geo_box.y) + ((edges & WLR_EDGE_BOTTOM) ? geo_box.height : 0);
-		server->grab_x = server->cursor->x - border_x;
-		server->grab_y = server->cursor->y - border_y;
-
-		server->grab_geobox = geo_box;
-		server->grab_geobox.x += view->x;
-		server->grab_geobox.y += view->y;
-
-		server->resize_edges = edges;
-	}
-}
-
-static void xdg_toplevel_request_move(
-		struct wl_listener *listener, void *data __attribute__((unused))) {
-	/* This event is raised when a client would like to begin an interactive
-	 * move, typically because the user clicked on their client-side
-	 * decorations. Note that a more sophisticated compositor should check the
-	 * provided serial against a list of button press serials sent to this
-	 * client, to prevent the client from requesting this whenever they want. */
-	/* QUBES EVENT HOOK: implement the above check OR omit this entirely */
-	struct tinywl_view *view = wl_container_of(listener, view, request_move);
-	assert(QUBES_VIEW_MAGIC == view->magic);
-	begin_interactive(view, TINYWL_CURSOR_MOVE, 0);
-}
-
-static void xdg_toplevel_request_resize(
-		struct wl_listener *listener, void *data) {
-	/* This event is raised when a client would like to begin an interactive
-	 * resize, typically because the user clicked on their client-side
-	 * decorations. Note that a more sophisticated compositor should check the
-	 * provided serial against a list of button press serials sent to this
-	 * client, to prevent the client from requesting this whenever they want. */
-	/* QUBES EVENT HOOK: implement the above check OR omit this entirely */
-	struct wlr_xdg_toplevel_resize_event *event = data;
-	struct tinywl_view *view = wl_container_of(listener, view, request_resize);
-	assert(QUBES_VIEW_MAGIC == view->magic);
-	begin_interactive(view, TINYWL_CURSOR_RESIZE, event->edges);
 }
 
 static void qubes_new_popup(
@@ -589,10 +493,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 	/* And listen to the various emits the toplevel can emit */
 	struct wlr_xdg_toplevel *toplevel = xdg_surface->toplevel;
-	view->request_move.notify = xdg_toplevel_request_move;
-	wl_signal_add(&toplevel->events.request_move, &view->request_move);
-	view->request_resize.notify = xdg_toplevel_request_resize;
-	wl_signal_add(&toplevel->events.request_resize, &view->request_resize);
 	view->request_maximize.notify = qubes_request_maximize;
 	wl_signal_add(&toplevel->events.request_maximize, &view->request_maximize);
 	view->request_minimize.notify = qubes_request_minimize;
@@ -801,9 +701,6 @@ bad_domid:
 		return 1;
 	}
 
-	server->request_cursor.notify = seat_request_cursor;
-	wl_signal_add(&server->seat->events.request_set_cursor,
-			&server->request_cursor);
 	server->request_set_selection.notify = seat_request_set_selection;
 	wl_signal_add(&server->seat->events.request_set_selection,
 			&server->request_set_selection);

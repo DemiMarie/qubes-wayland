@@ -7,6 +7,7 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/util/log.h>
 
 #include <drm/drm_fourcc.h>
@@ -148,14 +149,14 @@ static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const 
 
 	memcpy(&keypress, ptr, sizeof(keypress));
 	switch (keypress.type) {
-	case 2:
-		state = WL_KEYBOARD_KEY_STATE_RELEASED;
-		break;
-	case 3:
+	case 2: // KeyPress
 		state = WL_KEYBOARD_KEY_STATE_PRESSED;
 		break;
+	case 3: // KeyRelease
+		state = WL_KEYBOARD_KEY_STATE_RELEASED;
+		break;
 	default:
-		wlr_log(WLR_ERROR, "Bad keypress type " PRIu32, keypress.type);
+		wlr_log(WLR_ERROR, "Bad keypress event type " PRIu32, keypress.type);
 		return; /* bad state */
 	}
 
@@ -163,8 +164,16 @@ static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const 
 		wlr_log(WLR_ERROR, "Bad keycode " PRIu32, keypress.keycode);
 		return; /* not valid in X11, which the GUI daemon uses */
 	}
-	uint8_t keycode = keypress.keycode - 0x8;
-	wlr_seat_keyboard_notify_key(seat, timestamp, keycode, state);
+	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
+	assert(keyboard);
+
+	struct wlr_event_keyboard_key event = {
+		.time_msec = timestamp,
+		.keycode = keypress.keycode - 8,
+		.update_state = true,
+		.state = state,
+	};
+	wlr_keyboard_notify_key(keyboard, &event);
 }
 
 static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8_t *ptr)
@@ -174,14 +183,14 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 
 	memcpy(&button, ptr, sizeof(button));
 	switch (button.type) {
-	case 4:
+	case 4: // ButtonPress
 		state = WLR_BUTTON_PRESSED;
 		break;
-	case 5:
+	case 5: // ButtonRelease
 		state = WLR_BUTTON_RELEASED;
 		break;
 	default:
-		wlr_log(WLR_ERROR, "Bad button type " PRIu32, button.type);
+		wlr_log(WLR_ERROR, "Bad button event type " PRIu32, button.type);
 		return; /* bad state */
 	}
 
@@ -244,17 +253,28 @@ static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const ui
 
 static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
 {
-	struct msg_motion motion;
+	struct msg_crossing crossing;
 	struct wlr_seat *seat = view->server->seat;
 	int display_width = MAX_WINDOW_WIDTH;
 	int display_height = MAX_WINDOW_HEIGHT;
 
-	memcpy(&motion, ptr, sizeof motion);
+	memcpy(&crossing, ptr, sizeof crossing);
+
+	switch (crossing.type) {
+	case 7: // EnterNotify
+		break;
+	case 8: // LeaveNotify
+		wlr_seat_pointer_notify_clear_focus(seat);
+		return;
+	default:
+		wlr_log(WLR_ERROR, "bad Crossing event type %" PRIu32, crossing.type);
+		return;
+	}
 
 	assert(display_width > 0 && display_height > 0);
 	assert(display_width <= MAX_WINDOW_WIDTH && display_height <= MAX_WINDOW_HEIGHT);
-	int32_t x = QUBES_MIN(motion.x, (uint32_t)display_width);
-	int32_t y = QUBES_MIN(motion.y, (uint32_t)display_height);
+	int32_t x = QUBES_MIN(crossing.x, (uint32_t)display_width);
+	int32_t y = QUBES_MIN(crossing.y, (uint32_t)display_height);
 	x = QUBES_MAX(view->x, QUBES_MIN(x, (int32_t)view->last_width + view->x));
 	y = QUBES_MAX(view->y, QUBES_MIN(y, (int32_t)view->last_height + view->y));
 
@@ -263,14 +283,24 @@ static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attri
 	wlr_seat_pointer_notify_enter(seat, view->xdg_surface->surface, sx, sy);
 }
 
-static void handle_focus(struct tinywl_view *view __attribute__((unused)), uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
+static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
 {
 	/* This is specifically *keyboard* focus */
 	struct msg_focus focus;
+	struct wlr_seat *seat = view->server->seat;
 
 	memcpy(&focus, ptr, sizeof focus);
-	//assert(!"not yet implemented: using the keyboard information that has already been received");
-	return;
+	switch (focus.type) {
+	case 9: // FocusIn
+		qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
+		break;
+	case 10: // FocusOut
+		wlr_seat_keyboard_notify_clear_focus(seat);
+		break;
+	default:
+		wlr_log(WLR_ERROR, "Bad Focus event type " PRIu32, focus.type);
+		return;
+	}
 }
 
 void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)

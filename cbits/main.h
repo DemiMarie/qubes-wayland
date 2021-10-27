@@ -14,6 +14,8 @@ void qubes_rust_delete_id(void *backend, uint32_t id);
 #define qubes_rust_destroy_id(a) ((void)0)
 #endif
 
+void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface *surface);
+
 /* For brevity's sake, struct members are annotated where they are used. */
 enum tinywl_cursor_mode {
 	TINYWL_CURSOR_PASSTHROUGH,
@@ -31,16 +33,8 @@ struct tinywl_server {
 	struct wl_listener new_xdg_surface;
 	struct wl_list views;
 
-	struct wlr_cursor *cursor;
-	struct wl_listener cursor_motion;
-	struct wl_listener cursor_motion_absolute;
-	struct wl_listener cursor_button;
-	struct wl_listener cursor_axis;
-	struct wl_listener cursor_frame;
-
 	struct wlr_seat *seat;
 	struct wl_listener new_input;
-	struct wl_listener request_cursor;
 	struct wl_listener request_set_selection;
 	struct wl_list keyboards;
 	enum tinywl_cursor_mode cursor_mode;
