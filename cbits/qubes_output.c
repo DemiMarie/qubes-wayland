@@ -231,22 +231,22 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 		break;
 	case 4:
 		wlr_seat_pointer_notify_axis(
-			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, -10.0, -10,
+			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, -1.0, -1,
 			WLR_AXIS_SOURCE_WHEEL);
 		break;
 	case 5:
 		wlr_seat_pointer_notify_axis(
-			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, 10.0, 10,
+			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, 1.0, 1,
 			WLR_AXIS_SOURCE_WHEEL);
 		break;
 	case 6:
 		wlr_seat_pointer_notify_axis(
-			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, -10.0, -10,
+			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, -1.0, -1,
 			WLR_AXIS_SOURCE_WHEEL);
 		break;
 	case 7:
 		wlr_seat_pointer_notify_axis(
-			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, 10.0, 10,
+			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, 1.0, 1,
 			WLR_AXIS_SOURCE_WHEEL);
 		break;
 	default:
