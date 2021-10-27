@@ -36,7 +36,7 @@ struct tinywl_view {
 	struct wl_listener commit;
 	struct wl_listener frame;
 	struct qubes_output output;
-	int x, y;
+	int x, y, left, top;
 	int last_width, last_height;
 	uint32_t window_id;
 	uint32_t magic;

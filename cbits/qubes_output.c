@@ -66,6 +66,30 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 			raw_output->pending.custom_mode.width,
 			raw_output->pending.custom_mode.height,
 			raw_output->pending.custom_mode.refresh);
+#ifdef BUILD_RUST
+		if (view->need_configure) {
+			wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
+			struct {
+				struct msg_hdr header;
+				struct msg_configure configure;
+			} msg = {
+				.header = {
+					.type = MSG_CONFIGURE,
+					.window = view->window_id,
+					.untrusted_len = sizeof(struct msg_configure),
+				},
+				.configure = {
+					.x = view->left,
+					.y = view->top,
+					.width = raw_output->pending.custom_mode.width,
+					.height = raw_output->pending.custom_mode.height,
+					.override_redirect = false,
+				},
+			};
+			assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+			view->need_configure = false;
+		}
+#endif
 	}
 
 	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
@@ -310,6 +334,19 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribut
 	}
 }
 
+static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
+{
+	struct msg_configure configure;
+	memcpy(&configure, ptr, sizeof(configure));
+	if (configure.width == 0 || configure.height == 0)
+		return;
+	wlr_output_update_custom_mode(&view->output.output, configure.width, configure.height, 0);
+	wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
+	view->need_configure = true;
+	view->left = configure.x;
+	view->top = configure.y;
+}
+
 void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
 {
 	struct tinywl_view *view = raw_view;
@@ -321,6 +358,7 @@ void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, c
 		break;
 	case MSG_CONFIGURE:
 		assert(hdr.untrusted_len == sizeof(struct msg_configure));
+		handle_configure(view, timestamp, ptr);
 		break;
 	case MSG_MAP:
 		break;
