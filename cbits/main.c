@@ -575,6 +575,7 @@ cleanup:
 int main(int argc, char *argv[]) {
 	wlr_log_init(WLR_DEBUG, NULL);
 	char *startup_cmd = NULL;
+	bool use_decoration = false;
 
 	int c;
 	if (argc < 1) {
@@ -582,10 +583,13 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	while ((c = getopt(argc, argv, "s:h")) != -1) {
+	while ((c = getopt(argc, argv, "ds:h")) != -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
+			break;
+		case 'd':
+			use_decoration = true;
 			break;
 		default:
 			printf("Usage: %s [-s startup command] [--] domid\n", argv[0]);
@@ -671,7 +675,7 @@ bad_domid:
 	 * see the handling of the request_set_selection event below.*/
 	wlr_compositor_create(server->wl_display, server->renderer);
 	wlr_data_device_manager_create(server->wl_display);
-	if (0) {
+	if (use_decoration) {
 		server->old_manager =
 			wlr_server_decoration_manager_create(server->wl_display);
 		if (server->old_manager)
