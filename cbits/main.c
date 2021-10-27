@@ -479,7 +479,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	struct tinywl_view *view = calloc(1, sizeof(struct tinywl_view));
 	if (!view)
 		goto cleanup;
-	assert(view);
 	view->server = server;
 	/* Add wlr_output */
 	qubes_output_init(&view->output, &server->backend->backend, server->wl_display);
