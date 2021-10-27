@@ -15,6 +15,7 @@ pub struct QubesData {
     pub map: BTreeMap<NonZeroU32, *mut std::os::raw::c_void>,
     last_width: u32,
     last_height: u32,
+    start: std::time::Instant,
     buf: qubes_gui_gntalloc::Buffer,
 }
 
@@ -60,7 +61,8 @@ impl QubesData {
                         eprintln!("Got an event for our own window!");
                     } else if let Ok(nz) = NonZeroU32::try_from(hdr.window) {
                         if let Some(&userdata) = self.map.get(&nz) {
-                            callback(userdata, 0, hdr, body.as_ptr())
+                            let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
+                            callback(userdata, delta, hdr, body.as_ptr())
                         }
                     }
                 }
@@ -229,5 +231,6 @@ fn setup_qubes_backend(domid: u16) -> RustBackend {
         last_width: width,
         last_height: height,
         buf,
+        start: std::time::Instant::now(),
     }
 }
