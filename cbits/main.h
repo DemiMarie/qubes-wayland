@@ -46,6 +46,9 @@ struct tinywl_server {
 	struct wlr_output_layout *output_layout;
 	struct wl_list outputs;
 	struct wl_listener new_output;
+	struct wlr_server_decoration_manager *old_manager;
+	struct wlr_xdg_decoration_manager_v1 *new_manager;
+	struct wl_listener new_decoration;
 	uint32_t magic;
 	uint16_t domid;
 };
