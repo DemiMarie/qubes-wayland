@@ -25,6 +25,7 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
+#include <wlr/types/wlr_server_decoration.h>
 
 #include <xkbcommon/xkbcommon.h>
 
@@ -661,6 +662,10 @@ bad_domid:
 	 * see the handling of the request_set_selection event below.*/
 	wlr_compositor_create(server->wl_display, server->renderer);
 	wlr_data_device_manager_create(server->wl_display);
+	struct wlr_server_decoration_manager *old_manager =
+		wlr_server_decoration_manager_create(server->wl_display);
+	if (old_manager)
+		wlr_server_decoration_manager_set_default_mode(old_manager, WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
 
 	/* Creates an output layout, which a wlroots utility for working with an
 	 * arrangement of screens in a physical layout. */
