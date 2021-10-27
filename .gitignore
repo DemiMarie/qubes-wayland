@@ -4,7 +4,8 @@
 .#*
 /report
 /cbits/build
-/cbits/qubes-compositor
+/cbits/protocols
+/qubes-compositor
 strace.out
 *.rej
 *.orig
