@@ -178,6 +178,7 @@ static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const 
 
 static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8_t *ptr)
 {
+	/* FIXME: correct for window geometry */
 	struct msg_button button;
 	enum wlr_button_state state;
 
@@ -232,6 +233,7 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 
 static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
 {
+	/* FIXME: correct for window geometry */
 	struct wlr_seat *seat = view->server->seat;
 	struct msg_motion motion;
 	memcpy(&motion, ptr, sizeof motion);
@@ -240,6 +242,7 @@ static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const ui
 
 static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
 {
+	/* FIXME: correct for window geometry */
 	struct msg_crossing crossing;
 	struct wlr_seat *seat = view->server->seat;
 	int display_width = MAX_WINDOW_WIDTH;
