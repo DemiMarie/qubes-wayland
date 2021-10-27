@@ -13,6 +13,7 @@
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_seat.h>
 #include <wlr/util/log.h>
 
 #ifdef BUILD_RUST
@@ -150,7 +151,6 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 	struct msg_button button;
 	enum wlr_button_state state;
 
-	assert(pointer_input->type == WLR_INPUT_DEVICE_POINTER);
 	memcpy(&button, ptr, sizeof(button));
 	switch (button.type) {
 	case 4:
@@ -210,15 +210,20 @@ static void handle_axis(struct wlr_seat *seat, uint32_t timestamp, const uint8_t
 	}
 }
 
-static void handle_motion(struct wlr_seat, uint32_t timestamp, const uint8_t *ptr)
+static void handle_motion(struct wlr_seat *seat, struct wlr_surface *surface, uint32_t timestamp, const uint8_t *ptr, int x, int y)
 {
 	struct msg_motion motion;
 
 	memcpy(&motion, ptr, sizeof motion);
-	/* TODO: compute x, y and propogate */
+	/* TODO: calculate x, y and propogate */
 }
 
-static void qubes_parse_event(struct qubes_backend *backend, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
+static void handle_close(struct wlr_surface *surface)
+{
+	wlr_xdg_toplevel_send_close(NULL); /* TODO */
+}
+
+static void qubes_parse_event(struct wlr_seat *seat, struct wlr_surface *surface, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
 {
 	switch (hdr.type) {
 	case MSG_KEYPRESS:
@@ -246,13 +251,14 @@ static void qubes_parse_event(struct qubes_backend *backend, uint32_t timestamp,
 		break;
 	case MSG_CLOSE:
 		assert(hdr.untrusted_len == 0);
-		handle_close();
+		handle_close(seat, surface);
 		break;
 	case MSG_CROSSING:
 		assert(hdr.untrusted_len == sizeof(struct msg_crossing));
 		break;
 	case MSG_FOCUS:
 		assert(hdr.untrusted_len == sizeof(struct msg_focus));
+		handle_focus(seat, surface, hdr, ptr);
 		break;
 	case MSG_CLIPBOARD_REQ:
 		break;
@@ -260,9 +266,11 @@ static void qubes_parse_event(struct qubes_backend *backend, uint32_t timestamp,
 		break;
 	case MSG_KEYMAP_NOTIFY:
 		assert(hdr.untrusted_len == sizeof(struct msg_keymap_notify));
+		handle_keymap(seat, surface, hdr, ptr);
 		break;
 	case MSG_WINDOW_FLAGS:
 		assert(hdr.untrusted_len == sizeof(struct msg_window_flags));
+		handle_window_flags(seat, surface, hdr, ptr);
 		break;
 	case MSG_RESIZE:
 	case MSG_CREATE:
