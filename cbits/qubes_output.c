@@ -232,23 +232,10 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 
 static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
 {
+	struct wlr_seat *seat = view->server->seat;
 	struct msg_motion motion;
 	memcpy(&motion, ptr, sizeof motion);
-
-	int display_width = MAX_WINDOW_WIDTH;
-	int display_height = MAX_WINDOW_HEIGHT;
-	struct wlr_seat *seat = view->server->seat;
-
-	assert(display_width > 0 && display_height > 0);
-	assert(display_width <= MAX_WINDOW_WIDTH && display_height <= MAX_WINDOW_HEIGHT);
-	int32_t x = QUBES_MIN(motion.x, (uint32_t)display_width);
-	int32_t y = QUBES_MIN(motion.y, (uint32_t)display_height);
-	x = QUBES_MAX(view->x, QUBES_MIN(x, (int32_t)view->last_width + view->x));
-	y = QUBES_MAX(view->y, QUBES_MIN(y, (int32_t)view->last_height + view->y));
-
-	double sx = (double)(x - view->x)/(double)(view->last_width);
-	double sy = (double)(y - view->y)/(double)(view->last_height);
-	wlr_seat_pointer_notify_motion(seat, timestamp, sx, sy);
+	wlr_seat_pointer_send_motion(seat, timestamp, (double)motion.x, (double)motion.y);
 }
 
 static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
@@ -273,14 +260,7 @@ static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attri
 
 	assert(display_width > 0 && display_height > 0);
 	assert(display_width <= MAX_WINDOW_WIDTH && display_height <= MAX_WINDOW_HEIGHT);
-	int32_t x = QUBES_MIN(crossing.x, (uint32_t)display_width);
-	int32_t y = QUBES_MIN(crossing.y, (uint32_t)display_height);
-	x = QUBES_MAX(view->x, QUBES_MIN(x, (int32_t)view->last_width + view->x));
-	y = QUBES_MAX(view->y, QUBES_MIN(y, (int32_t)view->last_height + view->y));
-
-	double sx = (double)(x - view->x)/(double)(view->last_width);
-	double sy = (double)(y - view->y)/(double)(view->last_height);
-	wlr_seat_pointer_notify_enter(seat, view->xdg_surface->surface, sx, sy);
+	wlr_seat_pointer_notify_enter(seat, view->xdg_surface->surface, crossing.x, crossing.y);
 }
 
 static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
