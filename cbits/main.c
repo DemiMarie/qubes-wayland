@@ -244,6 +244,9 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 	struct tinywl_view *view = wl_container_of(listener, view, map);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	view->mapped = true;
+	wlr_scene_node_set_enabled(&view->scene_output->scene->node, true);
+	wlr_scene_node_set_enabled(view->scene_subsurface_tree, true);
+	wlr_output_enable(&view->output.output, true);
 	qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
 }
 
@@ -253,6 +256,9 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	struct tinywl_view *view = wl_container_of(listener, view, unmap);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	view->mapped = false;
+	wlr_scene_node_set_enabled(&view->scene_output->scene->node, false);
+	wlr_scene_node_set_enabled(view->scene_subsurface_tree, false);
+	wlr_output_enable(&view->output.output, false);
 #ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, view->window_id);
 	struct msg_hdr header = {
@@ -349,8 +355,13 @@ static void qubes_surface_commit(
 	struct tinywl_view *view = wl_container_of(listener, view, commit);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	assert(view->scene_output);
+	if (!view->mapped)
+		return;
 	struct wlr_box box;
 	wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+	if (box.width <= 0 || box.height <= 0 || box.width > MAX_WINDOW_WIDTH || box.height > MAX_WINDOW_HEIGHT) {
+		return;
+	}
 	bool need_configure = false;
 	if (view->x != box.x || view->y != box.y) {
 		view->x = box.x;
@@ -362,17 +373,13 @@ static void qubes_surface_commit(
 # define MAX_WINDOW_WIDTH (1 << 14)
 # define MAX_WINDOW_HEIGHT ((1 << 11) * 3)
 #endif
-	if (box.width <= 0 || box.height <= 0 || box.width > MAX_WINDOW_WIDTH || box.height > MAX_WINDOW_HEIGHT) {
-	}
 	if (view->last_width != box.width || view->last_height != box.height) {
 		need_configure = true;
 		view->last_width = box.width;
 		view->last_height = box.height;
 	}
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
-	wlr_output_enable(&view->output.output, view->mapped);
-	if (!view->mapped)
-		return;
+	// wlr_output_enable(&view->output.output, true);
 	assert(view->scene_output->output == &view->output.output);
 	wlr_scene_output_commit(view->scene_output);
 	wlr_log(WLR_DEBUG, "Width is %" PRIu32 " height is %" PRIu32, (uint32_t)box.width, (uint32_t)box.height);
@@ -474,8 +481,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		goto cleanup;
 	if (!(view->scene_subsurface_tree = wlr_scene_subsurface_tree_create(&view->scene_output->scene->node, xdg_surface->surface)))
 		goto cleanup;
-	wlr_scene_node_set_enabled(&view->scene_output->scene->node, true);
-	wlr_scene_node_set_enabled(view->scene_subsurface_tree, true);
 	wlr_scene_node_raise_to_top(view->scene_subsurface_tree);
 
 	view->magic = QUBES_VIEW_MAGIC;
@@ -521,7 +526,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	if (box.height <= 0)
 		box.height = 1;
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
-	wlr_output_enable(&view->output.output, true);
 #ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, view->window_id);
 	struct {
