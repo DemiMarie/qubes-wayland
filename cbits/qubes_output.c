@@ -344,7 +344,7 @@ void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, c
 		break;
 	case MSG_KEYMAP_NOTIFY:
 		assert(hdr.untrusted_len == sizeof(struct msg_keymap_notify));
-		// handle_keymap(view, timestamp, ptr);
+		memcpy(&view->output.keymap, ptr, sizeof(struct msg_keymap_notify));
 		break;
 	case MSG_WINDOW_FLAGS:
 		assert(hdr.untrusted_len == sizeof(struct msg_window_flags));
