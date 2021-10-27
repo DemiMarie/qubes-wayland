@@ -671,16 +671,17 @@ bad_domid:
 	 * see the handling of the request_set_selection event below.*/
 	wlr_compositor_create(server->wl_display, server->renderer);
 	wlr_data_device_manager_create(server->wl_display);
-	server->old_manager =
-		wlr_server_decoration_manager_create(server->wl_display);
-	if (server->old_manager)
-		wlr_server_decoration_manager_set_default_mode(server->old_manager, WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
-	if (0) // doesn’t actually work yet
+	if (0) {
+		server->old_manager =
+			wlr_server_decoration_manager_create(server->wl_display);
+		if (server->old_manager)
+			wlr_server_decoration_manager_set_default_mode(server->old_manager, WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
 		server->new_manager =
 			wlr_xdg_decoration_manager_v1_create(server->wl_display);
-	if (server->new_manager) {
-		server->new_decoration.notify = qubes_new_decoration;
-		wl_signal_add(&server->new_manager->events.new_toplevel_decoration, &server->new_decoration);
+		if (server->new_manager) {
+			server->new_decoration.notify = qubes_new_decoration;
+			wl_signal_add(&server->new_manager->events.new_toplevel_decoration, &server->new_decoration);
+		}
 	}
 
 	/* Creates an output layout, which a wlroots utility for working with an
