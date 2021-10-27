@@ -356,7 +356,10 @@ static void qubes_new_decoration(struct wl_listener *listener, void *data)
 	struct tinywl_server *server = wl_container_of(listener, server, new_decoration);
 	struct wlr_xdg_toplevel_decoration_v1 *decoration = data;
 
-	wlr_xdg_toplevel_decoration_v1_set_mode(decoration, WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+	wlr_xdg_toplevel_decoration_v1_set_mode(decoration,
+		server->use_server_side_decorations ?
+		WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE :
+		WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
 }
 
 static void qubes_surface_commit(
@@ -575,7 +578,7 @@ cleanup:
 int main(int argc, char *argv[]) {
 	wlr_log_init(WLR_DEBUG, NULL);
 	char *startup_cmd = NULL;
-	bool use_decoration = false;
+	bool use_server_side_decoration = false;
 
 	int c;
 	if (argc < 1) {
@@ -589,7 +592,7 @@ int main(int argc, char *argv[]) {
 			startup_cmd = optarg;
 			break;
 		case 'd':
-			use_decoration = true;
+			use_server_side_decoration = true;
 			break;
 		default:
 			printf("Usage: %s [-s startup command] [--] domid\n", argv[0]);
@@ -632,6 +635,7 @@ bad_domid:
 	}
 	server->magic = QUBES_SERVER_MAGIC;
 	server->domid = domid;
+	server->use_server_side_decorations = use_server_side_decoration;
 
 	/* The Wayland display is managed by libwayland. It handles accepting
 	 * clients from the Unix socket, manging Wayland globals, and so on. */
@@ -675,17 +679,20 @@ bad_domid:
 	 * see the handling of the request_set_selection event below.*/
 	wlr_compositor_create(server->wl_display, server->renderer);
 	wlr_data_device_manager_create(server->wl_display);
-	if (use_decoration) {
-		server->old_manager =
-			wlr_server_decoration_manager_create(server->wl_display);
-		if (server->old_manager)
-			wlr_server_decoration_manager_set_default_mode(server->old_manager, WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
-		server->new_manager =
-			wlr_xdg_decoration_manager_v1_create(server->wl_display);
-		if (server->new_manager) {
-			server->new_decoration.notify = qubes_new_decoration;
-			wl_signal_add(&server->new_manager->events.new_toplevel_decoration, &server->new_decoration);
-		}
+	server->old_manager =
+		wlr_server_decoration_manager_create(server->wl_display);
+	if (server->old_manager) {
+		wlr_server_decoration_manager_set_default_mode(server->old_manager,
+			server->use_server_side_decorations ?
+			WLR_SERVER_DECORATION_MANAGER_MODE_SERVER :
+			WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
+	}
+	server->new_manager =
+		wlr_xdg_decoration_manager_v1_create(server->wl_display);
+	if (server->new_manager) {
+		server->new_decoration.notify = qubes_new_decoration;
+		wl_signal_add(&server->new_manager->events.new_toplevel_decoration,
+		              &server->new_decoration);
 	}
 
 	/* Creates an output layout, which a wlroots utility for working with an

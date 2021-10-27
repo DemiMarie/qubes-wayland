@@ -51,6 +51,7 @@ struct tinywl_server {
 	struct wl_listener new_decoration;
 	uint32_t magic;
 	uint16_t domid;
+	bool use_server_side_decorations;
 };
 
 #endif
