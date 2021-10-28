@@ -447,11 +447,10 @@ static void qubes_surface_commit(
 	if (box.width <= 0 || box.height <= 0 || box.width > MAX_WINDOW_WIDTH || box.height > MAX_WINDOW_HEIGHT) {
 		return;
 	}
-	bool need_configure = false;
 	if (view->x != box.x || view->y != box.y) {
 		view->x = box.x;
 		view->y = box.y;
-		need_configure = true;
+		view->need_configure = true;
 		wlr_scene_output_set_position(view->scene_output, view->x, view->y);
 	}
 #ifndef BUILD_RUST
@@ -459,7 +458,7 @@ static void qubes_surface_commit(
 # define MAX_WINDOW_HEIGHT ((1 << 11) * 3)
 #endif
 	if (view->last_width != box.width || view->last_height != box.height) {
-		need_configure = true;
+		view->need_configure = true;
 		view->last_width = box.width;
 		view->last_height = box.height;
 	}
@@ -469,27 +468,6 @@ static void qubes_surface_commit(
 	wlr_scene_output_commit(view->scene_output);
 	wlr_log(WLR_DEBUG, "Width is %" PRIu32 " height is %" PRIu32, (uint32_t)box.width, (uint32_t)box.height);
 #ifdef BUILD_RUST
-	if (need_configure) {
-		wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
-		struct {
-			struct msg_hdr header;
-			struct msg_configure configure;
-		} msg = {
-			.header = {
-				.type = MSG_CONFIGURE,
-				.window = view->window_id,
-				.untrusted_len = sizeof(struct msg_configure),
-			},
-			.configure = {
-				.x = box.x,
-				.y = box.y,
-				.width = box.width,
-				.height = box.height,
-				.override_redirect = 0,
-			},
-		};
-		assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
-	}
 	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
 	struct {
 		struct msg_hdr header;
@@ -508,8 +486,6 @@ static void qubes_surface_commit(
 		},
 	};
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg));
-#else
-	(void)need_configure;
 #endif
 	struct timespec now;
 	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
