@@ -304,29 +304,59 @@ static void qubes_new_popup(
 	assert(QUBES_VIEW_MAGIC == view->magic);
 }
 
+static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_set, uint32_t flags_unset)
+{
+#ifdef BUILD_RUST
+	struct {
+		struct msg_hdr header;
+		struct msg_window_flags flags;
+	} msg = {
+		.header = {
+			.type = MSG_WINDOW_FLAGS,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_window_flags),
+		},
+		.flags = {
+			.flags_set = flags_set,
+			.flags_unset = flags_unset,
+		},
+	};
+	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.flags, "bug");
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+#endif
+}
+
 static void qubes_request_maximize(
-		struct wl_listener *listener, void *data __attribute__((unused))) {
+	struct wl_listener *listener, void *data __attribute__((unused)))
+{
 	/* QUBES HOOK: MSG_WINDOW_FLAGS: ask GUI daemon to maximize window */
 	struct tinywl_view *view = wl_container_of(listener, view, request_maximize);
 	assert(QUBES_VIEW_MAGIC == view->magic);
+#ifdef WINDOW_FLAG_MAXIMIZE
+	wlr_log(WLR_DEBUG, "Maximizing window " PRIu32, view->window_id);
+	qubes_change_window_flags(view, WINDOW_FLAG_MAXIMIZE, 0);
+#else
 	wlr_log(WLR_ERROR, "window maximize: not implemented");
+#endif
 }
 
 static void qubes_request_minimize(
-		struct wl_listener *listener, void *data __attribute__((unused))) {
+		struct wl_listener *listener, void *data __attribute__((unused)))
+{
 	/* QUBES HOOK: MSG_WINDOW_FLAGS: ask GUI daemon to minimize window */
 	struct tinywl_view *view = wl_container_of(listener, view, request_minimize);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	wlr_log(WLR_ERROR, "window minimize: not implemented");
+	qubes_change_window_flags(view, WINDOW_FLAG_MINIMIZE, 0);
 }
 
 static void qubes_request_fullscreen(
-		struct wl_listener *listener, void *data __attribute__((unused))) {
+		struct wl_listener *listener, void *data __attribute__((unused)))
+{
 	/* QUBES HOOK: MSG_WINDOW_FLAGS: ask GUI daemon to fullscreen window */
 	struct tinywl_view *view = wl_container_of(listener, view, request_fullscreen);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	wlr_log(WLR_ERROR, "window fullscreen: not implemented");
-	/* qubes_rust_set_window_flags(view->window_id) */
+	wlr_log(WLR_DEBUG, "Marking window " PRIu32 " fullscreen", view->window_id);
+	qubes_change_window_flags(view, WINDOW_FLAG_FULLSCREEN, 0);
 }
 
 static void qubes_set_title(
@@ -351,6 +381,7 @@ static void qubes_set_title(
 			.data = { 0 },
 		},
 	};
+	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.title, "bug");
 	strncpy(msg.title.data, view->xdg_surface->toplevel->title, sizeof(msg.title.data) - 1);
 	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
 #endif
@@ -368,7 +399,8 @@ static void qubes_new_decoration(struct wl_listener *listener, void *data)
 }
 
 static void qubes_surface_commit(
-		struct wl_listener *listener, void *data __attribute__((unused))) {
+		struct wl_listener *listener, void *data __attribute__((unused)))
+{
 	/* QUBES HOOK: MSG_WINDOW_HINTS, plus do a bunch of actual rendering stuff :) */
 	struct tinywl_view *view = wl_container_of(listener, view, commit);
 	assert(QUBES_VIEW_MAGIC == view->magic);
