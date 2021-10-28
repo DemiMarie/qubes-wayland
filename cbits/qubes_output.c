@@ -42,6 +42,7 @@ static const struct wlr_output_impl qubes_wlr_output_impl;
 static void qubes_output_deinit(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
+	wl_list_remove(&output->frame.link);
 	qubes_unlink_buffer(output);
 }
 

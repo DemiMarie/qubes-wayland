@@ -119,6 +119,7 @@ qubes_backend_destroy(struct qubes_backend *backend) {
 	wlr_output_destroy(backend->output);
 	wlr_input_device_destroy(backend->keyboard_input);
 	wlr_input_device_destroy(backend->pointer_input);
+	wl_list_remove(&backend->display_destroy.link);
 	free(backend);
 }
 
