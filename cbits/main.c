@@ -468,6 +468,27 @@ static void qubes_surface_commit(
 	wlr_scene_output_commit(view->scene_output);
 	wlr_log(WLR_DEBUG, "Width is %" PRIu32 " height is %" PRIu32, (uint32_t)box.width, (uint32_t)box.height);
 #ifdef BUILD_RUST
+	if (view->need_configure) {
+		wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
+		struct {
+			struct msg_hdr header;
+			struct msg_configure configure;
+		} msg = {
+			.header = {
+				.type = MSG_CONFIGURE,
+				.window = view->window_id,
+				.untrusted_len = sizeof(struct msg_configure),
+			},
+			.configure = {
+				.x = box.x,
+				.y = box.y,
+				.width = box.width,
+				.height = box.height,
+				.override_redirect = 0,
+			},
+		};
+		assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+	}
 	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
 	struct {
 		struct msg_hdr header;
