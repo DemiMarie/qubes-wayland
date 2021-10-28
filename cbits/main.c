@@ -245,16 +245,73 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	wlr_output_layout_add_auto(server->output_layout, wlr_output);
 }
 
+static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_set, uint32_t flags_unset)
+{
+#ifdef BUILD_RUST
+	struct {
+		struct msg_hdr header;
+		struct msg_window_flags flags;
+	} msg = {
+		.header = {
+			.type = MSG_WINDOW_FLAGS,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_window_flags),
+		},
+		.flags = {
+			.flags_set = flags_set,
+			.flags_unset = flags_unset,
+		},
+	};
+	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.flags, "bug");
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+#endif
+}
+
 static void xdg_surface_map(struct wl_listener *listener, void *data __attribute__((unused))) {
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
 	struct tinywl_view *view = wl_container_of(listener, view, map);
 	assert(QUBES_VIEW_MAGIC == view->magic);
+	struct wlr_xdg_surface *xdg_surface = view->xdg_surface;
 	view->mapped = true;
 	wlr_scene_node_set_enabled(&view->scene_output->scene->node, true);
 	wlr_scene_node_set_enabled(view->scene_subsurface_tree, true);
 	wlr_output_enable(&view->output.output, true);
-	qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
+	qubes_give_view_keyboard_focus(view, xdg_surface->surface);
+#ifdef BUILD_RUST
+	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		uint32_t flags_to_set = 0, flags_to_unset = 0;
+		if (xdg_surface->toplevel->requested.minimized) {
+			flags_to_set = WINDOW_FLAG_MINIMIZE;
+			flags_to_unset = WINDOW_FLAG_FULLSCREEN;
+		} else if (xdg_surface->toplevel->requested.fullscreen) {
+			flags_to_set = WINDOW_FLAG_FULLSCREEN;
+			flags_to_unset = WINDOW_FLAG_MINIMIZE;
+		}
+		if (flags_to_set || flags_to_unset) {
+			qubes_change_window_flags(view, flags_to_set, flags_to_unset);
+		}
+	}
+
+	wlr_log(WLR_DEBUG, "Sending MSG_MAP (0x%x) to window %" PRIu32, MSG_MAP, view->window_id);
+	struct {
+		struct msg_hdr header;
+		struct msg_map_info info;
+	} msg = {
+		.header = {
+			.type = MSG_MAP,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_map_info),
+		},
+		.info = {
+			.transient_for = 0,
+			.override_redirect = 0,
+		},
+	};
+	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.info, "bug");
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg));
+
+#endif
 }
 
 static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribute__((unused))) {
@@ -302,28 +359,6 @@ static void qubes_new_popup(
 	struct tinywl_view *view = wl_container_of(listener, view, new_popup);
 	struct wlr_xdg_popup *popup __attribute__((unused)) = data;
 	assert(QUBES_VIEW_MAGIC == view->magic);
-}
-
-static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_set, uint32_t flags_unset)
-{
-#ifdef BUILD_RUST
-	struct {
-		struct msg_hdr header;
-		struct msg_window_flags flags;
-	} msg = {
-		.header = {
-			.type = MSG_WINDOW_FLAGS,
-			.window = view->window_id,
-			.untrusted_len = sizeof(struct msg_window_flags),
-		},
-		.flags = {
-			.flags_set = flags_set,
-			.flags_unset = flags_unset,
-		},
-	};
-	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.flags, "bug");
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
-#endif
 }
 
 static void qubes_request_maximize(
@@ -455,23 +490,6 @@ static void qubes_surface_commit(
 		};
 		assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
 	}
-	wlr_log(WLR_DEBUG, "Sending MSG_MAP (0x%x) to window %" PRIu32, MSG_MAP, view->window_id);
-
-	struct {
-		struct msg_hdr header;
-		struct msg_map_info info;
-	} msg = {
-		.header = {
-			.type = MSG_MAP,
-			.window = view->window_id,
-			.untrusted_len = sizeof(struct msg_map_info),
-		},
-		.info = {
-			.transient_for = 0,
-			.override_redirect = 0,
-		},
-	};
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
 	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
 	struct {
 		struct msg_hdr header;
