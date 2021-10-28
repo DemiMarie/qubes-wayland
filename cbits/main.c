@@ -267,6 +267,30 @@ static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_s
 #endif
 }
 
+static void qubes_set_view_title(struct tinywl_view *view)
+{
+#ifdef BUILD_RUST
+	assert(view->window_id);
+	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
+	struct {
+		struct msg_hdr header;
+		struct msg_wmname title;
+	} msg = {
+		.header = {
+			.type = MSG_WMNAME,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_wmname),
+		},
+		.title = {
+			.data = { 0 },
+		},
+	};
+	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.title, "bug");
+	strncpy(msg.title.data, view->xdg_surface->toplevel->title, sizeof(msg.title.data) - 1);
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+#endif
+}
+
 static void xdg_surface_map(struct wl_listener *listener, void *data __attribute__((unused))) {
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
@@ -290,6 +314,9 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 		}
 		if (flags_to_set || flags_to_unset) {
 			qubes_change_window_flags(view, flags_to_set, flags_to_unset);
+		}
+		if (xdg_surface->toplevel->title) {
+			qubes_set_view_title(view);
 		}
 	}
 
@@ -395,32 +422,15 @@ static void qubes_request_fullscreen(
 }
 
 static void qubes_set_title(
-		struct wl_listener *listener, void *data __attribute__((unused))) {
+		struct wl_listener *listener, void *data __attribute__((unused)))
+{
 	/* QUBES HOOK: MSG_WMNAME: ask GUI daemon to set window title */
 	struct tinywl_view *view = wl_container_of(listener, view, set_title);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	assert(view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL);
-#ifdef BUILD_RUST
-	assert(view->window_id);
-	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
-	struct {
-		struct msg_hdr header;
-		struct msg_wmname title;
-	} msg = {
-		.header = {
-			.type = MSG_WMNAME,
-			.window = view->window_id,
-			.untrusted_len = sizeof(struct msg_wmname),
-		},
-		.title = {
-			.data = { 0 },
-		},
-	};
-	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.title, "bug");
-	strncpy(msg.title.data, view->xdg_surface->toplevel->title, sizeof(msg.title.data) - 1);
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
-#endif
+	qubes_set_view_title(view);
 }
+
 
 static void qubes_new_decoration(struct wl_listener *listener, void *data)
 {
