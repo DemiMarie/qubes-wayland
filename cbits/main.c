@@ -366,6 +366,14 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	wl_list_remove(&view->link);
+	wl_list_remove(&view->map.link);
+	wl_list_remove(&view->unmap.link);
+	wl_list_remove(&view->destroy.link);
+	wl_list_remove(&view->new_popup.link);
+	wl_list_remove(&view->request_maximize.link);
+	wl_list_remove(&view->request_minimize.link);
+	wl_list_remove(&view->set_title.link);
+	wl_list_remove(&view->commit.link);
 #ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, view->window_id);
 	struct msg_hdr header = {
