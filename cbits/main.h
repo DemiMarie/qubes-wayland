@@ -54,5 +54,7 @@ struct tinywl_server {
 	bool use_server_side_decorations;
 };
 
+bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box);
+
 #endif
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:

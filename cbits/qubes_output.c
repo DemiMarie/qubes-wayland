@@ -3,11 +3,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <wlr/render/drm_format_set.h>
-#include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_output.h>
-#include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/render/drm_format_set.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 
 #include <drm/drm_fourcc.h>
@@ -61,7 +62,9 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	struct tinywl_view *view = wl_container_of(output, view, output);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	assert(qubes_output_created(view));
+	struct wlr_box box;
+	if (!qubes_output_ensure_created(view, &box))
+		return false;
 
 	if (raw_output->pending.committed & WLR_OUTPUT_STATE_MODE) {
 		assert(raw_output->pending.mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
@@ -134,6 +137,35 @@ static const struct wlr_output_impl qubes_wlr_output_impl = {
 
 static void qubes_output_frame(struct wl_listener *listener, void *data __attribute__((unused))) {
 	struct qubes_output *output = wl_container_of(listener, output, frame);
+	struct tinywl_view *view = wl_container_of(output, view, output);
+	assert(QUBES_VIEW_MAGIC == view->magic);
+	wlr_scene_output_commit(view->scene_output);
+#ifdef BUILD_RUST
+	struct wlr_box box;
+	if (!qubes_output_ensure_created(view, &box))
+		return;
+	wlr_log(WLR_DEBUG, "Width is %" PRIu32 " height is %" PRIu32, (uint32_t)box.width, (uint32_t)box.height);
+	qubes_send_configure(view, box.width, box.height);
+	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
+	struct {
+		struct msg_hdr header;
+		struct msg_shmimage shmimage;
+	} new_msg = {
+		.header = {
+			.type = MSG_SHMIMAGE,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_shmimage),
+		},
+		.shmimage = {
+			.x = 0,
+			.y = 0,
+			.width = INT32_MAX,
+			.height = INT32_MAX,
+		},
+	};
+	// Created above
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg));
+#endif
 }
 
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend, struct wl_display *display) {

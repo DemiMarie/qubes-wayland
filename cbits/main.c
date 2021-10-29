@@ -22,11 +22,11 @@
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_server_decoration.h>
 #include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
-#include <wlr/types/wlr_server_decoration.h>
-#include <wlr/types/wlr_xdg_decoration_v1.h>
 
 #include <xkbcommon/xkbcommon.h>
 
@@ -302,7 +302,7 @@ static void qubes_set_view_title(struct tinywl_view *view)
 #endif
 }
 
-static bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
+bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 {
 	assert(box);
 	wlr_xdg_surface_get_geometry(view->xdg_surface, box);
@@ -551,30 +551,6 @@ static void qubes_surface_commit(
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	// wlr_output_enable(&view->output.output, true);
 	assert(view->scene_output->output == &view->output.output);
-	wlr_scene_output_commit(view->scene_output);
-	wlr_log(WLR_DEBUG, "Width is %" PRIu32 " height is %" PRIu32, (uint32_t)box.width, (uint32_t)box.height);
-#ifdef BUILD_RUST
-	qubes_send_configure(view, box.width, box.height);
-	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
-	struct {
-		struct msg_hdr header;
-		struct msg_shmimage shmimage;
-	} new_msg = {
-		.header = {
-			.type = MSG_SHMIMAGE,
-			.window = view->window_id,
-			.untrusted_len = sizeof(struct msg_shmimage),
-		},
-		.shmimage = {
-			.x = 0,
-			.y = 0,
-			.width = INT32_MAX,
-			.height = INT32_MAX,
-		},
-	};
-	// Created above
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg));
-#endif
 	struct timespec now;
 	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
 	wlr_output_send_frame(&view->output.output);
@@ -865,6 +841,7 @@ bad_domid:
 			execl("/bin/sh", "/bin/sh", "-c", startup_cmd, (void *)NULL);
 		}
 	}
+
 	/* Run the Wayland event loop. This does not return until you exit the
 	 * compositor. Starting the backend rigged up all of the necessary event
 	 * loop configuration to listen to libinput events, DRM events, generate
