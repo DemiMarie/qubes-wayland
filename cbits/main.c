@@ -38,6 +38,13 @@
 #include "qubes_allocator.h"
 #include "main.h"
 
+static void qubes_send_frame_done(struct wlr_surface *surface,
+	int sx __attribute__((unused)), int sy __attribute__((unused)),
+	void *data)
+{
+	wlr_surface_send_frame_done(surface, data);
+}
+
 /* NOT IMPLEMENTABLE:
  *
  * - MSG_DOCK: involves a D-Bus listener, out of scope for initial
@@ -570,7 +577,8 @@ static void qubes_surface_commit(
 	struct timespec now;
 	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
 	wlr_output_send_frame(&view->output.output);
-	wlr_surface_send_frame_done(view->xdg_surface->surface, &now);
+	wlr_scene_node_for_each_surface(&view->scene_output->scene->node,
+		qubes_send_frame_done, &now);
 }
 
 static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
