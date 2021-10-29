@@ -39,13 +39,39 @@ struct tinywl_view {
 	int last_width, last_height;
 	uint32_t window_id;
 	uint32_t magic;
-	bool mapped, need_configure;
+	uint32_t flags;
 };
+
+enum {
+	QUBES_OUTPUT_CREATED = 1 << 0,
+	QUBES_OUTPUT_MAPPED = 1 << 1,
+	QUBES_OUTPUT_NEED_CONFIGURE = 1 << 2,
+};
+
+static inline bool qubes_output_created(struct tinywl_view *view)
+{
+	return view->flags & QUBES_OUTPUT_CREATED;
+}
+
+static inline bool qubes_output_mapped(struct tinywl_view *view)
+{
+	if (!(view->flags & QUBES_OUTPUT_CREATED))
+		return false;
+	return view->flags & QUBES_OUTPUT_MAPPED;
+}
+
+static inline bool qubes_output_need_configure(struct tinywl_view *view)
+{
+	if (!(view->flags & QUBES_OUTPUT_CREATED))
+		return false;
+	return view->flags & QUBES_OUTPUT_NEED_CONFIGURE;
+}
 
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
                        struct wl_display *display);
 
 void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
+void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t height);
 
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_OUTPUT_H */
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:

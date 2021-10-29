@@ -60,6 +60,8 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	struct tinywl_view *view = wl_container_of(output, view, output);
+	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(qubes_output_created(view));
 
 	if (raw_output->pending.committed & WLR_OUTPUT_STATE_MODE) {
 		assert(raw_output->pending.mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
@@ -68,28 +70,11 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 			raw_output->pending.custom_mode.height,
 			raw_output->pending.custom_mode.refresh);
 #ifdef BUILD_RUST
-		if (view->need_configure) {
-			wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
-			struct {
-				struct msg_hdr header;
-				struct msg_configure configure;
-			} msg = {
-				.header = {
-					.type = MSG_CONFIGURE,
-					.window = view->window_id,
-					.untrusted_len = sizeof(struct msg_configure),
-				},
-				.configure = {
-					.x = view->left,
-					.y = view->top,
-					.width = raw_output->pending.custom_mode.width,
-					.height = raw_output->pending.custom_mode.height,
-					.override_redirect = false,
-				},
-			};
-			assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
-			view->need_configure = false;
-		}
+		qubes_send_configure(
+			view,
+			raw_output->pending.custom_mode.width,
+			raw_output->pending.custom_mode.height
+		);
 #endif
 	}
 
@@ -316,7 +301,7 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribut
 		}
 		qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
 		break;
-	case 10:; // FocusOut
+	case 10: // FocusOut
 		if (seat->keyboard_state.focused_surface) {
 			/*
 			 * Deactivate the previously focused surface. This lets the client know
@@ -337,18 +322,50 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribut
 	}
 }
 
+void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t height)
+{
+	if (!qubes_output_need_configure(view))
+		return;
+	wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
+	struct {
+		struct msg_hdr header;
+		struct msg_configure configure;
+	} msg = {
+		.header = {
+			.type = MSG_CONFIGURE,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_configure),
+		},
+		.configure = {
+			.x = view->left,
+			.y = view->top,
+			.width = width,
+			.height = height,
+			.override_redirect = 0,
+		},
+	};
+	view->flags &= ~(__typeof__(view->flags))QUBES_OUTPUT_NEED_CONFIGURE;
+	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg));
+}
+
 static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
 {
 	struct msg_configure configure;
 	memcpy(&configure, ptr, sizeof(configure));
-	if (configure.width == 0 || configure.height == 0)
+	view->left = configure.x;
+	view->top = configure.y;
+	// Just ACK the configure
+	view->flags |= (__typeof__(view->flags))QUBES_OUTPUT_NEED_CONFIGURE;
+	qubes_send_configure(view, configure.width, configure.height);
+	if (configure.width == (uint32_t)view->last_width &&
+	    configure.height == (uint32_t)view->last_height) {
 		return;
+	}
 	wlr_output_update_custom_mode(&view->output.output, configure.width, configure.height, 0);
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
 		wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
-	view->need_configure = true;
-	view->left = configure.x;
-	view->top = configure.y;
+	else
+		assert(0 && "not implemented");
 }
 
 void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
