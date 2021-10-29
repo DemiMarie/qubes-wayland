@@ -29,7 +29,8 @@ CFLAGS ::= -O2 -g3 \
 	-Wp,-D_GLIBCXX_ASSERTIONS \
 	-Wp,-UNDEBUG \
 	-Icbits/protocols \
-	-fsanitize=address,undefined \
+	-fsanitize=undefined \
+	-fsanitize-undefined-trap-on-error \
 	-pthread $(flags)
 
 CC ::= gcc
