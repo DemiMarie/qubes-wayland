@@ -100,8 +100,7 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 	if (format->cap & ~(size_t)WLR_BUFFER_CAP_DATA_PTR)
 		return NULL;
 	/* Only ARGB8888 and XRGB8888 are supported */
-	if (format->format != DRM_FORMAT_XRGB8888 &&
-	    format->format != DRM_FORMAT_ARGB8888) {
+	if (format->format != DRM_FORMAT_XRGB8888) {
 		wlr_log(WLR_ERROR, "Refusing allocation because format %" PRIu32 " is not supported", format->format);
 		return NULL;
 	}
