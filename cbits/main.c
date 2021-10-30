@@ -38,13 +38,6 @@
 #include "qubes_allocator.h"
 #include "main.h"
 
-static void qubes_send_frame_done(struct wlr_surface *surface,
-	int sx __attribute__((unused)), int sy __attribute__((unused)),
-	void *data)
-{
-	wlr_surface_send_frame_done(surface, data);
-}
-
 /* NOT IMPLEMENTABLE:
  *
  * - MSG_DOCK: involves a D-Bus listener, out of scope for initial
@@ -70,7 +63,30 @@ struct tinywl_keyboard {
 	uint32_t magic;
 };
 
-void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface *surface) {
+static void qubes_send_frame_done(struct wlr_surface *surface,
+	int sx __attribute__((unused)), int sy __attribute__((unused)),
+	void *data)
+{
+	wlr_surface_send_frame_done(surface, data);
+}
+
+static int qubes_send_frame_callbacks(void *data)
+{
+	struct tinywl_server *server = data;
+	struct timespec now;
+	struct tinywl_view *view;
+	wl_event_source_timer_update(server->timer, 16);
+	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
+	wl_list_for_each(view, &server->views, link) {
+		wlr_scene_node_for_each_surface(
+			&view->scene_output->scene->node,
+			qubes_send_frame_done, &now);
+	}
+	return 0;
+}
+
+void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface *surface)
+{
 	/* Note: this function only deals with keyboard focus. */
 	if (view == NULL) {
 		return;
@@ -551,11 +567,7 @@ static void qubes_surface_commit(
 	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	// wlr_output_enable(&view->output.output, true);
 	assert(view->scene_output->output == &view->output.output);
-	struct timespec now;
-	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
 	wlr_output_send_frame(&view->output.output);
-	wlr_scene_node_for_each_surface(&view->scene_output->scene->node,
-		qubes_send_frame_done, &now);
 }
 
 static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
@@ -824,6 +836,15 @@ bad_domid:
 		wlr_backend_destroy(&server->backend->backend);
 		return 1;
 	}
+
+	struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
+	assert(loop);
+
+	if (!(server->timer = wl_event_loop_add_timer(loop, qubes_send_frame_callbacks, server))) {
+		wlr_log(WLR_ERROR, "Cannot create timer");
+		return 1;
+	}
+	wl_event_source_timer_update(server->timer, 16);
 
 	/* Start the backend. This will enumerate outputs and inputs, become the DRM
 	 * master, etc */

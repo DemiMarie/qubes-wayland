@@ -49,6 +49,7 @@ struct tinywl_server {
 	struct wlr_server_decoration_manager *old_manager;
 	struct wlr_xdg_decoration_manager_v1 *new_manager;
 	struct wl_listener new_decoration;
+	struct wl_event_source *timer;
 	uint32_t magic;
 	uint16_t domid;
 	bool use_server_side_decorations;
