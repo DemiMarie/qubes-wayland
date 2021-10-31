@@ -13,10 +13,7 @@ pub struct QubesData {
     pub connection: qubes_gui_gntalloc::Agent,
     wid: u32,
     pub map: BTreeMap<NonZeroU32, *mut std::os::raw::c_void>,
-    last_width: u32,
-    last_height: u32,
     start: std::time::Instant,
-    buf: qubes_gui_gntalloc::Buffer,
 }
 
 impl QubesData {
@@ -27,7 +24,7 @@ impl QubesData {
             .expect("not yet implemented: wid wrapping");
         let id = id
             .try_into()
-            .expect("IDs start at 2 and do not wrap, so they cannot be zero; qed");
+            .expect("IDs start at 1 and do not wrap, so they cannot be zero; qed");
         assert!(self.map.insert(id, userdata).is_none());
         id
     }
@@ -57,9 +54,7 @@ impl QubesData {
                 Poll::Ready((hdr, body)) => {
                     assert!(body.len() < (1usize << 20));
                     assert_eq!(body.len() as u32, hdr.untrusted_len);
-                    if hdr.window == 1 {
-                        eprintln!("Got an event for our own window!");
-                    } else if let Ok(nz) = NonZeroU32::try_from(hdr.window) {
+                    if let Ok(nz) = NonZeroU32::try_from(hdr.window) {
                         if let Some(&userdata) = self.map.get(&nz) {
                             let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
                             callback(userdata, delta, hdr, body.as_ptr())
@@ -179,58 +174,15 @@ pub unsafe extern "C" fn qubes_rust_backend_free(backend: *mut std::os::raw::c_v
 }
 
 fn setup_qubes_backend(domid: u16) -> RustBackend {
-    let mut connection = qubes_gui_gntalloc::new(domid).unwrap();
-    let (mut agent, conf) = qubes_gui_client::Client::agent(domid).unwrap();
+    let connection = qubes_gui_gntalloc::new(domid).unwrap();
+    let (agent, conf) = qubes_gui_client::Client::agent(domid).unwrap();
     // we now have a agent 🙂
     eprintln!("Configuration parameters: {:?}", conf);
-    let (width, height) = (0x200, 0x100);
-    let my_window = 1.try_into().unwrap();
-    agent
-        .send(
-            &qubes_gui::Create {
-                rectangle: qubes_gui::Rectangle {
-                    top_left: qubes_gui::Coordinates { x: 50, y: 400 },
-                    size: qubes_gui::WindowSize { width, height },
-                },
-                parent: None,
-                override_redirect: 0,
-            },
-            my_window,
-        )
-        .unwrap();
-    let title = b"Qubes Demo Rust GUI Agent";
-    let mut title_buf = [0u8; 128];
-    title_buf[..title.len()].copy_from_slice(title);
-    agent
-        .send_raw(&mut title_buf, my_window, qubes_gui::MSG_SET_TITLE)
-        .unwrap();
-    let buf = connection.alloc_buffer(width, height).unwrap();
-    let shade = vec![0xFF00u32; (width * height / 2).try_into().unwrap()];
-    agent
-        .send_raw(buf.msg(), my_window, qubes_gui::MSG_WINDOW_DUMP)
-        .unwrap();
-    buf.write(
-        qubes_castable::as_bytes(&shade[..]),
-        (width * height).try_into().unwrap(),
-    );
-    agent
-        .send(
-            &qubes_gui::MapInfo {
-                override_redirect: 0,
-                transient_for: 0,
-            },
-            my_window,
-        )
-        .unwrap();
-    let raw_fd = agent.as_raw_fd();
     QubesData {
         agent,
         connection,
-        wid: 2,
+        wid: 1,
         map: Default::default(),
-        last_width: width,
-        last_height: height,
-        buf,
         start: std::time::Instant::now(),
     }
 }
