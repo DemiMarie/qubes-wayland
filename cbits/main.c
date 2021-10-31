@@ -75,9 +75,11 @@ static int qubes_send_frame_callbacks(void *data)
 	struct tinywl_server *server = data;
 	struct timespec now;
 	struct tinywl_view *view;
-	wl_event_source_timer_update(server->timer, 16);
 	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
+	server->frame_pending = false;
 	wl_list_for_each(view, &server->views, link) {
+		assert(QUBES_VIEW_MAGIC == view->magic);
+		view->output.output.frame_pending = false;
 		wlr_output_send_frame(&view->output.output);
 		wlr_scene_node_for_each_surface(
 			&view->scene_output->scene->node,

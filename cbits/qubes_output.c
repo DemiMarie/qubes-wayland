@@ -139,7 +139,14 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 	struct qubes_output *output = wl_container_of(listener, output, frame);
 	struct tinywl_view *view = wl_container_of(output, view, output);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	wlr_scene_output_commit(view->scene_output);
+	if (wlr_scene_output_commit(view->scene_output)) {
+		output->output.frame_pending = true;
+		if (!view->server->frame_pending) {
+			// Schedule another timer callback
+			wl_event_source_timer_update(view->server->timer, 16);
+			view->server->frame_pending = true;
+		}
+	}
 #ifdef BUILD_RUST
 	struct wlr_box box;
 	if (!qubes_output_ensure_created(view, &box))
