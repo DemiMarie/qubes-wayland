@@ -275,8 +275,9 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 		break;
 	default:
 		wlr_log(WLR_DEBUG, "Unknown button event type %" PRIu32, button.button);
-		break;
+		return;
 	}
+	wlr_seat_pointer_send_frame(seat);
 }
 
 static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
@@ -287,6 +288,7 @@ static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const ui
 	wlr_seat_pointer_send_motion(seat, timestamp,
 	                            (double)motion.x + (double)view->x,
 	                            (double)motion.y + (double)view->y);
+	wlr_seat_pointer_send_frame(seat);
 }
 
 static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
@@ -314,6 +316,7 @@ static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attri
 	wlr_seat_pointer_notify_enter(seat, view->xdg_surface->surface,
 	                              (double)crossing.x + (double)view->x,
 	                              (double)crossing.y + (double)view->y);
+	wlr_seat_pointer_send_frame(seat);
 }
 
 static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
