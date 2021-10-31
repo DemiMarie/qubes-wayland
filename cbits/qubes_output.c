@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/render/drm_format_set.h>
@@ -205,12 +206,12 @@ static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const 
 		state = WL_KEYBOARD_KEY_STATE_RELEASED;
 		break;
 	default:
-		wlr_log(WLR_ERROR, "Bad keypress event type " PRIu32, keypress.type);
+		wlr_log(WLR_ERROR, "Bad keypress event type %" PRIu32, keypress.type);
 		return; /* bad state */
 	}
 
 	if (keypress.keycode < 0x8 || keypress.keycode >= 0x108) {
-		wlr_log(WLR_ERROR, "Bad keycode " PRIu32, keypress.keycode);
+		wlr_log(WLR_ERROR, "Bad keycode %" PRIu32, keypress.keycode);
 		return; /* not valid in X11, which the GUI daemon uses */
 	}
 	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
@@ -239,7 +240,7 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 		state = WLR_BUTTON_RELEASED;
 		break;
 	default:
-		wlr_log(WLR_ERROR, "Bad button event type " PRIu32, button.type);
+		wlr_log(WLR_ERROR, "Bad button event type %" PRIu32, button.type);
 		return; /* bad state */
 	}
 
@@ -359,7 +360,7 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribut
 		wlr_seat_keyboard_notify_clear_focus(seat);
 		break;
 	default:
-		wlr_log(WLR_ERROR, "Bad Focus event type " PRIu32, focus.type);
+		wlr_log(WLR_ERROR, "Bad Focus event type %" PRIu32, focus.type);
 		return;
 	}
 }

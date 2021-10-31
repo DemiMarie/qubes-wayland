@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <inttypes.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
 
@@ -505,7 +506,7 @@ static void qubes_request_minimize(
 	struct tinywl_view *view = wl_container_of(listener, view, request_minimize);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	if (qubes_output_mapped(view)) {
-		wlr_log(WLR_DEBUG, "Marking window " PRIu32 " minimized", view->window_id);
+		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " minimized", view->window_id);
 		// Mapped implies created
 		qubes_change_window_flags(view, WINDOW_FLAG_MINIMIZE, 0);
 	}
@@ -518,7 +519,7 @@ static void qubes_request_fullscreen(
 	struct tinywl_view *view = wl_container_of(listener, view, request_fullscreen);
 	assert(QUBES_VIEW_MAGIC == view->magic);
 	if (qubes_output_mapped(view)) {
-		wlr_log(WLR_DEBUG, "Marking window " PRIu32 " fullscreen", view->window_id);
+		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " fullscreen", view->window_id);
 		// Mapped implies created
 		qubes_change_window_flags(view, WINDOW_FLAG_FULLSCREEN, 0);
 	}
