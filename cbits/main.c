@@ -78,6 +78,7 @@ static int qubes_send_frame_callbacks(void *data)
 	wl_event_source_timer_update(server->timer, 16);
 	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
 	wl_list_for_each(view, &server->views, link) {
+		wlr_output_send_frame(&view->output.output);
 		wlr_scene_node_for_each_surface(
 			&view->scene_output->scene->node,
 			qubes_send_frame_done, &now);
