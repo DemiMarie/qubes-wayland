@@ -5,6 +5,7 @@ project(
   license: 'GPLv2+',
   default_options: [
     'c_std=c11',
+    'buildtype=debugoptimized',
     'warning_level=2',
     'werror=true',
   ],
@@ -15,6 +16,7 @@ add_project_arguments(
     '-DWLR_USE_UNSTABLE',
     '-D_FORTIFY_SOURCE=2',
     '-D_GNU_SOURCE=1',
+    '-DBUILD_RUST',
     '-Wno-unused-parameter',
     '-Wno-error=cpp',
     '-Wvla',
@@ -27,6 +29,9 @@ qubes_files = [
   'cbits/qubes_output.c',
   'cbits/main.c',
 ]
+
+cc = meson.get_compiler('c')
+dl = cc.find_library('dl', required: false)
 
 # Taken from wlroots, which is:
 # Copyright (c) 2017, 2018 Drew DeVault
@@ -96,10 +101,23 @@ wlroots_proj = subproject(
   required: true,
   version: ['>=0.15.0', '<0.16.0'],
 )
+
+rust_parts = custom_target(
+  'Build Rust code',
+  depfile: 'libqubes_gui_rust.d',
+  command: ['./build_rust.sh', '@DEPFILE@', '@OUTDIR@', '@PRIVATE_DIR@', 'release'],
+  output: ['libqubes_gui_rust.a'],
+  build_by_default: true,
+)
+
+threads = dependency('threads')
+vchan_xen = dependency('vchan-xen')
+
 bin_compositor = executable(
   meson.project_name(),
   qubes_files,
-  dependencies: [wlroots_proj.get_variable('wlroots')],
+  dependencies: [wlroots_proj.get_variable('wlroots'), threads, vchan_xen, dl],
   include_directories: ['cbits', include_directories('.')],
+  link_with: [rust_parts[0]],
   install: true,
 )
