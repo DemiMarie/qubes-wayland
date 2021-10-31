@@ -544,9 +544,7 @@ static void qubes_new_decoration(struct wl_listener *listener, void *data)
 	struct wlr_xdg_toplevel_decoration_v1 *decoration = data;
 
 	wlr_xdg_toplevel_decoration_v1_set_mode(decoration,
-		server->use_server_side_decorations ?
-		WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE :
-		WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+		WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
 }
 static void qubes_surface_commit(
 		struct wl_listener *listener, void *data __attribute__((unused)))
@@ -668,7 +666,6 @@ cleanup:
 int main(int argc, char *argv[]) {
 	wlr_log_init(WLR_DEBUG, NULL);
 	char *startup_cmd = NULL;
-	bool use_server_side_decoration = false;
 
 	int c;
 	if (argc < 1) {
@@ -676,13 +673,10 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	while ((c = getopt(argc, argv, "ds:h")) != -1) {
+	while ((c = getopt(argc, argv, "s:h")) != -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
-			break;
-		case 'd':
-			use_server_side_decoration = true;
 			break;
 		default:
 			printf("Usage: %s [-s startup command] [--] domid\n", argv[0]);
@@ -725,7 +719,6 @@ bad_domid:
 	}
 	server->magic = QUBES_SERVER_MAGIC;
 	server->domid = domid;
-	server->use_server_side_decorations = use_server_side_decoration;
 
 	/* The Wayland display is managed by libwayland. It handles accepting
 	 * clients from the Unix socket, manging Wayland globals, and so on. */
@@ -773,9 +766,7 @@ bad_domid:
 		wlr_server_decoration_manager_create(server->wl_display);
 	if (server->old_manager) {
 		wlr_server_decoration_manager_set_default_mode(server->old_manager,
-			server->use_server_side_decorations ?
-			WLR_SERVER_DECORATION_MANAGER_MODE_SERVER :
-			WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
+			WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
 	}
 	server->new_manager =
 		wlr_xdg_decoration_manager_v1_create(server->wl_display);

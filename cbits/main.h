@@ -52,7 +52,7 @@ struct tinywl_server {
 	struct wl_event_source *timer;
 	uint32_t magic;
 	uint16_t domid;
-	bool use_server_side_decorations, frame_pending;
+	bool frame_pending;
 };
 
 bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box);
