@@ -198,6 +198,7 @@ qubes_backend_create(struct wl_display *display, uint16_t domid) {
 	assert(!wl_list_empty(&output->modes));
 	assert(output->current_mode);
 	wlr_keyboard_init(keyboard, &qubes_keyboard_impl);
+	wlr_keyboard_set_repeat_info(keyboard, 0, 0);
 	wlr_pointer_init(pointer, &qubes_pointer_impl);
 	wlr_input_device_init(keyboard_input, WLR_INPUT_DEVICE_KEYBOARD, &qubes_input_device_impl,
 			"Qubes OS Virtual Keyboard", 0, 0);
