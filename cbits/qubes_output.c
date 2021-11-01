@@ -320,7 +320,7 @@ static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attri
 	wlr_seat_pointer_send_frame(seat);
 }
 
-static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
+static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
 {
 	/* This is specifically *keyboard* focus */
 	struct msg_focus focus;
