@@ -328,7 +328,8 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribut
 
 	memcpy(&focus, ptr, sizeof focus);
 	switch (focus.type) {
-	case 9:; // FocusIn
+	case 9: // FocusIn
+		qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
 		struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
 		assert(keyboard);
 		for (int i = 0; i < 32; ++i) {
@@ -342,7 +343,6 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp __attribut
 				wlr_keyboard_notify_key(keyboard, &event);
 			}
 		}
-		qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
 		break;
 	case 10: // FocusOut
 		if (seat->keyboard_state.focused_surface) {
