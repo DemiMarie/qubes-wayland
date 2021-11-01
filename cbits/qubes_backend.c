@@ -55,9 +55,9 @@ static bool qubes_backend_start(struct wlr_backend *raw_backend);
 extern void qubes_rust_backend_free(void *ptr);
 extern void *qubes_rust_backend_create(uint16_t domid);
 extern int qubes_rust_backend_fd(struct qubes_rust_backend *backend);
-typedef void (*qubes_parse_event_callback)(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
+typedef void (*qubes_parse_event_callback)(void *raw_view, void *raw_backend, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
 
-extern void qubes_rust_backend_on_fd_ready(struct qubes_rust_backend *backend, bool, qubes_parse_event_callback);
+extern void qubes_rust_backend_on_fd_ready(struct qubes_rust_backend *, bool, qubes_parse_event_callback, void *);
 static int qubes_backend_on_fd(int, uint32_t, void *);
 #endif
 
@@ -103,7 +103,8 @@ static bool qubes_backend_start(struct wlr_backend *raw_backend) {
 static int qubes_backend_on_fd(int fd __attribute__((unused)), uint32_t mask, void *data) {
 	struct qubes_backend *backend = data;
 	assert(!(mask & WL_EVENT_WRITABLE));
-	qubes_rust_backend_on_fd_ready(backend->rust_backend, mask & WL_EVENT_READABLE, qubes_parse_event);
+	qubes_rust_backend_on_fd_ready(
+		backend->rust_backend, mask & WL_EVENT_READABLE, qubes_parse_event, backend);
 	return 0;
 }
 #endif

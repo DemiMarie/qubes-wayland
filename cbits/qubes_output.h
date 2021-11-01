@@ -70,7 +70,7 @@ static inline bool qubes_output_need_configure(struct tinywl_view *view)
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
                        struct wl_display *display);
 
-void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
+void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
 void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t height);
 
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_OUTPUT_H */

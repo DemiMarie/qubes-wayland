@@ -2,7 +2,9 @@ use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
     num::NonZeroU32,
+    os::raw::{c_int, c_void},
     os::unix::io::AsRawFd,
+    ptr,
     task::Poll,
 };
 
@@ -12,12 +14,12 @@ pub struct QubesData {
     pub agent: qubes_gui_client::Client,
     pub connection: qubes_gui_gntalloc::Agent,
     wid: u32,
-    pub map: BTreeMap<NonZeroU32, *mut std::os::raw::c_void>,
+    pub map: BTreeMap<NonZeroU32, *mut c_void>,
     start: std::time::Instant,
 }
 
 impl QubesData {
-    fn id(&mut self, userdata: *mut std::os::raw::c_void) -> NonZeroU32 {
+    fn id(&mut self, userdata: *mut c_void) -> NonZeroU32 {
         let id = self.wid;
         self.wid = id
             .checked_add(1)
@@ -38,12 +40,8 @@ impl QubesData {
     unsafe fn on_fd_ready(
         &mut self,
         is_readable: bool,
-        callback: unsafe extern "C" fn(
-            *mut std::os::raw::c_void,
-            u32,
-            qubes_gui::Header,
-            *const u8,
-        ),
+        callback: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, qubes_gui::Header, *const u8),
+        global_userdata: *mut c_void,
     ) {
         if is_readable {
             self.agent.wait();
@@ -54,11 +52,13 @@ impl QubesData {
                 Poll::Ready((hdr, body)) => {
                     assert!(body.len() < (1usize << 20));
                     assert_eq!(body.len() as u32, hdr.untrusted_len);
+                    let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
                     if let Ok(nz) = NonZeroU32::try_from(hdr.window) {
                         if let Some(&userdata) = self.map.get(&nz) {
-                            let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
-                            callback(userdata, delta, hdr, body.as_ptr())
+                            callback(global_userdata, userdata, delta, hdr, body.as_ptr())
                         }
+                    } else {
+                        callback(global_userdata, ptr::null_mut(), delta, hdr, body.as_ptr());
                     }
                 }
             }
@@ -70,8 +70,8 @@ type RustBackend = QubesData;
 
 #[no_mangle]
 pub unsafe extern "C" fn qubes_rust_generate_id(
-    backend: *mut std::os::raw::c_void,
-    userdata: *mut std::os::raw::c_void,
+    backend: *mut c_void,
+    userdata: *mut c_void,
 ) -> u32 {
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).id(userdata)) {
         Ok(e) => e.into(),
@@ -85,7 +85,7 @@ pub unsafe extern "C" fn qubes_rust_generate_id(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn qubes_rust_delete_id(backend: *mut std::os::raw::c_void, id: u32) {
+pub unsafe extern "C" fn qubes_rust_delete_id(backend: *mut c_void, id: u32) {
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).destroy_id(id)) {
         Ok(e) => e.into(),
         Err(e) => {
@@ -98,9 +98,7 @@ pub unsafe extern "C" fn qubes_rust_delete_id(backend: *mut std::os::raw::c_void
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn qubes_rust_backend_fd(
-    backend: *mut std::os::raw::c_void,
-) -> std::os::raw::c_int {
+pub unsafe extern "C" fn qubes_rust_backend_fd(backend: *mut c_void) -> c_int {
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).agent.as_raw_fd()) {
         Ok(e) => e,
         Err(e) => {
@@ -113,7 +111,7 @@ pub unsafe extern "C" fn qubes_rust_backend_fd(
 }
 
 #[no_mangle]
-pub extern "C" fn qubes_rust_backend_create(domid: u16) -> *mut std::os::raw::c_void {
+pub extern "C" fn qubes_rust_backend_create(domid: u16) -> *mut c_void {
     match std::panic::catch_unwind(|| setup_qubes_backend(domid)) {
         Ok(e) => Box::into_raw(Box::new(e)) as *mut _,
         Err(e) => {
@@ -127,12 +125,13 @@ pub extern "C" fn qubes_rust_backend_create(domid: u16) -> *mut std::os::raw::c_
 
 #[no_mangle]
 pub unsafe extern "C" fn qubes_rust_backend_on_fd_ready(
-    backend: *mut std::os::raw::c_void,
+    backend: *mut c_void,
     is_readable: bool,
-    callback: unsafe extern "C" fn(*mut std::os::raw::c_void, u32, qubes_gui::Header, *const u8),
+    callback: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, qubes_gui::Header, *const u8),
+    global_userdata: *mut c_void,
 ) -> bool {
     match std::panic::catch_unwind(|| {
-        (*(backend as *mut RustBackend)).on_fd_ready(is_readable, callback)
+        (*(backend as *mut RustBackend)).on_fd_ready(is_readable, callback, global_userdata)
     }) {
         Ok(()) => true,
         Err(e) => {
@@ -146,7 +145,7 @@ pub unsafe extern "C" fn qubes_rust_backend_on_fd_ready(
 
 #[no_mangle]
 pub unsafe extern "C" fn qubes_rust_send_message(
-    backend: *mut std::os::raw::c_void,
+    backend: *mut c_void,
     header: &qubes_gui::Header,
 ) -> bool {
     // untrusted_len is actually trusted here
@@ -167,7 +166,7 @@ pub unsafe extern "C" fn qubes_rust_send_message(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn qubes_rust_backend_free(backend: *mut std::os::raw::c_void) {
+pub unsafe extern "C" fn qubes_rust_backend_free(backend: *mut c_void) {
     if !backend.is_null() {
         Box::from_raw(backend as *mut RustBackend);
     }

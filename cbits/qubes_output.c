@@ -436,9 +436,11 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 		assert(0 && "not implemented");
 }
 
-void qubes_parse_event(void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
+void qubes_parse_event(void *raw_backend __attribute__((unused)), void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
 {
 	struct tinywl_view *view = raw_view;
+	if (!view)
+		return;
 	assert(hdr.window == view->window_id);
 	switch (hdr.type) {
 	case MSG_KEYPRESS:
