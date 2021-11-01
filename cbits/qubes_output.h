@@ -11,7 +11,7 @@ struct qubes_output {
 	struct wlr_buffer *buffer; /* *not* owned by the compositor */
 	struct wl_listener frame;
 #ifdef BUILD_RUST
-	struct msg_keymap_notify keymap;
+	struct msg_keymap_notify keymap, current_state;
 #endif
 	const struct wlr_drm_format_set *formats; /* global */
 };
