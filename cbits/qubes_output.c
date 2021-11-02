@@ -58,6 +58,57 @@ static bool qubes_output_test(struct wlr_output *raw_output) {
 	return true;
 }
 
+#ifdef BUILD_RUST
+static void qubes_output_damage(struct tinywl_view *view) {
+	struct wlr_box box;
+	struct qubes_output *output = &view->output;
+	if (!qubes_output_ensure_created(view, &box))
+		return;
+	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32, (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
+	qubes_send_configure(view, box.width, box.height);
+	wlr_log(WLR_DEBUG, "Sending MSG_HMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
+	int n_rects = 0;
+	if (!(output->output.pending.committed & WLR_OUTPUT_STATE_DAMAGE))
+		return;
+	pixman_box32_t *rects = pixman_region32_rectangles(&output->output.pending.damage, &n_rects);
+	if (n_rects <= 0 || !rects) {
+		wlr_log(WLR_DEBUG, "No damage!");
+		return;
+	}
+	for (int i = 0; i < n_rects; ++i) {
+		int32_t width, height;
+		// this is the correct approach ― the alternative leads to glitches
+		static const bool use_delta = false;
+		int32_t x1 = use_delta ? QUBES_MAX(rects[i].x1, box.x) : rects[i].x1;
+		int32_t y1 = use_delta ? QUBES_MAX(rects[i].y1, box.y) : rects[i].y1;
+		if (__builtin_sub_overflow(rects[i].x2, x1, &width) ||
+		    __builtin_sub_overflow(rects[i].y2, y1, &height)) {
+			wlr_log(WLR_ERROR, "Overflow in damage calc");
+			return;
+		}
+		if (width <= 0 || height <= 0) {
+			wlr_log(WLR_ERROR, "Negative width or height - skipping");
+			continue;
+		}
+		int32_t const x = use_delta ? x1 - box.x : x1, y = use_delta ? y1 - box.y : y1;
+		wlr_log(WLR_DEBUG, "Submitting damage to GUI daemon: x %" PRIi32 " y %" PRIi32 " width %" PRIu32 " height %" PRIu32, x, y, width, height);
+		struct {
+			struct msg_hdr header;
+			struct msg_shmimage shmimage;
+		} new_msg = {
+			.header = {
+				.type = MSG_SHMIMAGE,
+				.window = view->window_id,
+				.untrusted_len = sizeof(struct msg_shmimage),
+			},
+			.shmimage = { .x = x1, .y = y1, .width = width, .height = height },
+		};
+		// Created above
+		assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg));
+	}
+}
+#endif
+
 static bool qubes_output_commit(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
@@ -97,6 +148,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 			buffer->header.type = MSG_WINDOW_DUMP;
 			buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
 			assert(qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header));
+			qubes_output_damage(view);
 #endif
 		}
 	}
@@ -148,32 +200,6 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 			view->server->frame_pending = true;
 		}
 	}
-#ifdef BUILD_RUST
-	struct wlr_box box;
-	if (!qubes_output_ensure_created(view, &box))
-		return;
-	wlr_log(WLR_DEBUG, "Width is %" PRIu32 " height is %" PRIu32, (uint32_t)box.width, (uint32_t)box.height);
-	qubes_send_configure(view, box.width, box.height);
-	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
-	struct {
-		struct msg_hdr header;
-		struct msg_shmimage shmimage;
-	} new_msg = {
-		.header = {
-			.type = MSG_SHMIMAGE,
-			.window = view->window_id,
-			.untrusted_len = sizeof(struct msg_shmimage),
-		},
-		.shmimage = {
-			.x = 0,
-			.y = 0,
-			.width = INT32_MAX,
-			.height = INT32_MAX,
-		},
-	};
-	// Created above
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg));
-#endif
 }
 
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend, struct wl_display *display) {
