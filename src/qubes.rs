@@ -75,7 +75,7 @@ pub unsafe extern "C" fn qubes_rust_generate_id(
 ) -> u32 {
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).id(userdata)) {
         Ok(e) => e.into(),
-        Err(e) => {
+        Err(_) => {
             drop(std::panic::catch_unwind(|| {
                 eprintln!("Unexpected panic");
             }));
@@ -88,7 +88,7 @@ pub unsafe extern "C" fn qubes_rust_generate_id(
 pub unsafe extern "C" fn qubes_rust_delete_id(backend: *mut c_void, id: u32) {
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).destroy_id(id)) {
         Ok(e) => e.into(),
-        Err(e) => {
+        Err(_) => {
             drop(std::panic::catch_unwind(|| {
                 eprintln!("Unexpected panic");
             }));
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn qubes_rust_delete_id(backend: *mut c_void, id: u32) {
 pub unsafe extern "C" fn qubes_rust_backend_fd(backend: *mut c_void) -> c_int {
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).agent.as_raw_fd()) {
         Ok(e) => e,
-        Err(e) => {
+        Err(_) => {
             drop(std::panic::catch_unwind(|| {
                 eprintln!("Unexpected panic");
             }));
@@ -114,7 +114,7 @@ pub unsafe extern "C" fn qubes_rust_backend_fd(backend: *mut c_void) -> c_int {
 pub extern "C" fn qubes_rust_backend_create(domid: u16) -> *mut c_void {
     match std::panic::catch_unwind(|| setup_qubes_backend(domid)) {
         Ok(e) => Box::into_raw(Box::new(e)) as *mut _,
-        Err(e) => {
+        Err(_) => {
             drop(std::panic::catch_unwind(|| {
                 eprintln!("Error initializing Rust code");
             }));
@@ -134,7 +134,7 @@ pub unsafe extern "C" fn qubes_rust_backend_on_fd_ready(
         (*(backend as *mut RustBackend)).on_fd_ready(is_readable, callback, global_userdata)
     }) {
         Ok(()) => true,
-        Err(e) => {
+        Err(_) => {
             drop(std::panic::catch_unwind(|| {
                 eprintln!("Error in Rust event handler");
             }));
@@ -144,10 +144,7 @@ pub unsafe extern "C" fn qubes_rust_backend_on_fd_ready(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn qubes_rust_send_message(
-    backend: *mut c_void,
-    header: &qubes_gui::Header,
-) -> bool {
+pub unsafe extern "C" fn qubes_rust_send_message(backend: *mut c_void, header: &qubes_gui::Header) {
     // untrusted_len is actually trusted here
     let slice = core::slice::from_raw_parts(
         header as *const _ as *const u8,
@@ -155,7 +152,7 @@ pub unsafe extern "C" fn qubes_rust_send_message(
     );
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).agent.send_raw_bytes(slice))
     {
-        Ok(e) => e.is_ok(),
+        Ok(_) => {}
         Err(_) => {
             core::mem::forget(std::panic::catch_unwind(|| {
                 eprintln!("Unexpected panic");

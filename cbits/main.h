@@ -5,7 +5,7 @@
 
 #ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
-bool qubes_rust_send_message(void *backend, struct msg_hdr *header) __attribute__((warn_unused_result));
+void qubes_rust_send_message(void *backend, struct msg_hdr *header);
 uint32_t qubes_rust_generate_id(void *backend, void *data) __attribute__((warn_unused_result));
 void qubes_rust_delete_id(void *backend, uint32_t id);
 #else
@@ -52,7 +52,7 @@ struct tinywl_server {
 	struct wl_event_source *timer;
 	uint32_t magic;
 	uint16_t domid;
-	bool frame_pending;
+	bool frame_pending, vchan_error;
 };
 
 bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box);

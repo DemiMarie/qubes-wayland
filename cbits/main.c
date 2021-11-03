@@ -176,6 +176,7 @@ static void server_new_keyboard(struct tinywl_server *server,
 	assert(device->keyboard);
 	struct tinywl_keyboard *keyboard =
 		calloc(1, sizeof(struct tinywl_keyboard));
+	assert(keyboard);
 	keyboard->magic = QUBES_KEYBOARD_MAGIC;
 	keyboard->server = server;
 	keyboard->device = device;
@@ -290,9 +291,9 @@ static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_s
 			.flags_unset = flags_unset,
 		},
 	};
-	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.flags, "bug");
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.flags);
 	// Asserted above, checked at call sites
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
 #endif
 }
 
@@ -318,7 +319,7 @@ static void qubes_set_view_title(struct tinywl_view *view)
 	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.title, "bug");
 	strncpy(msg.title.data, view->xdg_surface->toplevel->title, sizeof(msg.title.data) - 1);
 	// Asserted above, checked at call sites
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
 #endif
 }
 
@@ -361,7 +362,7 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 		},
 	};
 	// This is MSG_CREATE
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg));
+	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
 	view->flags |= QUBES_OUTPUT_CREATED;
 #endif
 	return true;
@@ -419,7 +420,7 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 	};
 	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.info, "bug");
 	// Surface created above
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg));
+	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg);
 
 #endif
 }
@@ -441,7 +442,7 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 		.untrusted_len = 0,
 	};
 	if (qubes_output_created(view))
-		assert(qubes_rust_send_message(view->server->backend->rust_backend, &header));
+		qubes_rust_send_message(view->server->backend->rust_backend, &header);
 #endif
 }
 
@@ -466,7 +467,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		.untrusted_len = 0,
 	};
 	if (qubes_output_created(view))
-		assert(qubes_rust_send_message(view->server->backend->rust_backend, &header));
+		qubes_rust_send_message(view->server->backend->rust_backend, &header);
 	qubes_rust_delete_id(view->server->backend->rust_backend, view->window_id);
 #endif
 	if (view->scene_subsurface_tree)
@@ -665,29 +666,32 @@ cleanup:
 }
 
 int main(int argc, char *argv[]) {
-	wlr_log_init(WLR_DEBUG, NULL);
-	char *startup_cmd = NULL;
 
-	int c;
+	const char *startup_cmd = NULL;
+	int c, loglevel = WLR_ERROR;
 	if (argc < 1) {
 		fputs("NULL argv[0] passed\n", stderr);
 		return 1;
 	}
 
-	while ((c = getopt(argc, argv, "s:h")) != -1) {
+	while ((c = getopt(argc, argv, "vs:h")) != -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
 			break;
+		case 'v':
+			loglevel = WLR_DEBUG;
+			break;
 		default:
-			printf("Usage: %s [-s startup command] [--] domid\n", argv[0]);
+			printf("Usage: %s [-v] [-s startup command] [--] domid\n", argv[0]);
 			return 0;
 		}
 	}
 	if (optind != argc - 1) {
-		printf("Usage: %s [-s startup command] [--] domid\n", argv[0]);
+		printf("Usage: %s [-v] [-s startup command] [--] domid\n", argv[0]);
 		return 0;
 	}
+	wlr_log_init(loglevel, NULL);
 	const char *domid_str = argv[argc - 1];
 	if (domid_str[0] < '0' || domid_str[0] > '9') {
 bad_domid:

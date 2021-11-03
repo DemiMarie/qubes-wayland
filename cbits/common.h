@@ -41,6 +41,8 @@ static_assert(LLONG_MIN == INT64_MIN, "wrong LLONG_MIN");
 	_x < _y ? _y : _x; \
 })
 
+#define QUBES_STATIC_ASSERT(a) _Static_assert(a, #a)
+
 enum {
 	QUBES_VIEW_MAGIC = QUBES_MAGIC('v', 'i', 'e', 'w'),
 	QUBES_KEYBOARD_MAGIC = QUBES_MAGIC('k', 'e', 'y', 'b'),

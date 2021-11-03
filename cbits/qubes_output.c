@@ -104,7 +104,7 @@ static void qubes_output_damage(struct tinywl_view *view) {
 			.shmimage = { .x = x1, .y = y1, .width = width, .height = height },
 		};
 		// Created above
-		assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg));
+		qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg);
 	}
 }
 #endif
@@ -147,7 +147,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 			buffer->header.window = view->window_id;
 			buffer->header.type = MSG_WINDOW_DUMP;
 			buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
-			assert(qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header));
+			qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header);
 			qubes_output_damage(view);
 #endif
 		}
@@ -410,7 +410,7 @@ void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t hei
 		},
 	};
 	view->flags &= ~(__typeof__(view->flags))QUBES_OUTPUT_NEED_CONFIGURE;
-	assert(qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg));
+	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg);
 }
 
 static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
