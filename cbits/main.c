@@ -1,11 +1,13 @@
-#define _POSIX_C_SOURCE 200112L
 #include "common.h"
 #include <getopt.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
 #include <inttypes.h>
+#include <fcntl.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
+
 #include <wayland-server-core.h>
 
 #include <wlr/allocator/interface.h>
@@ -241,8 +243,29 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 	struct tinywl_server *server = wl_container_of(
 			listener, server, request_set_selection);
 	struct wlr_seat_request_set_selection_event *event = data;
+	const char **mime_type;
 	assert(QUBES_SERVER_MAGIC == server->magic);
-	wlr_seat_set_selection(server->seat, event->source, event->serial);
+	struct wlr_data_source *source = event->source;
+	wl_array_for_each(mime_type, &source->mime_types) {
+		for (const char *s = *mime_type; *s; ++s)
+			if (*s < 0x21 || *s >= 0x7F)
+				goto exit;
+		wlr_log(WLR_DEBUG, "Received event of MIME type %s", *mime_type);
+		if (!strcmp(*mime_type, "text/plain")) {
+			int pipefds[2], res = pipe2(pipefds, O_CLOEXEC|O_NONBLOCK), ctrl = 0;
+			if (res == -1)
+				break;
+			assert(res == 0);
+			res = ioctl(pipefds[1], FIONBIO, &ctrl);
+			assert(res == 0);
+			wlr_data_source_send(source, *mime_type, pipefds[1]);
+			// TODO: read the data into a buffer asynchronously
+			assert(close(pipefds[0]) == 0);
+			wlr_log(WLR_ERROR, "Sorry, cannot handle data of MIME type text/plain, even though I should be able to");
+		}
+exit:
+	}
+	wlr_seat_set_selection(server->seat, source, event->serial);
 }
 
 static void server_new_output(struct wl_listener *listener, void *data) {
