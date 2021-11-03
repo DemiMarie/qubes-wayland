@@ -58,6 +58,7 @@ extern int qubes_rust_backend_fd(struct qubes_rust_backend *backend);
 typedef void (*qubes_parse_event_callback)(void *raw_view, void *raw_backend, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
 
 extern void qubes_rust_backend_on_fd_ready(struct qubes_rust_backend *, bool, qubes_parse_event_callback, void *);
+extern bool qubes_rust_is_channel_closed(struct qubes_rust_backend *);
 static int qubes_backend_on_fd(int, uint32_t, void *);
 #endif
 
@@ -105,6 +106,7 @@ static int qubes_backend_on_fd(int fd __attribute__((unused)), uint32_t mask, vo
 	assert(!(mask & WL_EVENT_WRITABLE));
 	qubes_rust_backend_on_fd_ready(
 		backend->rust_backend, mask & WL_EVENT_READABLE, qubes_parse_event, backend);
+	assert(!qubes_rust_is_channel_closed(backend->rust_backend));
 	return 0;
 }
 #endif

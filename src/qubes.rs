@@ -64,9 +64,26 @@ impl QubesData {
             }
         }
     }
+
+    fn is_channel_closed(&self) -> bool {
+        return false;
+    }
 }
 
 type RustBackend = QubesData;
+
+#[no_mangle]
+pub unsafe extern "C" fn qubes_rust_is_channel_closed(backend: *mut c_void) -> bool {
+    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).is_channel_closed()) {
+        Ok(e) => e,
+        Err(_) => {
+            drop(std::panic::catch_unwind(|| {
+                eprintln!("Error in Rust event handler");
+            }));
+            std::process::abort();
+        }
+    }
+}
 
 #[no_mangle]
 pub unsafe extern "C" fn qubes_rust_generate_id(
