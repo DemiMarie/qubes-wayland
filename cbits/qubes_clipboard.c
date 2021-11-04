@@ -118,7 +118,7 @@ struct qubes_clipboard_handler *qubes_clipboard_handler_create(struct tinywl_ser
 {
 	struct qubes_clipboard_handler *handler = calloc(sizeof(*handler), 1);
 	if (!handler)
-		return NULL;
+		goto fail;
 	wl_array_init(&handler->clipboard_data);
 	struct msg_hdr header = {
 		.type = MSG_CLIPBOARD_DATA,
@@ -141,7 +141,10 @@ struct qubes_clipboard_handler *qubes_clipboard_handler_create(struct tinywl_ser
 	wl_display_add_destroy_listener(server->wl_display, &handler->display_destroy);
 	return handler;
 fail:
-	wl_array_release(&handler->clipboard_data);
-	free(handler);
+	if (handler) {
+		wl_array_release(&handler->clipboard_data);
+		free(handler);
+	}
+	close(fd);
 	return NULL;
 }

@@ -474,7 +474,6 @@ static void handle_clipboard_request(struct tinywl_view *view)
 			if (handler) {
 				wlr_data_source_send(source, *mime_type, pipefds[1]);
 			} else {
-				assert(close(pipefds[0]) == 0);
 				assert(close(pipefds[1]) == 0);
 			}
 			return;
