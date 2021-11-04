@@ -338,6 +338,33 @@ static void qubes_set_view_title(struct tinywl_view *view)
 #endif
 }
 
+static void qubes_set_view_app_id(struct tinywl_view *view)
+{
+#ifdef BUILD_RUST
+	assert(qubes_output_created(view));
+	assert(view->window_id);
+	wlr_log(WLR_DEBUG, "Sending MSG_WMCLASS (0x%x) to window %" PRIu32, MSG_WMCLASS, view->window_id);
+	struct {
+		struct msg_hdr header;
+		struct msg_wmclass class;
+	} msg = {
+		.header = {
+			.type = MSG_WMCLASS,
+			.window = view->window_id,
+			.untrusted_len = sizeof(struct msg_wmclass),
+		},
+		.class = {
+			.res_class = { 0 },
+			.res_name = { 0 },
+		},
+	};
+	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.class, "bug");
+	strncpy(msg.class.res_class, view->xdg_surface->toplevel->app_id, sizeof(msg.class.res_class) - 1);
+	// Asserted above, checked at call sites
+	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
+#endif
+}
+
 bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 {
 	assert(box);
@@ -416,6 +443,10 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 			// Window created above, so this is safe
 			qubes_set_view_title(view);
 		}
+		if (xdg_surface->toplevel->app_id) {
+			// Window created above, so this is safe
+			qubes_set_view_app_id(view);
+		}
 	}
 
 	wlr_log(WLR_DEBUG, "Sending MSG_MAP (0x%x) to window %" PRIu32, MSG_MAP, view->window_id);
@@ -473,6 +504,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	wl_list_remove(&view->request_maximize.link);
 	wl_list_remove(&view->request_minimize.link);
 	wl_list_remove(&view->set_title.link);
+	wl_list_remove(&view->set_app_id.link);
 	wl_list_remove(&view->commit.link);
 #ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, view->window_id);
@@ -554,6 +586,18 @@ static void qubes_set_title(
 	}
 }
 
+static void qubes_set_app_id(
+		struct wl_listener *listener, void *data __attribute__((unused)))
+{
+	/* QUBES HOOK: MSG_WMNAME: ask GUI daemon to set window app id */
+	struct tinywl_view *view = wl_container_of(listener, view, set_app_id);
+	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL);
+	if (qubes_output_mapped(view)) {
+		// Mapped implies created
+		qubes_set_view_app_id(view);
+	}
+}
 
 static void qubes_new_decoration(struct wl_listener *listener, void *data)
 {
@@ -645,6 +689,8 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	wl_signal_add(&toplevel->events.request_fullscreen, &view->request_fullscreen);
 	view->set_title.notify = qubes_set_title;
 	wl_signal_add(&toplevel->events.set_title, &view->set_title);
+	view->set_app_id.notify = qubes_set_app_id;
+	wl_signal_add(&toplevel->events.set_app_id, &view->set_app_id);
 
 	/* Listen to surface events */
 	view->commit.notify = qubes_surface_commit;
