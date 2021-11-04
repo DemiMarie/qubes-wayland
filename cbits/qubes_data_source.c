@@ -134,6 +134,7 @@ static void qubes_data_source_send(struct wlr_data_source *raw_source, const cha
 	writer->data = qubes_clipboard_data_retain(source->data);
 	writer->display_destroy.notify = qubes_clipboard_writer_on_display_destroy;
 	wl_display_add_destroy_listener(source->display, &writer->display_destroy);
+	qubes_data_writer_write_data(fd, WL_EVENT_WRITABLE, writer);
 	return;
 fail:
 	close(fd);
