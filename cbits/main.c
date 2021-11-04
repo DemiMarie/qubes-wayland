@@ -741,7 +741,10 @@ int main(int argc, char *argv[]) {
 			startup_cmd = optarg;
 			break;
 		case 'v':
-			loglevel = WLR_DEBUG;
+			if (loglevel == WLR_ERROR)
+				loglevel = WLR_INFO;
+			else
+				loglevel = WLR_DEBUG;
 			break;
 		default:
 			printf("Usage: %s [-v] [-s startup command] [--] domid\n", argv[0]);
