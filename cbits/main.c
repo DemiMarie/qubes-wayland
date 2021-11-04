@@ -234,7 +234,8 @@ static void server_new_input(struct wl_listener *listener, void *data) {
 	wlr_seat_set_capabilities(server->seat, caps);
 }
 
-static void seat_request_set_selection(struct wl_listener *listener, void *data) {
+static void seat_request_set_selection(struct wl_listener *listener, void *data)
+{
 	/* This event is raised by the seat when a client wants to set the selection,
 	 * usually when the user copies something. wlroots allows compositors to
 	 * ignore such requests if they so choose, but in tinywl we always honor
@@ -256,22 +257,6 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 		}
 	}
 	// SANITIZE END
-	wl_array_for_each(mime_type, &source->mime_types) {
-		// Sanitized above
-		wlr_log(WLR_DEBUG, "Received event of MIME type %s", *mime_type);
-		if (!strcmp(*mime_type, "text/plain")) {
-			int pipefds[2], res = pipe2(pipefds, O_CLOEXEC|O_NONBLOCK), ctrl = 0;
-			if (res == -1)
-				break;
-			assert(res == 0);
-			res = ioctl(pipefds[1], FIONBIO, &ctrl);
-			assert(res == 0);
-			wlr_data_source_send(source, *mime_type, pipefds[1]);
-			// TODO: read the data into a buffer asynchronously
-			assert(close(pipefds[0]) == 0);
-			wlr_log(WLR_ERROR, "Sorry, cannot handle data of MIME type text/plain, even though I should be able to");
-		}
-	}
 	wlr_seat_set_selection(server->seat, source, event->serial);
 }
 

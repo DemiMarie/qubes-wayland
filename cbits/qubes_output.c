@@ -4,8 +4,13 @@
 #include <string.h>
 #include <inttypes.h>
 
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/render/drm_format_set.h>
+#include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
@@ -19,6 +24,7 @@
 #include "qubes_output.h"
 #include "qubes_allocator.h"
 #include "qubes_backend.h"
+#include "qubes_clipboard.h"
 #include "main.h"
 
 /* Qubes OS doesn’t support gamma LUTs */
@@ -432,6 +438,37 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 	else
 		assert(0 && "not implemented");
 }
+static void handle_clipboard_request(struct tinywl_view *view)
+{
+	struct tinywl_server *server = view->server;
+	assert(server);
+	struct wlr_seat *seat = server->seat;
+	assert(seat);
+	if (!seat->selection_source)
+		return; /* Nothing to do */
+	struct wlr_data_source *const source = seat->selection_source;
+	char **mime_type;
+	wl_array_for_each(mime_type, &source->mime_types) {
+		// MIME types are already sanitized against injection attacks
+		wlr_log(WLR_DEBUG, "Received event of MIME type %s", *mime_type);
+		if (!strcmp(*mime_type, "text/plain")) {
+			int pipefds[2], res = pipe2(pipefds, O_CLOEXEC|O_NONBLOCK), ctrl = 0;
+			if (res == -1)
+				return;
+			assert(res == 0);
+			res = ioctl(pipefds[1], FIONBIO, &ctrl);
+			assert(res == 0);
+			struct qubes_clipboard_handler *handler = qubes_clipboard_handler_create(server, pipefds[0]);
+			if (handler) {
+				wlr_data_source_send(source, *mime_type, pipefds[1]);
+			} else {
+				assert(close(pipefds[0]) == 0);
+				assert(close(pipefds[1]) == 0);
+			}
+			return;
+		}
+	}
+}
 
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
 {
@@ -504,6 +541,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 		break;
 	case MSG_CLIPBOARD_REQ:
 		assert(hdr.untrusted_len == 0);
+		handle_clipboard_request(view);
 		break;
 	case MSG_CLIPBOARD_DATA:
 		break;
