@@ -194,7 +194,7 @@ fail:
 	free(source);
 	free(data);
 destroy_mime:
-	for (size_t i = 0; i < sizeof(mime_types)/sizeof(mime_types[0]) - 1; ++i) {
+	for (size_t i = 0; i < sizeof(mime_types)/sizeof(mime_types[0]); ++i) {
 		free(mime_types[i]);
 	}
 	return NULL;
