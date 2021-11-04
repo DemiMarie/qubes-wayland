@@ -19,7 +19,6 @@
 struct qubes_data_source {
 	struct wlr_data_source inner;
 	struct qubes_clipboard_data *data;
-	struct wl_listener display_destroy;
 	struct wl_display *display;
 };
 
@@ -144,17 +143,10 @@ fail:
 	free(writer);
 }
 
-static void qubes_data_source_on_display_destroy(struct wl_listener *listener, void *data QUBES_UNUSED)
-{
-	struct qubes_data_source *source = wl_container_of(listener, source, display_destroy);
-	wlr_data_source_destroy((struct wlr_data_source *)source);
-}
-
 static void qubes_data_source_destroy(struct wlr_data_source *raw_source)
 {
 	wlr_log(WLR_DEBUG, "Destroying global clipboard sender");
 	struct qubes_data_source *source = qubes_data_source_from_wlr_data_source(raw_source);
-	wl_list_remove(&source->display_destroy.link);
 	qubes_clipboard_data_release(source->data);
 	free(source);
 }
@@ -190,8 +182,6 @@ struct qubes_data_source *qubes_data_source_create(struct wl_display *display, u
 	data->refcount = 1;
 	data->size = len;
 	source->display = display;
-	source->display_destroy.notify = qubes_data_source_on_display_destroy;
-	wl_display_add_destroy_listener(display, &source->display_destroy);
 	char **mime_ptr = wl_array_add(&source->inner.mime_types, sizeof(mime_types));
 	if (!mime_ptr) {
 		wlr_data_source_destroy(&source->inner);
