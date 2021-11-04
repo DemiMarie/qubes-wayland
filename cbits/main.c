@@ -246,10 +246,18 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 	const char **mime_type;
 	assert(QUBES_SERVER_MAGIC == server->magic);
 	struct wlr_data_source *source = event->source;
+	// Sanitize MIME types
 	wl_array_for_each(mime_type, &source->mime_types) {
-		for (const char *s = *mime_type; *s; ++s)
-			if (*s < 0x21 || *s >= 0x7F)
-				goto exit;
+		for (const char *s = *mime_type; *s; ++s) {
+			if (*s < 0x21 || *s >= 0x7F) {
+				wlr_log(WLR_ERROR, "Refusing to set selection with bad MIME type");
+				return;
+			}
+		}
+	}
+	// SANITIZE END
+	wl_array_for_each(mime_type, &source->mime_types) {
+		// Sanitized above
 		wlr_log(WLR_DEBUG, "Received event of MIME type %s", *mime_type);
 		if (!strcmp(*mime_type, "text/plain")) {
 			int pipefds[2], res = pipe2(pipefds, O_CLOEXEC|O_NONBLOCK), ctrl = 0;
@@ -263,7 +271,6 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 			assert(close(pipefds[0]) == 0);
 			wlr_log(WLR_ERROR, "Sorry, cannot handle data of MIME type text/plain, even though I should be able to");
 		}
-exit:
 	}
 	wlr_seat_set_selection(server->seat, source, event->serial);
 }
