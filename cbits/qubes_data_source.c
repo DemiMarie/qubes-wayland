@@ -79,6 +79,7 @@ static int qubes_data_writer_write_data(int const fd, uint32_t const mask, void 
 	assert(handler);
 	assert(handler->source);
 	assert(handler->data);
+	assert(fd == handler->fd);
 	struct qubes_clipboard_data *data = handler->data;
 	assert(data->refcount > 0 && "Use after free!");
 	wlr_log(WLR_DEBUG, "Sending clipboard data to client");
@@ -133,6 +134,7 @@ static void qubes_data_source_send(struct wlr_data_source *raw_source, const cha
 	writer->bytes_remaining = source->data->size;
 	writer->data = qubes_clipboard_data_retain(source->data);
 	writer->display_destroy.notify = qubes_clipboard_writer_on_display_destroy;
+	writer->fd = fd;
 	wl_display_add_destroy_listener(source->display, &writer->display_destroy);
 	qubes_data_writer_write_data(fd, WL_EVENT_WRITABLE, writer);
 	return;
