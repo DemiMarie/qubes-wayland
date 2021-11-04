@@ -25,6 +25,7 @@
 #include "qubes_allocator.h"
 #include "qubes_backend.h"
 #include "qubes_clipboard.h"
+#include "qubes_data_source.h"
 #include "main.h"
 
 /* Qubes OS doesn’t support gamma LUTs */
@@ -438,6 +439,17 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 	else
 		assert(0 && "not implemented");
 }
+
+static void handle_clipboard_data(struct tinywl_view *view, uint32_t len, const uint8_t *ptr)
+{
+	struct tinywl_server *server = view->server;
+	assert(server);
+	struct wlr_seat *seat = server->seat;
+	assert(seat);
+	struct qubes_data_source *source = qubes_data_source_create(server->wl_display, len, ptr);
+	wlr_seat_set_selection(server->seat, (struct wlr_data_source *)source, wl_display_get_serial(server->wl_display));
+}
+
 static void handle_clipboard_request(struct tinywl_view *view)
 {
 	struct tinywl_server *server = view->server;
@@ -544,6 +556,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 		handle_clipboard_request(view);
 		break;
 	case MSG_CLIPBOARD_DATA:
+		handle_clipboard_data(view, hdr.untrusted_len, ptr);
 		break;
 	case MSG_KEYMAP_NOTIFY:
 		assert(hdr.untrusted_len == sizeof(struct msg_keymap_notify));
