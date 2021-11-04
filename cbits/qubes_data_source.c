@@ -86,8 +86,7 @@ retry:
 	assert(handler->bytes_remaining <= data->size && "Wrote too many bytes!");
 	ssize_t res = write(fd, data->data + (data->size - handler->bytes_remaining), handler->bytes_remaining);
 	if (res == -1) {
-		int err = errno;
-		switch (err) {
+		switch (errno) {
 		case EAGAIN:
 #if EAGAIN != EWOULDBLOCK
 		case EWOULDBLOCK:
@@ -99,7 +98,6 @@ retry:
 			abort();
 		default:
 			wlr_log(WLR_ERROR, "Error writing to pipe");
-			goto done;
 		}
 	} else {
 		assert(res > 0 && (size_t)res <= (size_t)handler->bytes_remaining && "Bad return from write()!");
@@ -107,7 +105,6 @@ retry:
 		if (handler->bytes_remaining)
 			goto retry;
 	}
-done:
 	qubes_clipboard_writer_destroy(handler);
 	return 0;
 }
