@@ -33,6 +33,7 @@ struct tinywl_view {
 	struct wl_listener request_fullscreen;
 	struct wl_listener request_minimize;
 	struct wl_listener set_title;
+	struct wl_listener set_app_id;
 	struct wl_listener commit;
 	struct qubes_output output;
 	int x, y, left, top;
