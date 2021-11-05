@@ -53,7 +53,7 @@ static int qubes_on_clipboard_data(int const fd, uint32_t const mask, void *data
 	assert(fd == handler->fd && "Wrong file descriptor");
 	wlr_log(WLR_DEBUG, "Processing clipboard data from client");
 	assert(clipboard_data->size <= clipboard_data->alloc && "corrupt wl_array");
-retry:
+retry:;
 	size_t const size = clipboard_data->size;
 	assert(clipboard_data->size <= (size_t)MAX_CLIPBOARD_MESSAGE_SIZE && "already made array too large?");
 	if (clipboard_data->alloc <= size) {

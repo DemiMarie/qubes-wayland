@@ -497,7 +497,9 @@ static void handle_keymap(struct qubes_backend *backend,
 			const uint8_t old_pressed = prev_key & shift, is_pressed = keymask & shift;
 			assert(is_pressed == shift || is_pressed == 0);
 			assert(old_pressed == shift || old_pressed == 0);
+#ifdef GCC_BUG_WORKAROUND
 			backend->keymap.keys[i] = (backend->keymap.keys[i] & ~shift) | is_pressed;
+#endif
 			if (1) {
 				if (!old_pressed || is_pressed) {
 					continue;
@@ -516,8 +518,8 @@ static void handle_keymap(struct qubes_backend *backend,
 			wlr_keyboard_notify_key(keyboard, &event);
 		}
 	}
-	assert(!memcmp(backend->keymap.keys, ptr, sizeof(struct msg_keymap_notify)));
-	// memcpy(backend->keymap.keys, ptr, sizeof(struct msg_keymap_notify));
+	// assert(!memcmp(backend->keymap.keys, ptr, sizeof(struct msg_keymap_notify)));
+	memcpy(backend->keymap.keys, ptr, sizeof(struct msg_keymap_notify));
 }
 
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
