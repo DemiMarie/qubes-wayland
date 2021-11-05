@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "common.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -765,6 +766,11 @@ static int qubes_clean_exit(int signal_number, void *data)
 	wl_display_terminate(((struct tinywl_server *)data)->wl_display);
 	return 0;
 }
+volatile sig_atomic_t crashing = 0;
+
+static void sigpipe_handler(int signum, siginfo_t *siginfo, void *ucontext)
+{
+}
 
 int main(int argc, char *argv[]) {
 
@@ -820,6 +826,16 @@ bad_domid:
 			goto bad_domid;
 		domid = raw_domid;
 	} else goto bad_domid;
+
+	struct sigaction sigpipe = {
+		.sa_sigaction = sigpipe_handler,
+		.sa_flags = SA_SIGINFO | SA_RESTART,
+	}, old_sighnd;
+	sigemptyset(&sigpipe.sa_mask);
+	if (sigaction(SIGPIPE, &sigpipe, &old_sighnd)) {
+		wlr_log(WLR_ERROR, "Cannot set up signal handler: %s", strerror(errno));
+		return 1;
+	}
 
 	struct tinywl_server *server = calloc(1, sizeof(*server));
 	if (!server) {
