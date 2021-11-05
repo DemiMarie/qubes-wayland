@@ -887,6 +887,9 @@ bad_domid:
 	 * see the handling of the request_set_selection event below.*/
 	wlr_compositor_create(server->wl_display, server->renderer);
 	wlr_data_device_manager_create(server->wl_display);
+
+	/* Enable server-side decorations.  By default, Wayland clients decorate
+	 * themselves, but that will lead to duplicate decorations on Qubes OS. */
 	server->old_manager =
 		wlr_server_decoration_manager_create(server->wl_display);
 	if (server->old_manager) {
