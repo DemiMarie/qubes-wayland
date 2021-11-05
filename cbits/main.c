@@ -1,9 +1,11 @@
 #include "common.h"
-#include <getopt.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <time.h>
+#include <signal.h>
 #include <inttypes.h>
+
+#include <getopt.h>
+#include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
@@ -49,11 +51,13 @@
  * - MSG_CURSOR: requires some sort of image recognition
  */
 
+// A single *physical* output (in the GUI daemon).
+// Owned by the wlr_output.
 struct tinywl_output {
 	struct wl_list link;
 	struct tinywl_server *server;
+	struct wl_listener output_destroy;
 	struct wlr_output *wlr_output;
-	struct wl_listener frame;
 };
 
 struct tinywl_keyboard {
@@ -260,6 +264,15 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 	wlr_seat_set_selection(server->seat, source, event->serial);
 }
 
+static void qubes_output_destroy(struct wl_listener *listener, void *data QUBES_UNUSED)
+{
+	struct tinywl_output *output =
+		wl_container_of(listener, output, output_destroy);
+	wl_list_remove(&output->output_destroy.link);
+	wl_list_remove(&output->link);
+	free(output);
+}
+
 static void server_new_output(struct wl_listener *listener, void *data) {
 	/* This event is raised by the backend when a new output (aka a display oe
 	 * monitor) becomes available. */
@@ -273,6 +286,8 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 		calloc(1, sizeof(struct tinywl_output));
 	output->wlr_output = wlr_output;
 	output->server = server;
+	output->output_destroy.notify = qubes_output_destroy;
+	wl_signal_add(&wlr_output->events.destroy, &output->output_destroy);
 	wl_list_insert(&server->outputs, &output->link);
 
 	// assert(!wl_list_empty(&wlr_output->modes));
@@ -519,7 +534,10 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 #endif
 	if (view->scene_subsurface_tree)
 		wlr_scene_node_destroy(view->scene_subsurface_tree);
+	if (view->scene_output)
+		wlr_scene_output_destroy(view->scene_output);
 	wlr_output_destroy(&view->output.output);
+	free(view->scene);
 	free(view);
 }
 
@@ -726,6 +744,27 @@ cleanup:
 	return;
 }
 
+static int qubes_clean_exit(int signal_number, void *data)
+{
+	char *sig;
+	switch (signal_number) {
+	case SIGTERM:
+		sig = "SIGTERM";
+		break;
+	case SIGHUP:
+		sig = "SIGHUP";
+		break;
+	case SIGINT:
+		sig = "SIGINT";
+		break;
+	default:
+		abort();
+	}
+	wlr_log(WLR_ERROR, "Terminating due to signal %s", sig);
+	wl_display_terminate(((struct tinywl_server *)data)->wl_display);
+	return 0;
+}
+
 int main(int argc, char *argv[]) {
 
 	const char *startup_cmd = NULL;
@@ -917,6 +956,20 @@ bad_domid:
 		return 1;
 	}
 
+	/*
+	 * Add signal handlers for SIGTERM, SIGINT, and SIGHUP
+	 */
+	struct wl_event_source *sigterm = wl_event_loop_add_signal(loop,
+		SIGTERM, qubes_clean_exit, server);
+	struct wl_event_source *sigint = wl_event_loop_add_signal(loop,
+		SIGINT, qubes_clean_exit, server);
+	struct wl_event_source *sighup = wl_event_loop_add_signal(loop,
+		SIGHUP, qubes_clean_exit, server);
+	if (!sigterm || !sigint || !sighup) {
+		wlr_log(WLR_ERROR, "Cannot setup signal handlers");
+		return 1;
+	}
+
 	/* Set the WAYLAND_DISPLAY environment variable to our socket and run the
 	 * startup command if requested. */
 	setenv("WAYLAND_DISPLAY", socket, true);
@@ -934,8 +987,23 @@ bad_domid:
 			socket);
 	wl_display_run(server->wl_display);
 
-	/* Once wl_display_run returns, we shut down the server-> */
+	/* Once wl_display_run returns, we shut down the server */
 	wl_display_destroy_clients(server->wl_display);
+	wl_event_source_remove(sighup);
+	wl_event_source_remove(sigint);
+	wl_event_source_remove(sigterm);
+
+	struct tinywl_keyboard *keyboard_to_free, *tmp_keyboard;
+	wl_list_for_each_safe(keyboard_to_free, tmp_keyboard, &server->keyboards, link) {
+		wl_list_remove(&keyboard_to_free->key.link);
+		wl_list_remove(&keyboard_to_free->modifiers.link);
+		wl_list_remove(&keyboard_to_free->link);
+		// wlr_input_device_destroy(keyboard_to_free->input_device);
+		free(keyboard_to_free);
+	}
+	wlr_renderer_destroy(server->renderer);
+	wlr_allocator_destroy(server->allocator);
+	wlr_output_layout_destroy(server->output_layout);
 	wl_display_destroy(server->wl_display);
 	free(server);
 	return 0;

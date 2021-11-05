@@ -25,6 +25,9 @@ enum tinywl_cursor_mode {
 	TINYWL_CURSOR_RESIZE,
 };
 
+/**
+ * Qubes OS server.  Freed at end of main().
+ */
 struct tinywl_server {
 	struct wl_display *wl_display;
 	struct qubes_backend *backend;

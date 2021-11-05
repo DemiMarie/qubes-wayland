@@ -11,6 +11,10 @@
 #endif
 
 struct qubes_rust_backend;
+
+/**
+ * Qubes OS backend.  Owned by the wl_display.
+ */
 struct qubes_backend {
 	struct wlr_backend backend;
 	struct wl_display *display;

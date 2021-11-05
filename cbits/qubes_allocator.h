@@ -8,9 +8,15 @@
 #include <xen/gntalloc.h>
 #endif
 
+/**
+ * Creates an allocator, owned by main()
+ */
 struct wlr_allocator *qubes_allocator_create(uint16_t domid);
 extern const struct wlr_buffer_impl *qubes_buffer_impl_addr;
 
+/**
+ * Qubes OS buffer.  Owned by wlroots.
+ */
 struct qubes_buffer {
 	struct wlr_buffer inner;
 	void *ptr;
