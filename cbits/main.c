@@ -537,7 +537,8 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	if (view->scene_output)
 		wlr_scene_output_destroy(view->scene_output);
 	wlr_output_destroy(&view->output.output);
-	free(view->scene);
+	if (view->scene)
+		wlr_scene_node_destroy(&view->scene->node);
 	free(view);
 }
 
