@@ -532,6 +532,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		qubes_rust_send_message(view->server->backend->rust_backend, &header);
 	qubes_rust_delete_id(view->server->backend->rust_backend, view->window_id);
 #endif
+	assert(wl_list_empty(&view->output.output.modes));
 	if (view->scene_subsurface_tree)
 		wlr_scene_node_destroy(view->scene_subsurface_tree);
 	if (view->scene_output)

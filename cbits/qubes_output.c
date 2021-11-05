@@ -219,6 +219,7 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 
 	output->buffer = NULL;
 	output->buffer_destroy.notify = qubes_unlink_buffer_listener;
+	assert(output->formats == NULL);
 	output->formats = &global_formats;
 	output->frame.notify = qubes_output_frame;
 	wl_signal_add(&output->output.events.frame, &output->frame);
@@ -261,7 +262,7 @@ static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const 
 	}
 	struct wlr_event_keyboard_key event = {
 		.time_msec = timestamp,
-		.keycode = keypress.keycode - 8,
+		.keycode = keycode,
 		.update_state = true,
 		.state = state,
 	};
@@ -481,6 +482,44 @@ static void handle_clipboard_request(struct tinywl_view *view)
 	}
 }
 
+static void handle_keymap(struct qubes_backend *backend,
+                          uint32_t timestamp,
+                          const uint8_t ptr[static sizeof(struct msg_keymap_notify)])
+{
+	_Static_assert(sizeof(backend->keymap) == sizeof(struct msg_keymap_notify), "wrong size");
+	_Static_assert(32 == sizeof(struct msg_keymap_notify), "wrong size");
+	struct wlr_keyboard *keyboard = backend->keyboard_input->keyboard;
+	assert(keyboard);
+	for (size_t i = 0; i < sizeof(struct msg_keymap_notify); ++i) {
+		const uint8_t prev_key = backend->keymap.keys[i], keymask = ptr[i];
+		for (int j = 0; j < 8; ++j) {
+			const uint8_t keycode = (i << 3) | j, shift = UINT8_C(1) << j;
+			const uint8_t old_pressed = prev_key & shift, is_pressed = keymask & shift;
+			assert(is_pressed == shift || is_pressed == 0);
+			assert(old_pressed == shift || old_pressed == 0);
+			backend->keymap.keys[i] = (backend->keymap.keys[i] & ~shift) | is_pressed;
+			if (1) {
+				if (!old_pressed || is_pressed) {
+					continue;
+				}
+			} else {
+				if (old_pressed == is_pressed) {
+					continue;
+				}
+			}
+			struct wlr_event_keyboard_key event = {
+				.time_msec = timestamp,
+				.keycode = keycode,
+				.update_state = true,
+				.state = is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED,
+			};
+			wlr_keyboard_notify_key(keyboard, &event);
+		}
+	}
+	assert(!memcmp(backend->keymap.keys, ptr, sizeof(struct msg_keymap_notify)));
+	// memcpy(backend->keymap.keys, ptr, sizeof(struct msg_keymap_notify));
+}
+
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
 {
 	struct qubes_backend *backend = raw_backend;
@@ -492,27 +531,8 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 			wlr_log(WLR_ERROR, "No window for message of type %" PRIu32, hdr.type);
 			return;
 		}
-		struct wlr_keyboard *keyboard = backend->keyboard_input->keyboard;
-		assert(keyboard);
-		for (int i = 0; i < 32; ++i) {
-			for (int j = 0; j < 8; ++j) {
-				bool is_pressed = ptr[i] & 1 << j;
-				bool old_pressed = backend->keymap.keys[i] & 1 << j;
-				if (!old_pressed || is_pressed)
-					continue;
-				backend->keymap.keys[i] ^= 1 << j;
-				struct wlr_event_keyboard_key event = {
-					.time_msec = timestamp,
-					.keycode = i << 3 | j,
-					.update_state = true,
-					.state = is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED,
-				};
-				wlr_keyboard_notify_key(keyboard, &event);
-			}
-		}
 		assert(hdr.untrusted_len == sizeof(struct msg_keymap_notify));
-		_Static_assert(sizeof(backend->keymap) == sizeof(struct msg_keymap_notify), "wrong size");
-		memcpy(&backend->keymap, ptr, hdr.untrusted_len);
+		handle_keymap(backend, timestamp, ptr);
 		return;
 	}
 	assert(hdr.window == view->window_id);
