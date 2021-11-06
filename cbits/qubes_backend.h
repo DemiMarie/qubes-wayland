@@ -25,11 +25,16 @@ struct qubes_backend {
 	struct qubes_rust_backend *rust_backend;
 	struct wl_event_source *source;
 	struct msg_keymap_notify keymap;
+	struct wl_list *views;
 #endif
 
 	struct wl_listener display_destroy;
 };
+extern int qubes_rust_backend_fd(struct qubes_rust_backend *backend);
 
-struct qubes_backend * qubes_backend_create(struct wl_display *, uint16_t);
+struct qubes_backend * qubes_backend_create(struct wl_display *, uint16_t, struct wl_list *);
+typedef void (*qubes_parse_event_callback)(void *raw_view, void *raw_backend, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
+extern void qubes_rust_backend_on_fd_ready(struct qubes_rust_backend *, bool, qubes_parse_event_callback, void *);
+int qubes_backend_on_fd(int, uint32_t, void *);
 
 #endif

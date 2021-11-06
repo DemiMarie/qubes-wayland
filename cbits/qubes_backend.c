@@ -54,12 +54,8 @@ static bool qubes_backend_start(struct wlr_backend *raw_backend);
 #ifdef BUILD_RUST
 extern void qubes_rust_backend_free(void *ptr);
 extern void *qubes_rust_backend_create(uint16_t domid);
-extern int qubes_rust_backend_fd(struct qubes_rust_backend *backend);
 typedef void (*qubes_parse_event_callback)(void *raw_view, void *raw_backend, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
 
-extern void qubes_rust_backend_on_fd_ready(struct qubes_rust_backend *, bool, qubes_parse_event_callback, void *);
-extern bool qubes_rust_is_channel_closed(struct qubes_rust_backend *);
-static int qubes_backend_on_fd(int, uint32_t, void *);
 #endif
 
 
@@ -101,12 +97,11 @@ static bool qubes_backend_start(struct wlr_backend *raw_backend) {
 }
 
 #ifdef BUILD_RUST
-static int qubes_backend_on_fd(int fd __attribute__((unused)), uint32_t mask, void *data) {
+int qubes_backend_on_fd(int fd __attribute__((unused)), uint32_t mask, void *data) {
 	struct qubes_backend *backend = data;
 	assert(!(mask & WL_EVENT_WRITABLE));
 	qubes_rust_backend_on_fd_ready(
 		backend->rust_backend, mask & WL_EVENT_READABLE, qubes_parse_event, backend);
-	assert(!qubes_rust_is_channel_closed(backend->rust_backend));
 	return 0;
 }
 #endif
@@ -156,7 +151,7 @@ static const struct wlr_output_impl qubes_backend_output_impl = {
 };
 
 struct qubes_backend *
-qubes_backend_create(struct wl_display *display, uint16_t domid) {
+qubes_backend_create(struct wl_display *display, uint16_t domid, struct wl_list *views) {
 	struct qubes_backend *backend = calloc(sizeof(*backend), 1);
 	struct wlr_keyboard *keyboard = calloc(sizeof(*keyboard), 1);
 	struct wlr_output *output = calloc(sizeof(*output), 1);
@@ -180,6 +175,7 @@ qubes_backend_create(struct wl_display *display, uint16_t domid) {
 	backend->mode.refresh = 60000;
 	backend->mode.preferred = true;
 	wl_list_init(&backend->mode.link);
+	backend->views = views;
 	backend->output = output;
 	backend->display = display;
 	backend->keyboard_input = keyboard_input;

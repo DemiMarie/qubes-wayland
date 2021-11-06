@@ -10,7 +10,25 @@ use std::{
 
 pub const OUTPUT_NAME: &str = "qubes";
 
+// NOTE: Enabling and disabling GUI messages
+//
+// The C code in the GUI agent is, for the most part, not aware of the GUI
+// protocol state machine.  This is by design, as it keeps the C code (which is
+// much harder to maintain than Rust) simple.  However, this can cause problems
+// when reconnecting.  The GUI agent will not stop sending messages to the GUI
+// daemon just because the vchan has disconnected.  The Rust code will queue
+// these messages and send them when a new connection is made.  This leads to
+// the GUI daemon disconnecting with a message of the form “msg 0x93 without
+// CREATE for 0x1” (the actual window and message number may vary).
+//
+// To prevent such problems, the Rust code maintains an explicit “enabled” flag
+// This flag is unset when the agent becomes disconnected, and is set when the
+// agent reconnects.  When the flag is unset, all messages from the C code are
+// silently ignored.  This keeps the C code simple and ensures that no messages
+// are sent until the C code has recreated all of the windows.
+
 pub struct QubesData {
+    enabled: bool, // See NOTE: Enabling and disabling GUI messages
     pub agent: qubes_gui_client::Client,
     pub connection: qubes_gui_gntalloc::Agent,
     wid: u32,
@@ -43,13 +61,23 @@ impl QubesData {
         callback: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, qubes_gui::Header, *const u8),
         global_userdata: *mut c_void,
     ) {
+        if self.agent.needs_reconnect() {
+            self.enabled = false;
+            let hdr = qubes_gui::Header {
+                ty: 0,
+                window: 0,
+                untrusted_len: 1,
+            };
+            callback(global_userdata, ptr::null_mut(), 0, hdr, ptr::null());
+            return;
+        }
         if is_readable {
             self.agent.wait();
         }
         loop {
-            match self.agent.read_header().map(Result::unwrap) {
-                Poll::Pending => return,
-                Poll::Ready((hdr, body)) => {
+            let res = self.agent.read_header();
+            match res {
+                Poll::Ready(Ok((hdr, body))) => {
                     assert!(body.len() < (1usize << 20));
                     assert_eq!(body.len() as u32, hdr.untrusted_len);
                     let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
@@ -61,29 +89,36 @@ impl QubesData {
                         callback(global_userdata, ptr::null_mut(), delta, hdr, body.as_ptr());
                     }
                 }
+                Poll::Pending => {
+                    if self.agent.reconnected() {
+                        self.enabled = true;
+                        let hdr = qubes_gui::Header {
+                            ty: 0,
+                            window: 0,
+                            untrusted_len: 2,
+                        };
+                        let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
+                        callback(global_userdata, ptr::null_mut(), delta, hdr, ptr::null());
+                    }
+                    break;
+                }
+
+                Poll::Ready(Err(_)) => {
+                    self.enabled = false;
+                    let hdr = qubes_gui::Header {
+                        ty: 0,
+                        window: 0,
+                        untrusted_len: if self.agent.needs_reconnect() { 1 } else { 3 },
+                    };
+                    callback(global_userdata, ptr::null_mut(), 0, hdr, ptr::null());
+                    break;
+                }
             }
         }
-    }
-
-    fn is_channel_closed(&self) -> bool {
-        return false;
     }
 }
 
 type RustBackend = QubesData;
-
-#[no_mangle]
-pub unsafe extern "C" fn qubes_rust_is_channel_closed(backend: *mut c_void) -> bool {
-    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).is_channel_closed()) {
-        Ok(e) => e,
-        Err(_) => {
-            drop(std::panic::catch_unwind(|| {
-                eprintln!("Error in Rust event handler");
-            }));
-            std::process::abort();
-        }
-    }
-}
 
 #[no_mangle]
 pub unsafe extern "C" fn qubes_rust_generate_id(
@@ -92,6 +127,19 @@ pub unsafe extern "C" fn qubes_rust_generate_id(
 ) -> u32 {
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).id(userdata)) {
         Ok(e) => e.into(),
+        Err(_) => {
+            drop(std::panic::catch_unwind(|| {
+                eprintln!("Unexpected panic");
+            }));
+            std::process::abort();
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn qubes_rust_reconnect(backend: *mut c_void) -> bool {
+    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).agent.reconnect()) {
+        Ok(e) => e.is_ok(),
         Err(_) => {
             drop(std::panic::catch_unwind(|| {
                 eprintln!("Unexpected panic");
@@ -167,6 +215,9 @@ pub unsafe extern "C" fn qubes_rust_send_message(backend: *mut c_void, header: &
         header as *const _ as *const u8,
         header.untrusted_len as usize + core::mem::size_of::<qubes_gui::Header>(),
     );
+    if !(*(backend as *const RustBackend)).enabled {
+        return;
+    }
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).agent.send_raw_bytes(slice))
     {
         Ok(_) => {}
@@ -194,6 +245,7 @@ fn setup_qubes_backend(domid: u16) -> RustBackend {
     QubesData {
         agent,
         connection,
+        enabled: true,
         wid: 1,
         map: Default::default(),
         start: std::time::Instant::now(),

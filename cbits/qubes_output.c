@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 
+#include <wayland-server-core.h>
+
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/types/wlr_data_device.h>
@@ -73,7 +75,6 @@ static void qubes_output_damage(struct tinywl_view *view) {
 		return;
 	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32, (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
 	qubes_send_configure(view, box.width, box.height);
-	wlr_log(WLR_DEBUG, "Sending MSG_HMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
 	int n_rects = 0;
 	if (!(output->output.pending.committed & WLR_OUTPUT_STATE_DAMAGE))
 		return;
@@ -82,6 +83,7 @@ static void qubes_output_damage(struct tinywl_view *view) {
 		wlr_log(WLR_DEBUG, "No damage!");
 		return;
 	}
+	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
 	for (int i = 0; i < n_rects; ++i) {
 		int32_t width, height;
 		// this is the correct approach ― the alternative leads to glitches
@@ -116,6 +118,22 @@ static void qubes_output_damage(struct tinywl_view *view) {
 }
 #endif
 
+static void qubes_output_dump_buffer( struct tinywl_view *view)
+{
+	struct qubes_output *output = &view->output;
+	assert(output->buffer->impl == qubes_buffer_impl_addr);
+	wl_signal_add(&output->buffer->events.destroy, &output->buffer_destroy);
+#ifdef BUILD_RUST
+	wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32, MSG_WINDOW_DUMP, view->window_id);
+	struct qubes_buffer *buffer = wl_container_of(output->buffer, buffer, inner);
+	buffer->header.window = view->window_id;
+	buffer->header.type = MSG_WINDOW_DUMP;
+	buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
+	qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header);
+	qubes_output_damage(view);
+#endif
+}
+
 static bool qubes_output_commit(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
@@ -146,17 +164,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 			wl_list_remove(&output->buffer_destroy.link);
 		output->buffer = raw_output->pending.buffer;
 		if (output->buffer) {
-			assert(output->buffer->impl == qubes_buffer_impl_addr);
-			wl_signal_add(&output->buffer->events.destroy, &output->buffer_destroy);
-#ifdef BUILD_RUST
-			wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32, MSG_WINDOW_DUMP, view->window_id);
-			struct qubes_buffer *buffer = wl_container_of(output->buffer, buffer, inner);
-			buffer->header.window = view->window_id;
-			buffer->header.type = MSG_WINDOW_DUMP;
-			buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
-			qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header);
-			qubes_output_damage(view);
-#endif
+			qubes_output_dump_buffer(view);
 		}
 	}
 	wlr_output_update_enabled(raw_output, raw_output->pending.enabled);
@@ -398,6 +406,8 @@ void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t hei
 {
 	if (!qubes_output_need_configure(view))
 		return;
+	if (width <= 0 || height <= 0)
+		return;
 	wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
 	struct {
 		struct msg_hdr header;
@@ -432,6 +442,15 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 	if (configure.width == (uint32_t)view->last_width &&
 	    configure.height == (uint32_t)view->last_height) {
 		return;
+	}
+	if (configure.width <= 0 || configure.height <= 0) {
+		wlr_log(WLR_ERROR,
+		        "Bad configure from GUI daemon: width %" PRIu32 " height %" PRIu32 " window %" PRIu32,
+		        configure.x,
+		        configure.y,
+		        view->window_id);
+		qubes_send_configure(view, view->last_width, view->last_height);
+		configure.width = view->last_width, configure.height = view->last_height;
 	}
 	wlr_output_update_custom_mode(&view->output.output, configure.width, configure.height, 0);
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
@@ -481,12 +500,75 @@ static void handle_clipboard_request(struct tinywl_view *view)
 	}
 }
 
+// Called when the GUI agent has reconnected to the daemon.
+static void qubes_recreate_window(struct tinywl_view *view)
+{
+	struct wlr_box box;
+	if (!qubes_output_ensure_created(view, &box)) {
+		return;
+	}
+	view->last_width = box.width, view->last_height = box.height;
+	qubes_send_configure(view, box.width, box.height);
+	if (view->output.buffer) {
+		// qubes_output_dump_buffer assumes this
+		wl_list_remove(&view->output.buffer_destroy.link);
+		qubes_output_dump_buffer(view);
+	}
+	if (qubes_output_mapped(view)) {
+		qubes_view_map(view);
+	}
+}
+
+extern bool qubes_rust_reconnect(struct qubes_rust_backend *backend);
+
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
 {
 	struct qubes_backend *backend = raw_backend;
 	struct tinywl_view *view = raw_view;
 
 	assert(raw_backend);
+	if (!ptr) {
+		if (hdr.untrusted_len == 2) {
+			wlr_log(WLR_DEBUG, "Reconnecting to GUI daemon");
+			struct tinywl_view *view;
+			wl_list_for_each(view, backend->views, link) {
+				assert(QUBES_VIEW_MAGIC == view->magic);
+				view->flags &= ~QUBES_OUTPUT_CREATED;
+				view->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
+			}
+			wl_list_for_each(view, backend->views, link) {
+				assert(QUBES_VIEW_MAGIC == view->magic);
+				assert(!(view->flags & QUBES_OUTPUT_CREATED));
+				qubes_recreate_window(view);
+			}
+			return;
+		} else if (hdr.untrusted_len == 1) {
+			wlr_log(WLR_DEBUG, "Must reconnect to GUI daemon");
+		} else {
+			assert(hdr.untrusted_len == 3);
+			wl_display_terminate(backend->display);
+			return;
+		}
+		// GUI agent needs reconnection
+		wl_event_source_remove(backend->source);
+		backend->source = NULL;
+		if (!qubes_rust_reconnect(backend->rust_backend)) {
+			wlr_log(WLR_ERROR, "Fatal error: cannot reconnect to GUI daemon");
+			wl_display_terminate(backend->display);
+			return;
+		}
+		int fd = qubes_rust_backend_fd(backend->rust_backend);
+		struct wl_event_loop *loop = wl_display_get_event_loop(backend->display);
+		backend->source = wl_event_loop_add_fd(loop, fd,
+				WL_EVENT_READABLE | WL_EVENT_HANGUP | WL_EVENT_ERROR,
+				qubes_backend_on_fd,
+				backend);
+		if (!backend->source) {
+			wlr_log(WLR_ERROR, "Fatal error: Cannot re-register vchan file descriptor");
+			wl_display_terminate(backend->display);
+		}
+		return;
+	}
 	if (!view) {
 		if (hdr.type != MSG_KEYMAP_NOTIFY) {
 			wlr_log(WLR_ERROR, "No window for message of type %" PRIu32, hdr.type);

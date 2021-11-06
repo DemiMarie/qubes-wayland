@@ -432,15 +432,22 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
 	struct tinywl_view *view = wl_container_of(listener, view, map);
 	assert(QUBES_VIEW_MAGIC == view->magic);
+	qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
+	qubes_view_map(view);
+}
+
+void qubes_view_map(struct tinywl_view *view)
+{
 	struct wlr_box box;
 	if (!qubes_output_ensure_created(view, &box))
 		return;
 	struct wlr_xdg_surface *xdg_surface = view->xdg_surface;
-	view->flags |= QUBES_OUTPUT_MAPPED;
-	wlr_scene_node_set_enabled(&view->scene_output->scene->node, true);
-	wlr_scene_node_set_enabled(view->scene_subsurface_tree, true);
-	wlr_output_enable(&view->output.output, true);
-	qubes_give_view_keyboard_focus(view, xdg_surface->surface);
+	if (!qubes_output_mapped(view)) {
+		view->flags |= QUBES_OUTPUT_MAPPED;
+		wlr_scene_node_set_enabled(&view->scene_output->scene->node, true);
+		wlr_scene_node_set_enabled(view->scene_subsurface_tree, true);
+		wlr_output_enable(&view->output.output, true);
+	}
 #ifdef BUILD_RUST
 	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		uint32_t flags_to_set = 0, flags_to_unset = 0;
@@ -856,7 +863,7 @@ bad_domid:
 	 * output hardware. The autocreate option will choose the most suitable
 	 * backend based on the current environment, such as opening an X11 window
 	 * if an X11 server is running. */
-	if (!(server->backend = qubes_backend_create(server->wl_display, domid))) {
+	if (!(server->backend = qubes_backend_create(server->wl_display, domid, &server->views))) {
 		wlr_log(WLR_ERROR, "Cannot create wlr_backend");
 		return 1;
 	}
