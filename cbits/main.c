@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <signal.h>
 #include <inttypes.h>
+#include "config.h"
+#ifdef QUBES_HAS_SYSTEMD
+#include <systemd/sd-daemon.h>
+#endif
 
 #include <getopt.h>
 #include <time.h>
@@ -993,6 +997,9 @@ bad_domid:
 	struct wl_event_source *sighup = wl_event_loop_add_signal(loop,
 		SIGHUP, qubes_clean_exit, server);
 	if (!sigterm || !sigint || !sighup) {
+#ifdef QUBES_HAS_SYSTEMD
+		sd_notifyf(0, "ERRNO=%d", errno);
+#endif
 		wlr_log(WLR_ERROR, "Cannot setup signal handlers");
 		return 1;
 	}
@@ -1002,6 +1009,7 @@ bad_domid:
 	setenv("WAYLAND_DISPLAY", socket, true);
 	if (startup_cmd) {
 		if (fork() == 0) {
+			unsetenv("NOTIFY_SOCKET");
 			execl("/bin/sh", "/bin/sh", "-c", startup_cmd, (void *)NULL);
 		}
 	}
@@ -1012,6 +1020,9 @@ bad_domid:
 	 * frame events at the refresh rate, and so on. */
 	wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s",
 			socket);
+#ifdef QUBES_HAS_SYSTEMD
+	sd_notify(0, "READY=1");
+#endif
 	wl_display_run(server->wl_display);
 
 	/* Once wl_display_run returns, we shut down the server */

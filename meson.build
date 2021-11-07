@@ -114,11 +114,18 @@ rust_parts = custom_target(
 
 threads = dependency('threads')
 vchan_xen = dependency('vchan-xen')
+systemd = dependency('libsystemd', required: false)
+conf_data = configuration_data()
+conf_data.set('QUBES_HAS_SYSTEMD', systemd.found(), description: 'Is systemd found?')
+conf_h = configure_file(
+  output: 'config.h',
+  configuration: conf_data,
+)
 
 bin_compositor = executable(
   meson.project_name(),
   qubes_files,
-  dependencies: [wlroots_proj.get_variable('wlroots'), threads, vchan_xen, dl],
+  dependencies: [wlroots_proj.get_variable('wlroots'), threads, vchan_xen, dl, systemd],
   include_directories: ['cbits', include_directories('.')],
   link_with: [rust_parts[0]],
   install: true,
