@@ -445,7 +445,7 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 		        configure.x,
 		        configure.y,
 		        view->window_id);
-		configure.width = view->last_width, configure.height = view->last_height;
+		return;
 	}
 	wlr_output_update_custom_mode(&view->output.output, configure.width, configure.height, 0);
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
