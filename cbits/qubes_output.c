@@ -135,6 +135,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	struct tinywl_view *view = wl_container_of(output, view, output);
 	assert(QUBES_VIEW_MAGIC == view->magic);
+
 	struct wlr_box box;
 	if (!qubes_output_ensure_created(view, &box))
 		return false;
@@ -145,14 +146,8 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 			raw_output->pending.custom_mode.width,
 			raw_output->pending.custom_mode.height,
 			raw_output->pending.custom_mode.refresh);
-#ifdef BUILD_RUST
-		qubes_send_configure(
-			view,
-			raw_output->pending.custom_mode.width,
-			raw_output->pending.custom_mode.height
-		);
-#endif
 	}
+	qubes_send_configure(view, box.width, box.height);
 
 	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
 	    (output->buffer != raw_output->pending.buffer)) {
@@ -434,6 +429,8 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 	view->top = configure.y;
 	// Just ACK the configure
 	view->flags |= (__typeof__(view->flags))QUBES_OUTPUT_NEED_CONFIGURE;
+	wlr_log(WLR_DEBUG, "handle_configure: old size %u %u, new size %u %u",
+	        view->last_width, view->last_height, configure.width, configure.height);
 	qubes_send_configure(view, configure.width, configure.height);
 	if (configure.width == (uint32_t)view->last_width &&
 	    configure.height == (uint32_t)view->last_height) {
@@ -447,7 +444,8 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 		        view->window_id);
 		return;
 	}
-	wlr_output_update_custom_mode(&view->output.output, configure.width, configure.height, 0);
+	view->last_width = configure.width, view->last_height = configure.height;
+	wlr_output_set_custom_mode(&view->output.output, configure.width, configure.height, 60000);
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
 		wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
 	else

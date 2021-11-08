@@ -654,10 +654,15 @@ static void qubes_surface_commit(
 #endif
 	if (view->last_width != box.width || view->last_height != box.height) {
 		view->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
+		qubes_send_configure(view, box.width, box.height);
+		wlr_log(WLR_DEBUG,
+		        "Resized window %u: old size %u %u, new size %u %u",
+		        (unsigned)view->window_id, view->last_width,
+		        view->last_height, box.width, box.height);
+		wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 		view->last_width = box.width;
 		view->last_height = box.height;
 	}
-	wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
 	// wlr_output_enable(&view->output.output, true);
 	assert(view->scene_output->output == &view->output.output);
 	wlr_output_send_frame(&view->output.output);
