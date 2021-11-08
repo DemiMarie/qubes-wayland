@@ -68,13 +68,9 @@ static bool qubes_output_test(struct wlr_output *raw_output) {
 }
 
 #ifdef BUILD_RUST
-static void qubes_output_damage(struct tinywl_view *view) {
-	struct wlr_box box;
+static void qubes_output_damage(struct tinywl_view *view, struct wlr_box box) {
 	struct qubes_output *output = &view->output;
-	if (!qubes_output_ensure_created(view, &box))
-		return;
 	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32, (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
-	qubes_send_configure(view, box.width, box.height);
 	int n_rects = 0;
 	if (!(output->output.pending.committed & WLR_OUTPUT_STATE_DAMAGE))
 		return;
@@ -118,7 +114,7 @@ static void qubes_output_damage(struct tinywl_view *view) {
 }
 #endif
 
-static void qubes_output_dump_buffer( struct tinywl_view *view)
+static void qubes_output_dump_buffer(struct tinywl_view *view, struct wlr_box box)
 {
 	struct qubes_output *output = &view->output;
 	assert(output->buffer->impl == qubes_buffer_impl_addr);
@@ -130,7 +126,7 @@ static void qubes_output_dump_buffer( struct tinywl_view *view)
 	buffer->header.type = MSG_WINDOW_DUMP;
 	buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
 	qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header);
-	qubes_output_damage(view);
+	qubes_output_damage(view, box);
 #endif
 }
 
@@ -164,7 +160,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 			wl_list_remove(&output->buffer_destroy.link);
 		output->buffer = raw_output->pending.buffer;
 		if (output->buffer) {
-			qubes_output_dump_buffer(view);
+			qubes_output_dump_buffer(view, box);
 		}
 	}
 	wlr_output_update_enabled(raw_output, raw_output->pending.enabled);
@@ -512,7 +508,7 @@ static void qubes_recreate_window(struct tinywl_view *view)
 	if (view->output.buffer) {
 		// qubes_output_dump_buffer assumes this
 		wl_list_remove(&view->output.buffer_destroy.link);
-		qubes_output_dump_buffer(view);
+		qubes_output_dump_buffer(view, box);
 	}
 	if (qubes_output_mapped(view)) {
 		qubes_view_map(view);
