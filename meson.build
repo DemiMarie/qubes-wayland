@@ -129,4 +129,5 @@ bin_compositor = executable(
   include_directories: ['cbits', include_directories('.')],
   link_with: [rust_parts[0]],
   install: true,
+  gnu_symbol_visibility: 'hidden',
 )
