@@ -335,6 +335,11 @@ static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_s
 static void qubes_set_view_title(struct tinywl_view *view)
 {
 #ifdef BUILD_RUST
+	if (!strncmp(view->last_title.data,
+	             view->xdg_surface->toplevel->title,
+	             sizeof(view->last_title.data) - 1)) {
+		return;
+	}
 	assert(qubes_output_created(view));
 	assert(view->window_id);
 	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
@@ -352,7 +357,12 @@ static void qubes_set_view_title(struct tinywl_view *view)
 		},
 	};
 	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.title, "bug");
-	strncpy(msg.title.data, view->xdg_surface->toplevel->title, sizeof(msg.title.data) - 1);
+	strncpy(msg.title.data,
+	        view->xdg_surface->toplevel->title,
+	        sizeof(msg.title.data) - 1);
+	strncpy(view->last_title.data,
+	        view->xdg_surface->toplevel->title,
+	        sizeof(view->last_title.data) - 1);
 	// Asserted above, checked at call sites
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
 #endif

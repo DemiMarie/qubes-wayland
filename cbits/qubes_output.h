@@ -41,6 +41,7 @@ struct tinywl_view {
 	uint32_t window_id;
 	uint32_t magic;
 	uint32_t flags;
+	struct msg_wmname last_title;
 };
 
 enum {
