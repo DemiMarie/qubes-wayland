@@ -1,3 +1,6 @@
+#ifdef _GNU_SOURCE
+#undef _GNU_SOURCE
+#endif
 #define _POSIX_C_SOURCE 200809L
 #include "common.h"
 #ifndef BUILD_RUST
@@ -90,6 +93,51 @@ struct wlr_allocator *qubes_allocator_create(uint16_t domid) {
 #define XC_PAGE_SIZE 4096
 #endif
 
+static void report_gntalloc_error(void) {
+	const int err = errno;
+	char buf[256];
+	int e = strerror_r(err, buf, sizeof buf);
+	buf[sizeof buf - 1] = '\0';
+	if (e != 0) {
+		wlr_log(WLR_ERROR, "Grant ref alloc failed with unknown error %d", err);
+	} else {
+		wlr_log(WLR_ERROR, "Grant ref alloc failed with errno %d: %s", err, buf);
+	}
+	if (err != ENOSPC) {
+		return;
+	}
+	bool good = false;
+	static const char *const path = "/sys/module/xen_gntalloc/parameters/limit";
+	int params_fd = open(path, O_RDONLY|O_CLOEXEC|O_NOCTTY);
+	if (params_fd >= 0) {
+		ssize_t len = read(params_fd, buf, sizeof buf);
+		buf[sizeof buf - 1] = '\0';
+		if (len > 0) {
+			if (len > 1 && buf[len - 1] == '\n') {
+				buf[len - 1] = '\0';
+				len -= 1;
+			} else if ((size_t)len < sizeof buf) {
+				buf[len] = '\0';
+			}
+			good = true;
+			for (ssize_t i = 0; i < len; ++i) {
+				if (buf[i] < '0' || buf[i] > '9') {
+					good = false;
+					break;
+				}
+			}
+		}
+	} else {
+		wlr_log(WLR_ERROR, "Cannot open %s (errno %d): %m", path, errno);
+	}
+	if (good) {
+		wlr_log(WLR_ERROR, "Current grant table limit is %s (from %s)", buf, path);
+		wlr_log(WLR_ERROR, "Try 'echo %ld > %s'", 1L << 30, path);
+	} else {
+		wlr_log(WLR_ERROR, "Cannot obtain grant table limit");
+	}
+}
+
 static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 		const int width, const int height, const struct wlr_drm_format *format) {
 	assert(alloc->impl == &qubes_allocator_impl);
@@ -133,6 +181,7 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 	int res = ioctl(qalloc->xenfd, IOCTL_GNTALLOC_ALLOC_GREF, &buffer->xen);
 	if (res) {
 		assert(res == -1);
+		report_gntalloc_error();
 		goto fail;
 	}
 	buffer->index = buffer->xen.index;
