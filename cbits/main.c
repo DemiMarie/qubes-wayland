@@ -812,7 +812,6 @@ int main(int argc, char *argv[]) {
 		printf("Usage: %s [-v] [-s startup command] [--] domid\n", argv[0]);
 		return 0;
 	}
-	wlr_log_init(loglevel, NULL);
 	const char *domid_str = argv[argc - 1];
 	if (domid_str[0] < '0' || domid_str[0] > '9') {
 bad_domid:
@@ -848,6 +847,7 @@ bad_domid:
 		return 1;
 	}
 
+	wlr_log_init(loglevel, NULL);
 	struct tinywl_server *server = calloc(1, sizeof(*server));
 	if (!server) {
 		wlr_log(WLR_ERROR, "Cannot create tinywl_server");
