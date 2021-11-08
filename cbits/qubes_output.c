@@ -436,7 +436,10 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 	    configure.height == (uint32_t)view->last_height) {
 		return;
 	}
-	if (configure.width <= 0 || configure.height <= 0) {
+	if (configure.width <= 0 ||
+	    configure.height <= 0 ||
+	    configure.width > MAX_WINDOW_WIDTH ||
+	    configure.height > MAX_WINDOW_HEIGHT) {
 		wlr_log(WLR_ERROR,
 		        "Bad configure from GUI daemon: width %" PRIu32 " height %" PRIu32 " window %" PRIu32,
 		        configure.x,
