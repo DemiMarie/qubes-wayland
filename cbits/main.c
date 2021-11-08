@@ -856,6 +856,14 @@ bad_domid:
 	server->magic = QUBES_SERVER_MAGIC;
 	server->domid = domid;
 
+	/* The allocator is the bridge between the renderer and the backend.
+	 * It handles the buffer managment between the two, allowing wlroots
+	 * to render onto the screen */
+	if (!(server->allocator = qubes_allocator_create(domid))) {
+		wlr_log(WLR_ERROR, "Cannot create Qubes allocator");
+		return 1;
+	}
+
 	/* The Wayland display is managed by libwayland. It handles accepting
 	 * clients from the Unix socket, manging Wayland globals, and so on. */
 	if (!(server->wl_display = wl_display_create())) {
@@ -881,14 +889,6 @@ bad_domid:
 	}
 
 	wlr_renderer_init_wl_display(server->renderer, server->wl_display);
-
-	/* The allocator is the bridge between the renderer and the backend.
-	 * It handles the buffer managment between the two, allowing wlroots
-	 * to render onto the screen */
-	if (!(server->allocator = qubes_allocator_create(domid))) {
-		wlr_log(WLR_ERROR, "Cannot create Qubes allocator");
-		return 1;
-	}
 
 	/* This creates some hands-off wlroots interfaces. The compositor is
 	 * necessary for clients to allocate surfaces and the data device manager
