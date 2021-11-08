@@ -445,7 +445,6 @@ static void handle_configure(struct tinywl_view *view, uint32_t timestamp __attr
 		        configure.x,
 		        configure.y,
 		        view->window_id);
-		qubes_send_configure(view, view->last_width, view->last_height);
 		configure.width = view->last_width, configure.height = view->last_height;
 	}
 	wlr_output_update_custom_mode(&view->output.output, configure.width, configure.height, 0);
