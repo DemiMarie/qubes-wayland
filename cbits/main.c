@@ -1021,7 +1021,8 @@ bad_domid:
 	wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s",
 			socket);
 #ifdef QUBES_HAS_SYSTEMD
-	sd_notify(0, "READY=1");
+	if (sd_notify(0, "READY=1") < 0)
+		return 1;
 #endif
 	wl_display_run(server->wl_display);
 
