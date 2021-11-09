@@ -430,7 +430,7 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 			.width = box->width,
 			.height = box->height,
 			.parent = 0,
-			.override_redirect = 0,
+			.override_redirect = view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0,
 		},
 	};
 	// This is MSG_CREATE
@@ -498,7 +498,7 @@ void qubes_view_map(struct tinywl_view *view)
 		},
 		.info = {
 			.transient_for = 0,
-			.override_redirect = 0,
+			.override_redirect = view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0,
 		},
 	};
 	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.info, "bug");
@@ -537,12 +537,15 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
 	wl_list_remove(&view->destroy.link);
-	wl_list_remove(&view->new_popup.link);
-	wl_list_remove(&view->request_maximize.link);
-	wl_list_remove(&view->request_minimize.link);
-	wl_list_remove(&view->set_title.link);
-	wl_list_remove(&view->set_app_id.link);
 	wl_list_remove(&view->commit.link);
+	wl_list_remove(&view->new_popup.link);
+	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		wl_list_remove(&view->request_maximize.link);
+		wl_list_remove(&view->request_fullscreen.link);
+		wl_list_remove(&view->request_minimize.link);
+		wl_list_remove(&view->set_title.link);
+		wl_list_remove(&view->set_app_id.link);
+	}
 #ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, view->window_id);
 	struct msg_hdr header = {
@@ -685,7 +688,8 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		wl_container_of(listener, server, new_xdg_surface);
 	struct wlr_xdg_surface *xdg_surface = data;
 	assert(QUBES_SERVER_MAGIC == server->magic);
-	if (xdg_surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+	if (xdg_surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL &&
+	    xdg_surface->role != WLR_XDG_SURFACE_ROLE_POPUP) {
 		/* this is handled by the new_popup listener */
 		return;
 	}
@@ -724,19 +728,32 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	wl_signal_add(&xdg_surface->events.destroy, &view->destroy);
 	view->new_popup.notify = qubes_new_popup;
 	wl_signal_add(&xdg_surface->events.new_popup, &view->new_popup);
+	xdg_surface->data = view;
 
 	/* And listen to the various emits the toplevel can emit */
-	struct wlr_xdg_toplevel *toplevel = xdg_surface->toplevel;
-	view->request_maximize.notify = qubes_request_maximize;
-	wl_signal_add(&toplevel->events.request_maximize, &view->request_maximize);
-	view->request_minimize.notify = qubes_request_minimize;
-	wl_signal_add(&toplevel->events.request_minimize, &view->request_minimize);
-	view->request_fullscreen.notify = qubes_request_fullscreen;
-	wl_signal_add(&toplevel->events.request_fullscreen, &view->request_fullscreen);
-	view->set_title.notify = qubes_set_title;
-	wl_signal_add(&toplevel->events.set_title, &view->set_title);
-	view->set_app_id.notify = qubes_set_app_id;
-	wl_signal_add(&toplevel->events.set_app_id, &view->set_app_id);
+	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		struct wlr_xdg_toplevel *const toplevel = xdg_surface->toplevel;
+		view->request_maximize.notify = qubes_request_maximize;
+		wl_signal_add(&toplevel->events.request_maximize, &view->request_maximize);
+		view->request_minimize.notify = qubes_request_minimize;
+		wl_signal_add(&toplevel->events.request_minimize, &view->request_minimize);
+		view->request_fullscreen.notify = qubes_request_fullscreen;
+		wl_signal_add(&toplevel->events.request_fullscreen, &view->request_fullscreen);
+		view->set_title.notify = qubes_set_title;
+		wl_signal_add(&toplevel->events.set_title, &view->set_title);
+		view->set_app_id.notify = qubes_set_app_id;
+		wl_signal_add(&toplevel->events.set_app_id, &view->set_app_id);
+	} else if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
+		struct wlr_xdg_popup *const popup = xdg_surface->popup;
+		struct wlr_box geometry = wlr_xdg_positioner_get_geometry(&popup->positioner);
+		struct tinywl_view *parent_view = wlr_xdg_surface_from_wlr_surface(popup->parent)->data;
+		assert(parent_view);
+		view->left = geometry.x + parent_view->left;
+		view->top = geometry.y + parent_view->top;
+		view->last_width = geometry.width, view->last_height = geometry.height;
+	} else {
+		abort();
+	}
 
 	/* Listen to surface events */
 	view->commit.notify = qubes_surface_commit;

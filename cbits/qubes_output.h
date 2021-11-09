@@ -29,12 +29,15 @@ struct tinywl_view {
 	struct wl_listener unmap;
 	struct wl_listener destroy;
 	struct wl_listener new_popup;
+	struct wl_listener commit;
+
+	/* only initialized for toplevels */
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
 	struct wl_listener request_minimize;
 	struct wl_listener set_title;
 	struct wl_listener set_app_id;
-	struct wl_listener commit;
+
 	struct qubes_output output;
 	int x, y, left, top;
 	int last_width, last_height;
