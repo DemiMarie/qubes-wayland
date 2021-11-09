@@ -425,8 +425,8 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 			.untrusted_len = sizeof(struct msg_create),
 		},
 		.create = {
-			.x = 0,
-			.y = 0,
+			.x = view->left,
+			.y = view->top,
 			.width = box->width,
 			.height = box->height,
 			.parent = 0,
