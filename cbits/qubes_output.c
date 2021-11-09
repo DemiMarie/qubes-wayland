@@ -322,43 +322,51 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 	wlr_seat_pointer_send_frame(seat);
 }
 
+static void
+handle_pointer_movement(struct tinywl_view *view, int32_t x, int32_t y,
+                        uint32_t timestamp, struct wlr_seat *seat)
+{
+	const double seat_relative_x = x + (double)view->x,
+	             seat_relative_y = y + (double)view->y;
+	double sx, sy;
+	struct wlr_surface *surface = wlr_xdg_surface_surface_at(view->xdg_surface,
+		seat_relative_x, seat_relative_y, &sx, &sy);
+	if (surface) {
+		wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
+		wlr_seat_pointer_notify_motion(seat, timestamp, sx, sy);
+	} else {
+		wlr_seat_pointer_notify_clear_focus(seat);
+	}
+	wlr_seat_pointer_send_frame(seat);
+}
+
 static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
 {
 	struct wlr_seat *seat = view->server->seat;
 	struct msg_motion motion;
 	memcpy(&motion, ptr, sizeof motion);
-	wlr_seat_pointer_send_motion(seat, timestamp,
-	                            (double)motion.x + (double)view->x,
-	                            (double)motion.y + (double)view->y);
-	wlr_seat_pointer_send_frame(seat);
+	handle_pointer_movement(view, motion.x, motion.y, timestamp, seat);
 }
 
-static void handle_crossing(struct tinywl_view *view, uint32_t timestamp __attribute__((unused)), const uint8_t *ptr)
+static void handle_crossing(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
 {
 	struct msg_crossing crossing;
 	struct wlr_seat *seat = view->server->seat;
-	int display_width = MAX_WINDOW_WIDTH;
-	int display_height = MAX_WINDOW_HEIGHT;
 
 	memcpy(&crossing, ptr, sizeof crossing);
 
 	switch (crossing.type) {
 	case 7: // EnterNotify
-		break;
+		handle_pointer_movement(view, crossing.x, crossing.y, timestamp, seat);
+		return;
 	case 8: // LeaveNotify
 		wlr_seat_pointer_notify_clear_focus(seat);
+		wlr_seat_pointer_send_frame(seat);
 		return;
 	default:
 		wlr_log(WLR_ERROR, "bad Crossing event type %" PRIu32, crossing.type);
 		return;
 	}
-
-	assert(display_width > 0 && display_height > 0);
-	assert(display_width <= MAX_WINDOW_WIDTH && display_height <= MAX_WINDOW_HEIGHT);
-	wlr_seat_pointer_notify_enter(seat, view->xdg_surface->surface,
-	                              (double)crossing.x + (double)view->x,
-	                              (double)crossing.y + (double)view->y);
-	wlr_seat_pointer_send_frame(seat);
 }
 
 static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
