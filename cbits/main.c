@@ -529,7 +529,9 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 #endif
 	if (view->link.next) {
 		struct tinywl_view *previous_view = wl_container_of(view->link.next, previous_view, link);
-		qubes_give_view_keyboard_focus(previous_view, previous_view->xdg_surface->surface);
+		if (view != previous_view) {
+			qubes_give_view_keyboard_focus(previous_view, previous_view->xdg_surface->surface);
+		}
 	}
 }
 
