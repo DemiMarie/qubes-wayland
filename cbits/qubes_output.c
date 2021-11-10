@@ -449,6 +449,7 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 	qubes_send_configure(view, configure.width, configure.height);
 	if (configure.width == (uint32_t)view->last_width &&
 	    configure.height == (uint32_t)view->last_height) {
+		view->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 		return;
 	}
 	if (configure.width <= 0 ||
@@ -464,6 +465,8 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 	}
 	view->last_width = configure.width, view->last_height = configure.height;
 	wlr_output_set_custom_mode(&view->output.output, configure.width, configure.height, 60000);
+	/* Ignore client-submitted resizes for 1 commit, to avoid races */
+	view->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
 		wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
 	else

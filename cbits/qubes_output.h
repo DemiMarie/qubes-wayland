@@ -51,6 +51,7 @@ enum {
 	QUBES_OUTPUT_CREATED = 1 << 0,
 	QUBES_OUTPUT_MAPPED = 1 << 1,
 	QUBES_OUTPUT_NEED_CONFIGURE = 1 << 2,
+	QUBES_OUTPUT_IGNORE_CLIENT_RESIZE = 1 << 3,
 };
 
 static inline bool qubes_output_created(struct tinywl_view *view)

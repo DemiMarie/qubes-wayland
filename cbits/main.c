@@ -671,7 +671,8 @@ static void qubes_surface_commit(
 # define MAX_WINDOW_WIDTH (1 << 14)
 # define MAX_WINDOW_HEIGHT ((1 << 11) * 3)
 #endif
-	if (view->last_width != box.width || view->last_height != box.height) {
+	if ((view->last_width != box.width || view->last_height != box.height) &&
+	    !(view->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {
 		view->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
 		qubes_send_configure(view, box.width, box.height);
 		wlr_log(WLR_DEBUG,
