@@ -247,6 +247,7 @@ static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const 
 		wlr_log(WLR_ERROR, "Bad keycode %" PRIu32, keypress.keycode);
 		return; /* not valid in X11, which the GUI daemon uses */
 	}
+
 	const uint8_t keycode = keypress.keycode - 0x8;
 	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
 	assert(keyboard);
@@ -378,9 +379,11 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uin
 	memcpy(&focus, ptr, sizeof focus);
 	switch (focus.type) {
 	case 9: // FocusIn
+		wlr_log(WLR_INFO, "Window %" PRIu32 " has gained keyboard focus", view->window_id);
 		qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
 		break;
 	case 10: // FocusOut
+		wlr_log(WLR_INFO, "Window %" PRIu32 " has lost keyboard focus", view->window_id);
 		if (seat->keyboard_state.focused_surface) {
 			/*
 			 * Deactivate the previously focused surface. This lets the client know
@@ -399,7 +402,7 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uin
 		wlr_seat_keyboard_notify_clear_focus(seat);
 		break;
 	default:
-		wlr_log(WLR_ERROR, "Bad Focus event type %" PRIu32, focus.type);
+		wlr_log(WLR_ERROR, "Window %" PRIu32 ": Bad Focus event type %" PRIu32, view->window_id, focus.type);
 		return;
 	}
 }
