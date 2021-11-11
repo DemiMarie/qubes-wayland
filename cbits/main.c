@@ -138,8 +138,13 @@ void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface
 	wl_list_remove(&view->link);
 	wl_list_insert(&server->views, &view->link);
 	/* Activate the new surface */
-	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
-		wlr_xdg_toplevel_set_activated(view->xdg_surface, true);
+	struct wlr_xdg_surface *view_surface = view->xdg_surface;
+	while (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
+		view_surface = wlr_xdg_surface_from_wlr_surface(view_surface->popup->parent);
+	}
+	if (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		wlr_xdg_toplevel_set_activated(view_surface, true);
+	}
 	/*
 	 * Tell the seat to have the keyboard enter this surface. wlroots will keep
 	 * track of this and automatically send key events to the appropriate
