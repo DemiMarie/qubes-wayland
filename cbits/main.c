@@ -111,8 +111,12 @@ void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface
 	struct wlr_surface *prev_surface = seat->keyboard_state.focused_surface;
 	if (prev_surface == surface) {
 		/* Don't re-focus an already focused surface. */
+		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL &&
+		    !view->xdg_surface->toplevel->pending.activated)
+			wlr_xdg_toplevel_set_activated(view->xdg_surface, true);
 		return;
 	}
+	wlr_log(WLR_INFO, "Giving keyboard focus to window %u", view->window_id);
 	if (prev_surface) {
 		/*
 		 * Deactivate the previously focused surface. This lets the client know
