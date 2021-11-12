@@ -394,7 +394,6 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uin
 			if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 				wlr_xdg_toplevel_set_activated(previous, false);
 			}
-			seat->keyboard_state.focused_surface = NULL;
 		}
 		wlr_seat_keyboard_notify_clear_focus(seat);
 		break;
