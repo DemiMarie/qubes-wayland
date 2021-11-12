@@ -131,7 +131,7 @@ struct qubes_clipboard_handler *qubes_clipboard_handler_create(struct tinywl_ser
 	assert(handler->clipboard_data.alloc >= handler->clipboard_data.size && "corrupted wl_array?");
 	memcpy(ptr, &header, sizeof header);
 	handler->source = wl_event_loop_add_fd(wl_display_get_event_loop(server->wl_display), fd,
-		WL_EVENT_WRITABLE|WL_EVENT_HANGUP|WL_EVENT_ERROR, qubes_on_clipboard_data,
+		WL_EVENT_READABLE|WL_EVENT_HANGUP|WL_EVENT_ERROR, qubes_on_clipboard_data,
 		handler);
 	if (!handler->source)
 		goto fail;
