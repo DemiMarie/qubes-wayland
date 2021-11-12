@@ -1,3 +1,5 @@
+// Wayland data source for data from global clipboard
+
 #include "common.h"
 
 #include <stdlib.h>

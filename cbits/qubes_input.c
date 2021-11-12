@@ -1,3 +1,5 @@
+// vchan message dispatch and input event handling
+
 #include "common.h"
 #include <stdio.h>
 #include <stdlib.h>

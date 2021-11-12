@@ -1,3 +1,5 @@
+// wlr_output implementation and redraw code
+
 #include "common.h"
 #include <stdio.h>
 #include <stdlib.h>

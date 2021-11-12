@@ -1,3 +1,5 @@
+// Main program and most window management logic
+
 #define _POSIX_C_SOURCE 200809L
 #include "common.h"
 #include <stdlib.h>

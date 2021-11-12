@@ -1,3 +1,5 @@
+// Transporatation of client-provided clipboard data to the GUI daemon
+
 #include "common.h"
 
 #include <stdlib.h>
