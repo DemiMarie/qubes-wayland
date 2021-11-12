@@ -117,14 +117,13 @@ void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface
 		return;
 	}
 	wlr_log(WLR_INFO, "Giving keyboard focus to window %u", view->window_id);
-	if (prev_surface) {
+	if (prev_surface && wlr_surface_is_xdg_surface(prev_surface)) {
 		/*
 		 * Deactivate the previously focused surface. This lets the client know
 		 * it no longer has focus and the client will repaint accordingly, e.g.
 		 * stop displaying a caret.
 		 */
-		struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(
-					seat->keyboard_state.focused_surface);
+		struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(prev_surface);
 		if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 			wlr_xdg_toplevel_set_activated(previous, false);
 		}
