@@ -256,16 +256,15 @@ static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const 
 	bool was_pressed = (backend->keymap.keys[i] >> j & 1) ^ (3 - keypress.type);
 	backend->keymap.keys[i] = (backend->keymap.keys[i] & ~(1 << j)) | (3 - keypress.type) << j;
 
-	if (!was_pressed) {
-		return;
+	if (was_pressed) {
+		struct wlr_event_keyboard_key event = {
+			.time_msec = timestamp,
+			.keycode = keycode,
+			.update_state = true,
+			.state = state,
+		};
+		wlr_keyboard_notify_key(keyboard, &event);
 	}
-	struct wlr_event_keyboard_key event = {
-		.time_msec = timestamp,
-		.keycode = keypress.keycode - 8,
-		.update_state = true,
-		.state = state,
-	};
-	wlr_keyboard_notify_key(keyboard, &event);
 }
 
 static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8_t *ptr)
