@@ -337,7 +337,7 @@ handle_pointer_movement(struct tinywl_view *view, int32_t x, int32_t y,
 	} else {
 		wlr_seat_pointer_notify_clear_focus(seat);
 	}
-	wlr_seat_pointer_send_frame(seat);
+	wlr_seat_pointer_notify_frame(seat);
 }
 
 static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
@@ -361,7 +361,7 @@ static void handle_crossing(struct tinywl_view *view, uint32_t timestamp, const 
 		return;
 	case 8: // LeaveNotify
 		wlr_seat_pointer_notify_clear_focus(seat);
-		wlr_seat_pointer_send_frame(seat);
+		wlr_seat_pointer_notify_frame(seat);
 		return;
 	default:
 		wlr_log(WLR_ERROR, "bad Crossing event type %" PRIu32, crossing.type);
