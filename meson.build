@@ -27,6 +27,7 @@ qubes_files = [
   'cbits/qubes_allocator.c',
   'cbits/qubes_backend.c',
   'cbits/qubes_output.c',
+  'cbits/qubes_input.c',
   'cbits/qubes_clipboard.c',
   'cbits/qubes_data_source.c',
   'cbits/main.c',

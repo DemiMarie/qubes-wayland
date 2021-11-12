@@ -5,6 +5,10 @@
 #include <wayland-server-core.h>
 #include <wlr/interfaces/wlr_output.h>
 
+#ifdef BUILD_RUST
+#include <qubes-gui-protocol.h>
+#endif
+
 struct qubes_output {
 	struct wlr_output output;
 	struct wl_listener buffer_destroy;
@@ -78,6 +82,7 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
 void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t height);
+void qubes_output_dump_buffer(struct tinywl_view *view, struct wlr_box box);
 
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_OUTPUT_H */
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:
