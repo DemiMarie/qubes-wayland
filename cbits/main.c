@@ -452,7 +452,6 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
 	struct tinywl_view *view = wl_container_of(listener, view, map);
 	assert(QUBES_VIEW_MAGIC == view->magic);
-	qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
 	qubes_view_map(view);
 }
 
