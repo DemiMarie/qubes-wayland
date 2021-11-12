@@ -470,6 +470,7 @@ void qubes_view_map(struct tinywl_view *view)
 		wlr_output_enable(&view->output.output, true);
 	}
 #ifdef BUILD_RUST
+	uint32_t transient_for_window = 0;
 	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		uint32_t flags_to_set = 0, flags_to_unset = 0;
 		if (xdg_surface->toplevel->requested.minimized) {
@@ -491,9 +492,15 @@ void qubes_view_map(struct tinywl_view *view)
 			// Window created above, so this is safe
 			qubes_set_view_app_id(view);
 		}
+		if (xdg_surface->toplevel->parent) {
+			const struct tinywl_view *parent_view = xdg_surface->toplevel->parent->data;
+			transient_for_window = parent_view->window_id;
+		}
 	}
 
-	wlr_log(WLR_DEBUG, "Sending MSG_MAP (0x%x) to window %" PRIu32, MSG_MAP, view->window_id);
+	wlr_log(WLR_INFO,
+	        "Sending MSG_MAP (0x%x) to window %u (transient_for = %u)",
+	        MSG_MAP, view->window_id, transient_for_window);
 	struct {
 		struct msg_hdr header;
 		struct msg_map_info info;
@@ -504,7 +511,7 @@ void qubes_view_map(struct tinywl_view *view)
 			.untrusted_len = sizeof(struct msg_map_info),
 		},
 		.info = {
-			.transient_for = 0,
+			.transient_for = transient_for_window,
 			.override_redirect = view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0,
 		},
 	};
