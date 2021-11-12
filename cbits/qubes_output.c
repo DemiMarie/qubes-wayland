@@ -465,8 +465,6 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 	view->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
 		wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
-	else
-		assert(0 && "not implemented");
 }
 
 static void handle_clipboard_data(struct tinywl_view *view, uint32_t len, const uint8_t *ptr)
