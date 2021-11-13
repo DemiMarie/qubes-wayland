@@ -540,12 +540,6 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	if (qubes_output_created(view))
 		qubes_rust_send_message(view->server->backend->rust_backend, &header);
 #endif
-	if (view->link.next) {
-		struct tinywl_view *previous_view = wl_container_of(view->link.next, previous_view, link);
-		if (view != previous_view) {
-			qubes_give_view_keyboard_focus(previous_view, previous_view->xdg_surface->surface);
-		}
-	}
 }
 
 static void xdg_surface_destroy(struct wl_listener *listener, void *data __attribute__((unused))) {
