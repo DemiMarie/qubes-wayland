@@ -416,7 +416,6 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 	if (view->x != box->x || view->y != box->y) {
 		view->x = box->x;
 		view->y = box->y;
-		view->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
 		wlr_scene_output_set_position(view->scene_output, view->x, view->y);
 	}
 	if (qubes_output_created(view))
@@ -565,6 +564,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		wl_list_remove(&view->request_minimize.link);
 		wl_list_remove(&view->set_title.link);
 		wl_list_remove(&view->set_app_id.link);
+		wl_list_remove(&view->ack_configure.link);
 	}
 #ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, view->window_id);
@@ -687,7 +687,6 @@ static void qubes_surface_commit(
 #endif
 	if ((view->last_width != box.width || view->last_height != box.height) &&
 	    !(view->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {
-		view->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
 		qubes_send_configure(view, box.width, box.height);
 		wlr_log(WLR_DEBUG,
 		        "Resized window %u: old size %u %u, new size %u %u",
@@ -700,6 +699,19 @@ static void qubes_surface_commit(
 	// wlr_output_enable(&view->output.output, true);
 	assert(view->scene_output->output == &view->output.output);
 	wlr_output_send_frame(&view->output.output);
+}
+
+static void qubes_toplevel_ack_configure(struct wl_listener *listener, void *data)
+{
+	struct wlr_xdg_surface_configure *configure = data;
+	struct tinywl_view *view = wl_container_of(listener, view, ack_configure);
+	assert(QUBES_VIEW_MAGIC == view->magic);
+
+	if (view->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE &&
+	    view->configure_serial == configure->serial) {
+		view->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
+		qubes_send_configure(view, view->last_width, view->last_height);
+	}
 }
 
 static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
@@ -738,7 +750,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 	view->magic = QUBES_VIEW_MAGIC;
 	view->xdg_surface = xdg_surface;
-	view->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
 
 	/* Listen to the various events it can emit */
 	view->map.notify = xdg_surface_map;
@@ -764,6 +775,8 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		wl_signal_add(&toplevel->events.set_title, &view->set_title);
 		view->set_app_id.notify = qubes_set_app_id;
 		wl_signal_add(&toplevel->events.set_app_id, &view->set_app_id);
+		view->ack_configure.notify = qubes_toplevel_ack_configure;
+		wl_signal_add(&xdg_surface->events.ack_configure, &view->ack_configure);
 	} else if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
 		struct wlr_xdg_popup *const popup = xdg_surface->popup;
 		struct wlr_box geometry = wlr_xdg_positioner_get_geometry(&popup->positioner);

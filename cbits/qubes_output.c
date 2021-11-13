@@ -140,7 +140,6 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 			raw_output->pending.custom_mode.height,
 			raw_output->pending.custom_mode.refresh);
 	}
-	qubes_send_configure(view, box.width, box.height);
 
 	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
 	    (output->buffer != raw_output->pending.buffer)) {
@@ -218,7 +217,7 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 
 void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t height)
 {
-	if (!qubes_output_need_configure(view))
+	if (!qubes_output_created(view))
 		return;
 	if (width <= 0 || height <= 0)
 		return;
@@ -240,7 +239,6 @@ void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t hei
 			.override_redirect = 0,
 		},
 	};
-	view->flags &= ~(__typeof__(view->flags))QUBES_OUTPUT_NEED_CONFIGURE;
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg);
 }
 

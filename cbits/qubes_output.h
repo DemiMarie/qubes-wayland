@@ -41,6 +41,7 @@ struct tinywl_view {
 	struct wl_listener request_minimize;
 	struct wl_listener set_title;
 	struct wl_listener set_app_id;
+	struct wl_listener ack_configure;
 
 	struct qubes_output output;
 	int x, y, left, top;
@@ -48,14 +49,14 @@ struct tinywl_view {
 	uint32_t window_id;
 	uint32_t magic;
 	uint32_t flags;
+	uint32_t configure_serial;
 	struct msg_wmname last_title;
 };
 
 enum {
 	QUBES_OUTPUT_CREATED = 1 << 0,
 	QUBES_OUTPUT_MAPPED = 1 << 1,
-	QUBES_OUTPUT_NEED_CONFIGURE = 1 << 2,
-	QUBES_OUTPUT_IGNORE_CLIENT_RESIZE = 1 << 3,
+	QUBES_OUTPUT_IGNORE_CLIENT_RESIZE = 1 << 2,
 };
 
 static inline bool qubes_output_created(struct tinywl_view *view)
@@ -68,13 +69,6 @@ static inline bool qubes_output_mapped(struct tinywl_view *view)
 	if (!(view->flags & QUBES_OUTPUT_CREATED))
 		return false;
 	return view->flags & QUBES_OUTPUT_MAPPED;
-}
-
-static inline bool qubes_output_need_configure(struct tinywl_view *view)
-{
-	if (!(view->flags & QUBES_OUTPUT_CREATED))
-		return false;
-	return view->flags & QUBES_OUTPUT_NEED_CONFIGURE;
 }
 
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,

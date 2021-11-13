@@ -213,15 +213,15 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 	view->left = configure.x;
 	view->top = configure.y;
 	// Just ACK the configure
-	view->flags |= (__typeof__(view->flags))QUBES_OUTPUT_NEED_CONFIGURE;
 	wlr_log(WLR_DEBUG, "handle_configure: old size %u %u, new size %u %u",
 	        view->last_width, view->last_height, configure.width, configure.height);
-	qubes_send_configure(view, configure.width, configure.height);
 	if (configure.width == (uint32_t)view->last_width &&
 	    configure.height == (uint32_t)view->last_height) {
-		view->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
+		// Just ACK without doing anything
+		qubes_send_configure(view, configure.width, configure.height);
 		return;
 	}
+
 	if (configure.width <= 0 ||
 	    configure.height <= 0 ||
 	    configure.width > MAX_WINDOW_WIDTH ||
@@ -231,14 +231,32 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 		        configure.x,
 		        configure.y,
 		        view->window_id);
+		// this should never happen, but better to ACK the configure
+		// than to crash; return to avoid giving clients an invalid state
+		qubes_send_configure(view, configure.width, configure.height);
 		return;
 	}
-	view->last_width = configure.width, view->last_height = configure.height;
+
 	wlr_output_set_custom_mode(&view->output.output, configure.width, configure.height, 60000);
-	/* Ignore client-submitted resizes for 1 commit, to avoid races */
-	view->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
-		wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
+	view->last_width = configure.width, view->last_height = configure.height;
+
+	/* Ignore client-submitted resizes until this configure is acked, to avoid races */
+	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		view->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
+		view->configure_serial =
+			wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
+		wlr_log(WLR_DEBUG,
+		        "Will ACK configure from GUI daemon (width %u, height %u)"
+		        " when client ACKS configure with serial %u",
+		        configure.width, configure.height, view->configure_serial);
+	} else {
+		// There won’t be a configure event ACKd by the client, so
+		// ACK early
+		wlr_log(WLR_DEBUG,
+		        "Got a configure event for non-toplevel window %" PRIu32 "; returning early",
+		        view->window_id);
+		qubes_send_configure(view, configure.width, configure.height);
+	}
 }
 
 static void handle_clipboard_data(struct tinywl_view *view, uint32_t len, const uint8_t *ptr)
@@ -316,7 +334,6 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 			wl_list_for_each(view, backend->views, link) {
 				assert(QUBES_VIEW_MAGIC == view->magic);
 				view->flags &= ~QUBES_OUTPUT_CREATED;
-				view->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
 			}
 			wl_list_for_each(view, backend->views, link) {
 				assert(QUBES_VIEW_MAGIC == view->magic);
