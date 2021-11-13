@@ -190,6 +190,13 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 	struct qubes_output *output = wl_container_of(listener, output, frame);
 	struct tinywl_view *view = wl_container_of(output, view, output);
 	assert(QUBES_VIEW_MAGIC == view->magic);
+	// HACK HACK
+	//
+	// This fixes a *nasty* bug: without it, really fast resizes can cause the
+	// wlr_output to lose sync with the qubes_output, causing parts of the
+	// window to *never* be displayed until the next window resize.  This bug
+	// took more than three days to fix.
+	wlr_output_update_custom_mode(&output->output, view->last_width, view->last_height, 60000);
 	if (wlr_scene_output_commit(view->scene_output)) {
 		output->output.frame_pending = true;
 		if (!view->server->frame_pending) {
