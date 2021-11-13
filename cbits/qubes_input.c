@@ -205,6 +205,37 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uin
 	}
 }
 
+static void handle_window_flags(struct tinywl_view *view, const uint8_t *ptr)
+{
+	struct msg_window_flags flags;
+	memcpy(&flags, ptr, sizeof flags);
+
+	if (flags.flags_set & flags.flags_unset) {
+		wlr_log(WLR_ERROR,
+		        "GUI daemon tried to set and unset the same flag on window %" PRIu32
+		        "(flags_set: 0x%" PRIx32 ", flags_unset: 0x%" PRIx32 ")",
+		        view->window_id, flags.flags_set, flags.flags_unset);
+		return;
+	}
+
+	if (view->xdg_surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		wlr_log(WLR_INFO,
+		        "GUI daemon tried to change flags for non-toplevel window %" PRIu32
+		        "(flags_set: 0x%" PRIx32 ", flags_unset: 0x%" PRIx32 ")",
+		        view->window_id, flags.flags_set, flags.flags_unset);
+		return;
+	}
+
+	if ((flags.flags_set | flags.flags_unset) & WINDOW_FLAG_FULLSCREEN)
+		wlr_xdg_toplevel_set_fullscreen(view->xdg_surface, flags.flags_set & WINDOW_FLAG_FULLSCREEN);
+
+	// Setting the "minimized" flag directly would be better, but xdg-shell doesn't support that
+	if ((flags.flags_set | flags.flags_unset) & WINDOW_FLAG_MINIMIZE)
+		wlr_xdg_toplevel_set_activated(view->xdg_surface, !(flags.flags_set & WINDOW_FLAG_MINIMIZE));
+
+	// DEMANDS_ATTENTION has no Wayland analog
+}
+
 static void
 handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
 {
@@ -443,7 +474,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 		break;
 	case MSG_WINDOW_FLAGS:
 		assert(hdr.untrusted_len == sizeof(struct msg_window_flags));
-		// handle_window_flags(view, timestamp, ptr);
+		handle_window_flags(view, ptr);
 		break;
 	case MSG_RESIZE:
 	case MSG_CREATE:
