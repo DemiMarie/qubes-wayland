@@ -350,6 +350,9 @@ static void qubes_set_view_title(struct tinywl_view *view)
 	}
 	assert(qubes_output_created(view));
 	assert(view->window_id);
+	strncpy(view->last_title.data,
+	        view->xdg_surface->toplevel->title,
+	        sizeof(view->last_title.data) - 1);
 	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
 	struct {
 		struct msg_hdr header;
@@ -364,13 +367,10 @@ static void qubes_set_view_title(struct tinywl_view *view)
 			.data = { 0 },
 		},
 	};
-	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.title, "bug");
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.title);
 	strncpy(msg.title.data,
 	        view->xdg_surface->toplevel->title,
 	        sizeof(msg.title.data) - 1);
-	strncpy(view->last_title.data,
-	        view->xdg_surface->toplevel->title,
-	        sizeof(view->last_title.data) - 1);
 	// Asserted above, checked at call sites
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
 #endif
@@ -396,7 +396,7 @@ static void qubes_set_view_app_id(struct tinywl_view *view)
 			.res_name = { 0 },
 		},
 	};
-	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.class, "bug");
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.class);
 	strncpy(msg.class.res_class, view->xdg_surface->toplevel->app_id, sizeof(msg.class.res_class) - 1);
 	// Asserted above, checked at call sites
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
@@ -440,6 +440,7 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 			.override_redirect = view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0,
 		},
 	};
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.create);
 	// This is MSG_CREATE
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
 	view->flags |= QUBES_OUTPUT_CREATED;
@@ -511,10 +512,10 @@ void qubes_view_map(struct tinywl_view *view)
 		},
 		.info = {
 			.transient_for = transient_for_window,
-			.override_redirect = view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0,
+			.override_redirect = 0,
 		},
 	};
-	_Static_assert(sizeof msg == sizeof msg.header + sizeof msg.info, "bug");
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.info);
 	// Surface created above
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg);
 
