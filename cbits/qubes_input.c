@@ -15,7 +15,6 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
-#include <wlr/util/edges.h>
 
 #ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
@@ -275,11 +274,8 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 	/* Ignore client-submitted resizes until this configure is acked, to avoid races */
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		view->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-		wlr_xdg_toplevel_set_tiled(view->xdg_surface,
-		                           WLR_EDGE_TOP|WLR_EDGE_BOTTOM|WLR_EDGE_LEFT|WLR_EDGE_RIGHT);
 		view->configure_serial =
 			wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
-
 		wlr_log(WLR_DEBUG,
 		        "Will ACK configure from GUI daemon (width %u, height %u)"
 		        " when client ACKS configure with serial %u",
