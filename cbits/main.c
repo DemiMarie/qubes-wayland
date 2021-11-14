@@ -19,8 +19,7 @@
 
 #include <wayland-server-core.h>
 
-#include <wlr/allocator/interface.h>
-#include <wlr/allocator/wlr_allocator.h>
+#include <wlr/render/allocator.h>
 #include <wlr/backend.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/wlr_renderer.h>
@@ -730,8 +729,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	view->server = server;
 	/* Add wlr_output */
 	qubes_output_init(&view->output, &server->backend->backend, server->wl_display);
-	assert(wlr_output_set_allocator(&view->output.output, server->allocator));
-	view->output.output.allocator->render_formats = view->output.formats;
+	wlr_output_init_render(&view->output.output, server->allocator, server->renderer);
 	if (!(view->scene = wlr_scene_create()))
 		goto cleanup;
 

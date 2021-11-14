@@ -2,7 +2,7 @@
 #define QUBES_WAYLAND_COMPOSITOR_ALLOCATOR_H _Pragma("GCC error \"double-include guard referenced\"")
 
 #include "common.h"
-#include <wlr/allocator/wlr_allocator.h>
+#include <wlr/render/allocator.h>
 #ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
 #include <xen/gntalloc.h>

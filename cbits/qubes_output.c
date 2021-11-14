@@ -170,8 +170,6 @@ static const struct wlr_drm_format_set global_formats = {
 
 static const struct wlr_drm_format_set *qubes_output_get_primary_formats(
 		struct wlr_output *output __attribute__((unused)), uint32_t buffer_caps) {
-	if (!(buffer_caps & WLR_BUFFER_CAP_DATA_PTR))
-		return NULL;
 	return &global_formats;
 }
 

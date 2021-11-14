@@ -18,8 +18,7 @@
 
 #include <wlr/util/log.h>
 #include <wlr/render/drm_format_set.h>
-#include <wlr/allocator/interface.h>
-#include <wlr/allocator/wlr_allocator.h>
+#include <wlr/render/allocator.h>
 #include <wlr/types/wlr_buffer.h>
 #include <xen/gntalloc.h>
 #include <qubes-gui-protocol.h>
@@ -146,26 +145,36 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 	struct qubes_allocator *qalloc = wl_container_of(alloc, qalloc, inner);
 	assert(qalloc->refcount > 0);
 
-	/* DMA-BUFs aren’t supported */
-	if (format->cap & ~(size_t)WLR_BUFFER_CAP_DATA_PTR)
-		return NULL;
 	/* Only ARGB8888 and XRGB8888 are supported */
-	if (format->format != DRM_FORMAT_XRGB8888) {
-		wlr_log(WLR_ERROR, "Refusing allocation because format %" PRIu32 " is not supported", format->format);
+	if (format->format != DRM_FORMAT_XRGB8888 &&
+	    format->format != DRM_FORMAT_ARGB8888) {
+		wlr_log(WLR_ERROR,
+		        "Refusing allocation because format %" PRIu32 " is not supported",
+		        format->format);
 		return NULL;
 	}
-	/* Format modifiers aren’t supported */
-	if (format->len) {
-		wlr_log(WLR_ERROR, "Refusing allocation because of format modifiers");
+
+	/* Format modifiers aren’t supported, except DRM_FORMAT_MOD_LINEAR */
+	for (size_t i = 0; i < format->len; ++i) {
+		if (format->modifiers[i] == DRM_FORMAT_MOD_LINEAR)
+			continue;
+		wlr_log(WLR_ERROR,
+		        "Refusing allocation because of unsupported format modifier %" PRIx64,
+		        format->modifiers[i]);
 		return NULL;
 	}
+
 	/* Check for excessive sizes */
 	if (width <= 0 || width > MAX_WINDOW_WIDTH ||
 	    height <= 0 || height > MAX_WINDOW_HEIGHT) {
-		wlr_log(WLR_ERROR, "Refusing allocation because width %d and/or height %d is bad", width, height);
+		wlr_log(WLR_DEBUG,
+		        "Refusing allocation because width %d and/or height %d is bad",
+		        width, height);
 		return NULL;
 	}
+
 	wlr_log(WLR_DEBUG, "Allocating array of dimensions %dx%d", width, height);
+
 	/* the remaining computations cannot overflow */
 	const int32_t pixels = (int32_t)width * (int32_t)height;
 	const int32_t bytes = pixels * sizeof(uint32_t);
@@ -174,8 +183,10 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 	struct qubes_buffer *buffer = calloc((size_t)pages * SIZEOF_GRANT_REF +
 	                                     offsetof(struct qubes_buffer, qubes) +
 	                                     sizeof(buffer->qubes), 1);
-	if (!buffer)
+	if (!buffer) {
+		wlr_log(WLR_ERROR, "calloc(3) failed");
 		return NULL;
+	}
 	buffer->xen.domid = qalloc->domid;
 	buffer->xen.flags = GNTALLOC_FLAG_WRITABLE;
 	buffer->xen.count = pages;
