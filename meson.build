@@ -34,6 +34,7 @@ qubes_files = [
 
 cc = meson.get_compiler('c')
 dl = cc.find_library('dl', required: false)
+qubesdb = cc.find_library('qubesdb')
 
 # Taken from wlroots, which is:
 # Copyright (c) 2017, 2018 Drew DeVault
@@ -125,7 +126,7 @@ conf_h = configure_file(
 bin_compositor = executable(
   meson.project_name(),
   qubes_files,
-  dependencies: [wlroots_proj.get_variable('wlroots'), threads, vchan_xen, dl, systemd],
+  dependencies: [wlroots_proj.get_variable('wlroots'), threads, vchan_xen, dl, systemd, qubesdb],
   include_directories: ['cbits', include_directories('.')],
   link_with: [rust_parts[0]],
   install: true,

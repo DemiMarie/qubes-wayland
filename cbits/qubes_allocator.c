@@ -77,8 +77,10 @@ struct wlr_allocator *qubes_allocator_create(uint16_t domid) {
 		return NULL;
 	qubes->domid = domid;
 	if ((qubes->xenfd = open("/dev/xen/gntalloc", O_RDWR | O_CLOEXEC | O_NOCTTY)) < 0) {
+		int err = errno;
 		assert(qubes->xenfd == -1);
 		free(qubes);
+		errno = err;
 		return NULL;
 	} else {
 		assert(qubes->xenfd > 2 && "FD 0, 1, or 2 got closed earlier?");
@@ -100,39 +102,6 @@ static void report_gntalloc_error(void) {
 		wlr_log(WLR_ERROR, "Grant ref alloc failed with unknown error %d", err);
 	} else {
 		wlr_log(WLR_ERROR, "Grant ref alloc failed with errno %d: %s", err, buf);
-	}
-	if (err != ENOSPC) {
-		return;
-	}
-	bool good = false;
-	static const char *const path = "/sys/module/xen_gntalloc/parameters/limit";
-	int params_fd = open(path, O_RDONLY|O_CLOEXEC|O_NOCTTY);
-	if (params_fd >= 0) {
-		ssize_t len = read(params_fd, buf, sizeof buf);
-		buf[sizeof buf - 1] = '\0';
-		if (len > 0) {
-			if (len > 1 && buf[len - 1] == '\n') {
-				buf[len - 1] = '\0';
-				len -= 1;
-			} else if ((size_t)len < sizeof buf) {
-				buf[len] = '\0';
-			}
-			good = true;
-			for (ssize_t i = 0; i < len; ++i) {
-				if (buf[i] < '0' || buf[i] > '9') {
-					good = false;
-					break;
-				}
-			}
-		}
-	} else {
-		wlr_log(WLR_ERROR, "Cannot open %s (errno %d): %m", path, errno);
-	}
-	if (good) {
-		wlr_log(WLR_ERROR, "Current grant table limit is %s (from %s)", buf, path);
-		wlr_log(WLR_ERROR, "Try 'echo %ld > %s'", 1L << 30, path);
-	} else {
-		wlr_log(WLR_ERROR, "Cannot obtain grant table limit");
 	}
 }
 

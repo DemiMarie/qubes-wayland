@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <signal.h>
 #include <inttypes.h>
+#include <err.h>
+
+#include <qubesdb-client.h>
+
 #include "config.h"
 #ifdef QUBES_HAS_SYSTEMD
 #include <systemd/sd-daemon.h>
@@ -821,16 +825,114 @@ static void sigpipe_handler(int signum, siginfo_t *siginfo, void *ucontext)
 {
 }
 
-int main(int argc, char *argv[]) {
+static _Noreturn void usage(char *name, int status) {
+	printf("Usage: %s [-v] [-s startup command] [-d domid]\n", name);
+	exit(status);
+}
 
+static void raise_grant_limit(void) {
+#ifdef __linux__
+	static const char *const path = "/sys/module/xen_gntalloc/parameters/limit";
+	int params_fd = open(path, O_RDONLY|O_CLOEXEC|O_NOCTTY);
+	if (-1 == params_fd) {
+		if (errno != ENOENT)
+			err(1, "Cannot open %s", path);
+		return;
+	}
+	char buf[256];
+	// FIXME this might require multiple reads
+	const ssize_t slen = read(params_fd, buf, sizeof buf);
+	buf[sizeof buf - 1] = '\0';
+	if (-1 == slen)
+		err(1, "Cannot read %s", path);
+	size_t len = (size_t)slen;
+	if (len > 1 && buf[len - 1] == '\n') {
+		buf[len - 1] = '\0';
+		len -= 1;
+	} else if ((size_t)len < sizeof buf) {
+		buf[len] = '\0';
+	}
+	char *endptr;
+	errno = 0;
+	unsigned long l = strtoul(buf, &endptr, 10);
+	if (errno || !endptr || *endptr)
+		err(1, "Invalid grant limit from %s", path);
+	if (l >= (1UL << 30))
+		return;
+	const char to_write[] = "1073741824";
+	if (close(params_fd))
+		err(1, "close(%s)", path);
+	params_fd = open(path, O_WRONLY|O_CLOEXEC|O_NOCTTY);
+	if (params_fd == -1) {
+		warn("Cannot raise grant table limit: opening %s for writing failed", path);
+		return;
+	}
+	ssize_t status = write(params_fd, to_write, sizeof to_write - 1);
+	if (status == -1)
+		err(1, "writing to %s", path);
+	if (status != sizeof to_write - 1)
+		errx(1, "Failed to write full buffer");
+	if (close(params_fd))
+		err(1, "close(%s)", path);
+#endif
+}
+
+static void drop_privileges(void) {
+	if (setuid(getuid()) || setgid(getgid()))
+		err(1, "Cannot drop privileges");
+}
+
+static unsigned long strict_strtoul(char *str, char *what, unsigned long max) {
+	assert(str);
+	if (str[0] < '0' || str[0] > '9')
+		goto bad;
+	bool octal = str[0] == '0' && (str[1] != 'x' && str[1] != '\0');
+	errno = 0;
+	char *endptr = NULL;
+	unsigned long value = strtoul(str, &endptr, 0);
+	if (!endptr || *endptr != '\0')
+		goto bad;
+	if (value && octal)
+		errx(1, "Sorry, but octal %s %s isn't allowed\n", what, str);
+	if (errno == ERANGE || value > max)
+		errx(1, "Sorry, %s %s is too large (maximum is %lu)\n", what, str, max);
+	if (errno)
+		goto bad;
+	return value;
+bad:
+	errx(1, "%s is not a valid %s\n", str, what);
+}
+
+static uint16_t get_gui_domain_xid(qdb_handle_t qdb, char *domid_str) {
+	unsigned int len = UINT_MAX;
+	if (!domid_str) {
+		if (!(domid_str = qdb_read(qdb, "/qubes-gui-domain-xid", &len)))
+			err(1, "cannot read /qubes-gui-domain-xid from QubesDB");
+		assert(len != UINT_MAX);
+	}
+	uint16_t domid = (uint16_t)strict_strtoul(domid_str, "domain ID", UINT16_MAX);
+	if (len != UINT_MAX)
+		free(domid_str);
+	return domid;
+}
+
+int main(int argc, char *argv[]) {
 	const char *startup_cmd = NULL;
+	char *domid_str = NULL, *debug_mode_str = NULL;
 	int c, loglevel = WLR_ERROR;
 	if (argc < 1) {
 		fputs("NULL argv[0] passed\n", stderr);
 		return 1;
 	}
+	struct sigaction sigpipe = {
+		.sa_sigaction = sigpipe_handler,
+		.sa_flags = SA_SIGINFO | SA_RESTART,
+	}, old_sighnd;
+	sigemptyset(&sigpipe.sa_mask);
+	if (sigaction(SIGPIPE, &sigpipe, &old_sighnd))
+		err(1, "Cannot set empty handler for SIGPIPE");
 
-	while ((c = getopt(argc, argv, "vs:h")) != -1) {
+	while ((c = getopt(argc, argv, "vs:d:h")) != -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
@@ -841,66 +943,58 @@ int main(int argc, char *argv[]) {
 			else
 				loglevel = WLR_DEBUG;
 			break;
+		case 'd':
+			domid_str = optarg;
+			break;
+		case 'h':
+			usage(argv[0], 0);
 		default:
-			printf("Usage: %s [-v] [-s startup command] [--] domid\n", argv[0]);
-			return 0;
+			usage(argv[0], 1);
 		}
 	}
-	if (optind != argc - 1) {
-		printf("Usage: %s [-v] [-s startup command] [--] domid\n", argv[0]);
-		return 0;
+	if (optind != argc)
+		usage(argv[0], 1);
+	qdb_handle_t qdb = NULL;
+	if (!(qdb = qdb_open(NULL))) {
+#ifdef QUBES_HAS_SYSTEMD
+		sd_notifyf(0, "ERRNO=%d", errno);
+#endif
+		err(1, "Cannot connect to QubesDB");
 	}
-	const char *domid_str = argv[argc - 1];
-	if (domid_str[0] < '0' || domid_str[0] > '9') {
-bad_domid:
-		fprintf(stderr, "%s: %s is not a valid domain ID\n", argv[0], domid_str);
-		return 1;
+	uint16_t const domid = get_gui_domain_xid(qdb, domid_str);
+	if (!(debug_mode_str = qdb_read(qdb, "/qubes-debug-mode", NULL))) {
+#ifdef QUBES_HAS_SYSTEMD
+		sd_notifyf(0, "ERRNO=%d", errno);
+#endif
+		err(1, "Cannot determine debug mode");
 	}
-	bool octal_domid = domid_str[0] == '0' && (domid_str[1] != 'x' && domid_str[1] != '\0');
-	errno = 0;
-	char *endptr = NULL;
-	unsigned long raw_domid = strtoul(domid_str, &endptr, 0);
-	uint16_t domid;
-	if (endptr && *endptr == '\0') {
-		if (raw_domid && octal_domid) {
-			fprintf(stderr, "%s: Sorry, but octal domain ID %s isn't allowed\n", argv[0], domid_str);
-			return 1;
-		}
-		if (errno == ERANGE || raw_domid > UINT16_MAX) {
-			fprintf(stderr, "%s: Sorry, domain ID %s is too large (maximum is 65535)\n", argv[0], domid_str);
-			return 1;
-		}
-		if (errno)
-			goto bad_domid;
-		domid = raw_domid;
-	} else goto bad_domid;
-
-	struct sigaction sigpipe = {
-		.sa_sigaction = sigpipe_handler,
-		.sa_flags = SA_SIGINFO | SA_RESTART,
-	}, old_sighnd;
-	sigemptyset(&sigpipe.sa_mask);
-	if (sigaction(SIGPIPE, &sigpipe, &old_sighnd)) {
-		wlr_log(WLR_ERROR, "Cannot set up signal handler: %s", strerror(errno));
-		return 1;
-	}
-
-	wlr_log_init(loglevel, NULL);
+	if (strict_strtoul(debug_mode_str, "debug mode", ULONG_MAX))
+		loglevel = WLR_DEBUG;
+	raise_grant_limit();
+	qdb_close(qdb);
+	qdb = NULL;
 	struct tinywl_server *server = calloc(1, sizeof(*server));
 	if (!server) {
-		wlr_log(WLR_ERROR, "Cannot create tinywl_server");
-		return 1;
+#ifdef QUBES_HAS_SYSTEMD
+		sd_notifyf(0, "ERRNO=%d", errno);
+#endif
+		err(1, "Cannot create tinywl_server");
 	}
 	server->magic = QUBES_SERVER_MAGIC;
 	server->domid = domid;
 
-	/* The allocator is the bridge between the renderer and the backend.
-	 * It handles the buffer managment between the two, allowing wlroots
-	 * to render onto the screen */
 	if (!(server->allocator = qubes_allocator_create(domid))) {
-		wlr_log(WLR_ERROR, "Cannot create Qubes allocator");
-		return 1;
+#ifdef QUBES_HAS_SYSTEMD
+		sd_notifyf(0, "ERRNO=%d", errno);
+#endif
+		err(1, "Cannot create Qubes OS allocator");
 	}
+
+	// Get the default user
+	if (getuid() == 0)
+		drop_privileges();
+
+	wlr_log_init(loglevel, NULL);
 
 	/* The Wayland display is managed by libwayland. It handles accepting
 	 * clients from the Unix socket, manging Wayland globals, and so on. */
