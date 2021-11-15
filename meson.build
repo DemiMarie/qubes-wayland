@@ -16,7 +16,6 @@ add_project_arguments(
     '-DWLR_USE_UNSTABLE',
     '-D_FORTIFY_SOURCE=2',
     '-D_GNU_SOURCE=1',
-    '-DBUILD_RUST',
     '-Wno-unused-parameter',
     '-Wno-error=cpp',
     '-Wvla',
