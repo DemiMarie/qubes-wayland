@@ -60,7 +60,6 @@ static bool qubes_output_test(struct wlr_output *raw_output) {
 	return true;
 }
 
-#ifdef BUILD_RUST
 static void qubes_output_damage(struct tinywl_view *view, struct wlr_box box) {
 	struct qubes_output *output = &view->output;
 	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32, (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
@@ -106,14 +105,12 @@ static void qubes_output_damage(struct tinywl_view *view, struct wlr_box box) {
 		qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg);
 	}
 }
-#endif
 
 void qubes_output_dump_buffer(struct tinywl_view *view, struct wlr_box box)
 {
 	struct qubes_output *output = &view->output;
 	assert(output->buffer->impl == qubes_buffer_impl_addr);
 	wl_signal_add(&output->buffer->events.destroy, &output->buffer_destroy);
-#ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32, MSG_WINDOW_DUMP, view->window_id);
 	struct qubes_buffer *buffer = wl_container_of(output->buffer, buffer, inner);
 	buffer->header.window = view->window_id;
@@ -121,7 +118,6 @@ void qubes_output_dump_buffer(struct tinywl_view *view, struct wlr_box box)
 	buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
 	qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header);
 	qubes_output_damage(view, box);
-#endif
 }
 
 static bool qubes_output_commit(struct wlr_output *raw_output) {

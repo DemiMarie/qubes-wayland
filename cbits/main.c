@@ -41,9 +41,7 @@
 
 #include <xkbcommon/xkbcommon.h>
 
-#ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
-#endif
 #include "qubes_output.h"
 #include "qubes_backend.h"
 #include "qubes_allocator.h"
@@ -317,7 +315,6 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 
 static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_set, uint32_t flags_unset)
 {
-#ifdef BUILD_RUST
 	assert(qubes_output_created(view));
 	struct {
 		struct msg_hdr header;
@@ -336,12 +333,10 @@ static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_s
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.flags);
 	// Asserted above, checked at call sites
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
-#endif
 }
 
 static void qubes_set_view_title(struct tinywl_view *view)
 {
-#ifdef BUILD_RUST
 	if (!strncmp(view->last_title.data,
 	             view->xdg_surface->toplevel->title,
 	             sizeof(view->last_title.data) - 1)) {
@@ -372,12 +367,10 @@ static void qubes_set_view_title(struct tinywl_view *view)
 	        sizeof(msg.title.data) - 1);
 	// Asserted above, checked at call sites
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
-#endif
 }
 
 static void qubes_set_view_app_id(struct tinywl_view *view)
 {
-#ifdef BUILD_RUST
 	assert(qubes_output_created(view));
 	assert(view->window_id);
 	wlr_log(WLR_DEBUG, "Sending MSG_WMCLASS (0x%x) to window %" PRIu32, MSG_WMCLASS, view->window_id);
@@ -399,7 +392,6 @@ static void qubes_set_view_app_id(struct tinywl_view *view)
 	strncpy(msg.class.res_class, view->xdg_surface->toplevel->app_id, sizeof(msg.class.res_class) - 1);
 	// Asserted above, checked at call sites
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
-#endif
 }
 
 bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
@@ -419,7 +411,6 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 	}
 	if (qubes_output_created(view))
 		return true;
-#ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, view->window_id);
 	struct {
 		struct msg_hdr header;
@@ -443,7 +434,6 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 	// This is MSG_CREATE
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
 	view->flags |= QUBES_OUTPUT_CREATED;
-#endif
 	return true;
 }
 
@@ -468,7 +458,6 @@ void qubes_view_map(struct tinywl_view *view)
 		wlr_scene_node_set_enabled(view->scene_subsurface_tree, true);
 		wlr_output_enable(&view->output.output, true);
 	}
-#ifdef BUILD_RUST
 	uint32_t transient_for_window = 0;
 	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		uint32_t flags_to_set = 0, flags_to_unset = 0;
@@ -517,8 +506,6 @@ void qubes_view_map(struct tinywl_view *view)
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.info);
 	// Surface created above
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg);
-
-#endif
 }
 
 static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribute__((unused))) {
@@ -530,7 +517,6 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	wlr_scene_node_set_enabled(&view->scene_output->scene->node, false);
 	wlr_scene_node_set_enabled(view->scene_subsurface_tree, false);
 	wlr_output_enable(&view->output.output, false);
-#ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, view->window_id);
 	struct msg_hdr header = {
 		.type = MSG_UNMAP,
@@ -539,7 +525,6 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	};
 	if (qubes_output_created(view))
 		qubes_rust_send_message(view->server->backend->rust_backend, &header);
-#endif
 }
 
 static void xdg_surface_destroy(struct wl_listener *listener, void *data __attribute__((unused))) {
@@ -560,7 +545,6 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		wl_list_remove(&view->set_app_id.link);
 		wl_list_remove(&view->ack_configure.link);
 	}
-#ifdef BUILD_RUST
 	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, view->window_id);
 	struct msg_hdr header = {
 		.type = MSG_DESTROY,
@@ -570,7 +554,6 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	if (qubes_output_created(view))
 		qubes_rust_send_message(view->server->backend->rust_backend, &header);
 	qubes_rust_delete_id(view->server->backend->rust_backend, view->window_id);
-#endif
 	if (view->scene_subsurface_tree)
 		wlr_scene_node_destroy(view->scene_subsurface_tree);
 	if (view->scene_output)
@@ -675,10 +658,6 @@ static void qubes_surface_commit(
 	assert(view->scene_output);
 	if (!qubes_output_ensure_created(view, &box))
 		return;
-#ifndef BUILD_RUST
-# define MAX_WINDOW_WIDTH (1 << 14)
-# define MAX_WINDOW_HEIGHT ((1 << 11) * 3)
-#endif
 	if ((view->last_width != box.width || view->last_height != box.height) &&
 	    !(view->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {
 		qubes_send_configure(view, box.width, box.height);

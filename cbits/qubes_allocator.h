@@ -3,10 +3,8 @@
 
 #include "common.h"
 #include <wlr/render/allocator.h>
-#ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
 #include <xen/gntalloc.h>
-#endif
 
 /**
  * Creates an allocator, owned by main()
@@ -23,7 +21,6 @@ struct qubes_buffer {
 	struct qubes_allocator *alloc;
 	uint64_t index;
 	size_t size;
-#ifdef BUILD_RUST
 	union {
 		struct {
 			uint32_t format;
@@ -35,13 +32,8 @@ struct qubes_buffer {
 		struct ioctl_gntalloc_alloc_gref xen; /* only used during initialization */
 		struct msg_window_dump_hdr qubes;
 	};
-#else
-	uint32_t format, width, height;
-#endif
 };
-#ifdef BUILD_RUST
 _Static_assert(offsetof(struct qubes_buffer, xen) - offsetof(struct qubes_buffer, header) == sizeof(struct msg_hdr), "Struct not contiguous?");
-#endif
 
 #endif
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:

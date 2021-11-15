@@ -5,18 +5,14 @@
 #include <wayland-server-core.h>
 #include <wlr/interfaces/wlr_output.h>
 
-#ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
-#endif
 
 struct qubes_output {
 	struct wlr_output output;
 	struct wl_listener buffer_destroy;
 	struct wlr_buffer *buffer; /* *not* owned by the compositor */
 	struct wl_listener frame;
-#ifdef BUILD_RUST
 	struct msg_keymap_notify keymap;
-#endif
 	const struct wlr_drm_format_set *formats; /* global */
 };
 

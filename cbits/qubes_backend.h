@@ -6,9 +6,7 @@
 #include <wlr/types/wlr_output.h>
 #include <wayland-server-core.h>
 
-#ifdef BUILD_RUST
-# include <qubes-gui-protocol.h>
-#endif
+#include <qubes-gui-protocol.h>
 
 struct qubes_rust_backend;
 
@@ -21,13 +19,10 @@ struct qubes_backend {
 	struct wlr_output_mode mode;
 	struct wlr_output *output;
 	struct wlr_input_device *keyboard_input, *pointer_input;
-#ifdef BUILD_RUST
 	struct qubes_rust_backend *rust_backend;
 	struct wl_event_source *source;
 	struct msg_keymap_notify keymap;
 	struct wl_list *views;
-#endif
-
 	struct wl_listener display_destroy;
 };
 extern int qubes_rust_backend_fd(struct qubes_rust_backend *backend);

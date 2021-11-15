@@ -16,9 +16,7 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 
-#ifdef BUILD_RUST
 #include <qubes-gui-protocol.h>
-#endif
 
 #include "qubes_clipboard.h"
 #include "qubes_output.h"
