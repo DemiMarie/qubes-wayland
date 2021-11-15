@@ -158,13 +158,11 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 static const struct wlr_drm_format xrgb8888 = {
 	.format = DRM_FORMAT_XRGB8888,
 	.len = 0,
-	.cap = WLR_BUFFER_CAP_DATA_PTR,
 };
 
 static const struct wlr_drm_format *global_pointer = &xrgb8888;
 static const struct wlr_drm_format_set global_formats = {
 	.len = 1,
-	.cap = WLR_BUFFER_CAP_DATA_PTR,
 	.formats = (struct wlr_drm_format **)&global_pointer,
 };
 
