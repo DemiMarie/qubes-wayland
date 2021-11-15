@@ -990,9 +990,8 @@ int main(int argc, char *argv[]) {
 		err(1, "Cannot create Qubes OS allocator");
 	}
 
-	// Get the default user
-	if (getuid() == 0)
-		drop_privileges();
+	// Drop root privileges
+	drop_privileges();
 
 	wlr_log_init(loglevel, NULL);
 
