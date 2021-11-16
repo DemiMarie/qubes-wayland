@@ -955,40 +955,31 @@ int main(int argc, char *argv[]) {
 	if (optind != argc)
 		usage(argv[0], 1);
 	qdb_handle_t qdb = NULL;
-	if (!(qdb = qdb_open(NULL))) {
-#ifdef QUBES_HAS_SYSTEMD
-		sd_notifyf(0, "ERRNO=%d", errno);
-#endif
+	if (!(qdb = qdb_open(NULL)))
 		err(1, "Cannot connect to QubesDB");
-	}
+
 	uint16_t const domid = get_gui_domain_xid(qdb, domid_str);
-	if (!(debug_mode_str = qdb_read(qdb, "/qubes-debug-mode", NULL))) {
-#ifdef QUBES_HAS_SYSTEMD
-		sd_notifyf(0, "ERRNO=%d", errno);
-#endif
+	if (!(debug_mode_str = qdb_read(qdb, "/qubes-debug-mode", NULL)))
 		err(1, "Cannot determine debug mode");
-	}
 	if (strict_strtoul(debug_mode_str, "debug mode", ULONG_MAX))
 		loglevel = WLR_DEBUG;
-	raise_grant_limit();
+	free(debug_mode_str);
+	debug_mode_str = NULL;
+
 	qdb_close(qdb);
 	qdb = NULL;
+
+	raise_grant_limit();
+
 	struct tinywl_server *server = calloc(1, sizeof(*server));
-	if (!server) {
-#ifdef QUBES_HAS_SYSTEMD
-		sd_notifyf(0, "ERRNO=%d", errno);
-#endif
+	if (!server)
 		err(1, "Cannot create tinywl_server");
-	}
+
 	server->magic = QUBES_SERVER_MAGIC;
 	server->domid = domid;
 
-	if (!(server->allocator = qubes_allocator_create(domid))) {
-#ifdef QUBES_HAS_SYSTEMD
-		sd_notifyf(0, "ERRNO=%d", errno);
-#endif
+	if (!(server->allocator = qubes_allocator_create(domid)))
 		err(1, "Cannot create Qubes OS allocator");
-	}
 
 	// Drop root privileges
 	drop_privileges();
