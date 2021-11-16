@@ -504,7 +504,7 @@ void qubes_view_map(struct tinywl_view *view)
 		},
 		.info = {
 			.transient_for = transient_for_window,
-			.override_redirect = 0,
+			.override_redirect = view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0,
 		},
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.info);
