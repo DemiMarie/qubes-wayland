@@ -352,34 +352,26 @@ static void qubes_recreate_window(struct tinywl_view *view)
 	}
 }
 
-void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
+static void
+qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 {
 	extern bool qubes_rust_reconnect(struct qubes_rust_backend *backend);
-	struct qubes_backend *backend = raw_backend;
-	struct tinywl_view *view = raw_view;
-
-	assert(raw_backend);
-	if (!ptr) {
-		if (hdr.untrusted_len == 2) {
-			wlr_log(WLR_DEBUG, "Reconnecting to GUI daemon");
-			struct tinywl_view *view;
-			wl_list_for_each(view, backend->views, link) {
-				assert(QUBES_VIEW_MAGIC == view->magic);
-				view->flags &= ~QUBES_OUTPUT_CREATED;
-			}
-			wl_list_for_each(view, backend->views, link) {
-				assert(QUBES_VIEW_MAGIC == view->magic);
-				assert(!(view->flags & QUBES_OUTPUT_CREATED));
-				qubes_recreate_window(view);
-			}
-			return;
-		} else if (hdr.untrusted_len == 1) {
-			wlr_log(WLR_DEBUG, "Must reconnect to GUI daemon");
-		} else {
-			assert(hdr.untrusted_len == 3);
-			wl_display_terminate(backend->display);
-			return;
+	switch (msg_type)  {
+	case 2:
+		wlr_log(WLR_DEBUG, "Reconnecting to GUI daemon");
+		struct tinywl_view *view;
+		wl_list_for_each(view, backend->views, link) {
+			assert(QUBES_VIEW_MAGIC == view->magic);
+			view->flags &= ~QUBES_OUTPUT_CREATED;
 		}
+		wl_list_for_each(view, backend->views, link) {
+			assert(QUBES_VIEW_MAGIC == view->magic);
+			assert(!(view->flags & QUBES_OUTPUT_CREATED));
+			qubes_recreate_window(view);
+		}
+		return;
+	case 1:
+		wlr_log(WLR_DEBUG, "Must reconnect to GUI daemon");
 		// GUI agent needs reconnection
 		wl_event_source_remove(backend->source);
 		backend->source = NULL;
@@ -399,7 +391,25 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 			wl_display_terminate(backend->display);
 		}
 		return;
+	case 3:
+		wl_display_terminate(backend->display);
+		return;
+	default:
+		abort();
 	}
+}
+
+void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
+{
+	struct qubes_backend *backend = raw_backend;
+	struct tinywl_view *view = raw_view;
+
+	assert(raw_backend);
+	if (!ptr) {
+		qubes_reconnect(backend, hdr.untrusted_len);
+		return;
+	}
+
 	if (!view) {
 		if (hdr.type != MSG_KEYMAP_NOTIFY) {
 			wlr_log(WLR_ERROR, "No window for message of type %" PRIu32, hdr.type);
