@@ -100,7 +100,15 @@ endforeach
 
 wlroots_proj = subproject(
   'wlroots',
-  default_options: ['examples=false', 'session=disabled', 'backends=[]'],
+  default_options: [
+    'examples=false',
+    'no-gpu=true',
+    'session=disabled',
+    'xwayland=disabled',
+    'xcb-errors=disabled',
+    'renderers=[]',
+    'backends=[]',
+  ],
   required: true,
   version: ['>=0.15.0', '<0.16.0'],
 )
