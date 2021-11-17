@@ -1013,6 +1013,12 @@ int main(int argc, char *argv[]) {
 	if (optind != argc)
 		usage(argv[0], 1);
 
+	// Raise the grant table limit
+	raise_grant_limit();
+
+	// Drop root privileges
+	drop_privileges();
+
 	uint16_t domid;
 	{
 		qdb_handle_t qdb = NULL;
@@ -1033,8 +1039,6 @@ int main(int argc, char *argv[]) {
 			qdb_close(qdb);
 	}
 
-	raise_grant_limit();
-
 	struct tinywl_server *server = calloc(1, sizeof(*server));
 	if (!server)
 		err(1, "Cannot create tinywl_server");
@@ -1047,9 +1051,6 @@ int main(int argc, char *argv[]) {
 
 	// Check that the process is single threaded before using much from wlroots
 	check_single_threaded();
-
-	// Drop root privileges
-	drop_privileges();
 
 	wlr_log_init(loglevel, NULL);
 
