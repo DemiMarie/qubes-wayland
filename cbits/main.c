@@ -20,6 +20,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 #include <wayland-server-core.h>
 
@@ -826,7 +828,7 @@ static void sigpipe_handler(int signum, siginfo_t *siginfo, void *ucontext)
 }
 
 static _Noreturn void usage(char *name, int status) {
-	printf("Usage: %s [-v] [-s startup command] [-d domid]\n", name);
+	printf("Usage: %s [-v [silent|error|info|debug]] [-s startup command] [-d domid]\n", name);
 	exit(status);
 }
 
@@ -900,7 +902,7 @@ static unsigned long strict_strtoul(char *str, char *what, unsigned long max) {
 		goto bad;
 	return value;
 bad:
-	errx(1, "%s is not a valid %s\n", str, what);
+	errx(1, "'%s' is not a valid %s\n", str, what);
 }
 
 static uint16_t get_gui_domain_xid(qdb_handle_t qdb, char *domid_str) {
@@ -916,9 +918,66 @@ static uint16_t get_gui_domain_xid(qdb_handle_t qdb, char *domid_str) {
 	return domid;
 }
 
+static void check_single_threaded(void) {
+#ifdef __linux__
+	// This is not racy, assuming the kernel returns a consistent snapshot
+	// of the process state.
+	int procfd = open("/proc/self/task", O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOCTTY);
+	if (procfd == -1)
+		err(1, "opening /proc/self/task to list threads");
+	DIR *dir = fdopendir(procfd);
+	if (!dir)
+		err(1, "fdopendir");
+	struct dirent *firstent;
+	size_t thread_count = 0;
+	bool got_dot = false, got_dotdot = false;
+	while (errno = 0, (firstent = readdir(dir))) {
+		if (!strcmp(firstent->d_name, "."))
+			got_dot = true;
+		else if (!strcmp(firstent->d_name, ".."))
+			got_dotdot = true;
+		else
+			thread_count++;
+	}
+	if (errno)
+		err(1, "readdir");
+	if (!got_dot || !got_dotdot)
+		errx(1, "No . or .. in /proc/self/task?");
+	if (thread_count != 1)
+		errx(1, "Multiple threads running?");
+	closedir(dir);
+#endif
+}
+
+static int
+parse_verbosity(const char *optarg)
+{
+	switch (optarg[0]) {
+	case 's':
+		if (strcmp(optarg + 1, "ilent"))
+			break;
+		return WLR_SILENT;
+	case 'e':
+		if (strcmp(optarg + 1, "rror"))
+			break;
+		return WLR_ERROR;
+	case 'i':
+		if (strcmp(optarg + 1, "nfo"))
+			break;
+		return WLR_INFO;
+	case 'd':
+		if (strcmp(optarg + 1, "ebug"))
+			break;
+		return WLR_DEBUG;
+	default:
+		break;
+	}
+	errx(1, "Invalid verbosity level: expected 'silent', 'error', 'info', or 'debug', not '%s'", optarg);
+}
+
 int main(int argc, char *argv[]) {
 	const char *startup_cmd = NULL;
-	char *domid_str = NULL, *debug_mode_str = NULL;
+	char *domid_str = NULL;
 	int c, loglevel = WLR_ERROR;
 	if (argc < 1) {
 		fputs("NULL argv[0] passed\n", stderr);
@@ -932,16 +991,15 @@ int main(int argc, char *argv[]) {
 	if (sigaction(SIGPIPE, &sigpipe, &old_sighnd))
 		err(1, "Cannot set empty handler for SIGPIPE");
 
-	while ((c = getopt(argc, argv, "vs:d:h")) != -1) {
+	bool override_verbosity = false;
+	while ((c = getopt(argc, argv, "v:s:d:h")) != -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
 			break;
 		case 'v':
-			if (loglevel == WLR_ERROR)
-				loglevel = WLR_INFO;
-			else
-				loglevel = WLR_DEBUG;
+			override_verbosity = true;
+			loglevel = parse_verbosity(optarg);
 			break;
 		case 'd':
 			domid_str = optarg;
@@ -954,20 +1012,26 @@ int main(int argc, char *argv[]) {
 	}
 	if (optind != argc)
 		usage(argv[0], 1);
-	qdb_handle_t qdb = NULL;
-	if (!(qdb = qdb_open(NULL)))
-		err(1, "Cannot connect to QubesDB");
 
-	uint16_t const domid = get_gui_domain_xid(qdb, domid_str);
-	if (!(debug_mode_str = qdb_read(qdb, "/qubes-debug-mode", NULL)))
-		err(1, "Cannot determine debug mode");
-	if (strict_strtoul(debug_mode_str, "debug mode", ULONG_MAX))
-		loglevel = WLR_DEBUG;
-	free(debug_mode_str);
-	debug_mode_str = NULL;
+	uint16_t domid;
+	{
+		qdb_handle_t qdb = NULL;
+		if ((!domid_str || !override_verbosity) && !(qdb = qdb_open(NULL)))
+			err(1, "Cannot connect to QubesDB");
 
-	qdb_close(qdb);
-	qdb = NULL;
+		domid = get_gui_domain_xid(qdb, domid_str);
+		if (!override_verbosity) {
+			char *debug_mode;
+			if (!(debug_mode = qdb_read(qdb, "/qubes-debug-mode", NULL)))
+				err(1, "Cannot determine debug mode");
+			if (strict_strtoul(debug_mode, "debug mode", ULONG_MAX))
+				loglevel = WLR_DEBUG;
+			free(debug_mode);
+		}
+
+		if (qdb)
+			qdb_close(qdb);
+	}
 
 	raise_grant_limit();
 
@@ -980,6 +1044,9 @@ int main(int argc, char *argv[]) {
 
 	if (!(server->allocator = qubes_allocator_create(domid)))
 		err(1, "Cannot create Qubes OS allocator");
+
+	// Check that the process is single threaded before using much from wlroots
+	check_single_threaded();
 
 	// Drop root privileges
 	drop_privileges();
