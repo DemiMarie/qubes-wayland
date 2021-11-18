@@ -11,7 +11,6 @@
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/interfaces/wlr_pointer.h>
-#include <wlr/render/pixman.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_pointer.h>
@@ -23,13 +22,6 @@
 #include "qubes_output.h"
 
 static const struct wlr_backend_impl qubes_backend_impl;
-
-#ifdef QUBES_BACKEND_CUSTOM_RENDERER
-static struct wlr_renderer *
-qubes_backend_get_renderer(struct wlr_backend *backend __attribute__((unused))) {
-	return wlr_pixman_renderer_create();
-}
-#endif
 
 static uint32_t
 qubes_backend_get_buffer_caps(struct wlr_backend *backend __attribute__((unused))) {
@@ -59,11 +51,6 @@ typedef void (*qubes_parse_event_callback)(void *raw_view, void *raw_backend, ui
 static const struct wlr_backend_impl qubes_backend_impl = {
 	.start = qubes_backend_start,
 	.destroy = qubes_backend_handle_wlr_destroy,
-#ifdef QUBES_BACKEND_CUSTOM_RENDERER
-	.get_renderer = qubes_backend_get_renderer,
-#else
-	.get_renderer = NULL,
-#endif
 	.get_session = NULL,
 	.get_presentation_clock = NULL,
 	.get_drm_fd = NULL,
@@ -167,7 +154,6 @@ qubes_backend_create(struct wl_display *display, uint16_t domid, struct wl_list 
 	backend->display = display;
 	backend->keyboard_input = keyboard_input;
 	backend->pointer_input = pointer_input;
-	backend->backend.has_own_renderer = true;
 	wlr_backend_init(&backend->backend, &qubes_backend_impl);
 	strncpy(output->make, "Qubes OS Virtual Output", sizeof output->make - 1);
 	strncpy(output->model, "GUI Agent", sizeof output->model - 1);

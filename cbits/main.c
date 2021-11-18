@@ -26,6 +26,7 @@
 #include <wayland-server-core.h>
 
 #include <wlr/render/allocator.h>
+#include <wlr/render/pixman.h>
 #include <wlr/backend.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/render/wlr_renderer.h>
@@ -1070,11 +1071,8 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	/* If we don't provide a renderer, autocreate makes a GLES2 renderer for us.
-	 * The renderer is responsible for defining the various pixel formats it
-	 * supports for shared memory, this configures that for clients. */
-	if (!(server->renderer = wlr_backend_get_renderer(&server->backend->backend))) {
-		wlr_log(WLR_ERROR, "No renderer from wlr_backend");
+	if (!(server->renderer = wlr_pixman_renderer_create())) {
+		wlr_log(WLR_ERROR, "Cannot create Pixman renderer");
 		return 1;
 	}
 
