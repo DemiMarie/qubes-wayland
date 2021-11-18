@@ -147,7 +147,8 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 			qubes_output_dump_buffer(view, box);
 		}
 	}
-	wlr_output_update_enabled(raw_output, raw_output->pending.enabled);
+	if (raw_output->pending.committed & WLR_OUTPUT_STATE_ENABLED)
+		wlr_output_update_enabled(raw_output, raw_output->pending.enabled);
 	return true;
 }
 
