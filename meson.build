@@ -108,6 +108,7 @@ wlroots_proj = subproject(
     'xcb-errors=disabled',
     'renderers=[]',
     'backends=[]',
+    'allocators=[]',
   ],
   required: true,
   version: ['>=0.15.0', '<0.16.0'],
