@@ -154,13 +154,26 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 
 static const struct wlr_drm_format xrgb8888 = {
 	.format = DRM_FORMAT_XRGB8888,
-	.len = 0,
+	.len = 2,
+	.capacity = 0,
+	.modifiers = { DRM_FORMAT_MOD_INVALID, DRM_FORMAT_MOD_LINEAR },
+};
+static const struct wlr_drm_format argb8888 = {
+	.format = DRM_FORMAT_ARGB8888,
+	.len = 2,
+	.capacity = 0,
+	.modifiers = { DRM_FORMAT_MOD_INVALID, DRM_FORMAT_MOD_LINEAR },
 };
 
-static const struct wlr_drm_format *global_pointer = &xrgb8888;
+static const struct wlr_drm_format *const global_pointer_array[2] = {
+	&xrgb8888,
+	&argb8888,
+};
+
 static const struct wlr_drm_format_set global_formats = {
-	.len = 1,
-	.formats = (struct wlr_drm_format **)&global_pointer,
+	.len = 2,
+	.capacity = 0,
+	.formats = (struct wlr_drm_format **)global_pointer_array,
 };
 
 static const struct wlr_drm_format_set *qubes_output_get_primary_formats(
