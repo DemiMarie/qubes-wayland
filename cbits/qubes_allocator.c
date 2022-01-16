@@ -122,10 +122,11 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 
 	/* Format modifiers aren’t supported, except DRM_FORMAT_MOD_LINEAR */
 	for (size_t i = 0; i < format->len; ++i) {
-		if (format->modifiers[i] == DRM_FORMAT_MOD_LINEAR)
+		if (format->modifiers[i] == DRM_FORMAT_MOD_LINEAR ||
+		    format->modifiers[i] == DRM_FORMAT_MOD_INVALID)
 			continue;
 		wlr_log(WLR_ERROR,
-		        "Refusing allocation because of unsupported format modifier %" PRIx64,
+		        "Refusing allocation because of unsupported format modifier 0x%" PRIx64,
 		        format->modifiers[i]);
 		return NULL;
 	}
