@@ -98,21 +98,29 @@ foreach name, path : protocols
 	protocols_server_header += { name: server_header }
 endforeach
 
-wlroots_proj = subproject(
-  'wlroots',
-  default_options: [
-    'examples=false',
-    'no-gpu=true',
-    'session=disabled',
-    'xwayland=disabled',
-    'xcb-errors=disabled',
-    'renderers=[]',
-    'backends=[]',
-    'allocators=[]',
-  ],
-  required: true,
-  version: ['>=0.15.0', '<0.16.0'],
-)
+wlroots_options = [
+  'examples=false',
+  'no-gpu=true',
+  'session=disabled',
+  'xwayland=disabled',
+  'xcb-errors=disabled',
+  'renderers=["auto"]',
+  'backends=[]',
+  'allocators=[]',
+  'auto_features=disabled',
+]
+wlroots = dependency('wlroots',
+                     version: ['>=0.15.0', '<0.16.0'],
+                     default_options: wlroots_options)
+
+if not wlroots.found()
+  wlroots_proj = subproject(
+    'wlroots',
+    default_options: wlroots_options,
+    version: ['>=0.15.0', '<0.16.0'],
+  )
+  wlroots = wlroots_proj.get_variable('wlroots')
+endif
 
 rust_parts = custom_target(
   'Build Rust code',
@@ -135,7 +143,7 @@ conf_h = configure_file(
 bin_compositor = executable(
   meson.project_name(),
   qubes_files,
-  dependencies: [wlroots_proj.get_variable('wlroots'), threads, vchan_xen, dl, systemd, qubesdb],
+  dependencies: [wlroots, threads, vchan_xen, dl, systemd, qubesdb],
   include_directories: ['cbits', include_directories('.')],
   link_with: [rust_parts[0]],
   install: true,
