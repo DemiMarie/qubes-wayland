@@ -6,5 +6,5 @@
 	url = https://github.com/Smithay/smithay.git
 [submodule "wlroots"]
 	path = subprojects/wlroots
-	url = https://github.com/DemiMarie/wlroots.git
+	url = https://gitlab.freedesktop.org/wlroots/wlroots.git
 	branch = qubes
