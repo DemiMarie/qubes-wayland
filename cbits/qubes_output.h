@@ -10,7 +10,7 @@
 struct qubes_output {
 	struct wlr_output output;
 	struct wl_listener buffer_destroy;
-	struct wlr_buffer *buffer; /* *not* owned by the compositor */
+	struct wlr_buffer *buffer; /* owned by the compositor */
 	struct wl_listener frame;
 	struct msg_keymap_notify keymap;
 	const struct wlr_drm_format_set *formats; /* global */

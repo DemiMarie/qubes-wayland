@@ -48,6 +48,7 @@ static void qubes_output_deinit(struct wlr_output *raw_output) {
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	wl_list_remove(&output->frame.link);
 	qubes_unlink_buffer(output);
+	wlr_buffer_unlock(output->buffer);
 }
 
 static bool qubes_output_test(struct wlr_output *raw_output) {
@@ -140,10 +141,13 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 
 	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
 	    (output->buffer != raw_output->pending.buffer)) {
-		if (output->buffer)
-			wl_list_remove(&output->buffer_destroy.link);
-		output->buffer = raw_output->pending.buffer;
 		if (output->buffer) {
+			wl_list_remove(&output->buffer_destroy.link);
+			wlr_buffer_unlock(output->buffer);
+		}
+
+		if ((output->buffer = raw_output->pending.buffer)) {
+			wlr_buffer_lock(output->buffer);
 			qubes_output_dump_buffer(view, box);
 		}
 	}
