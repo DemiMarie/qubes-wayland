@@ -134,7 +134,7 @@ static struct wlr_buffer *qubes_buffer_create(struct wlr_allocator *alloc,
 	/* Check for excessive sizes */
 	if (width <= 0 || width > MAX_WINDOW_WIDTH ||
 	    height <= 0 || height > MAX_WINDOW_HEIGHT) {
-		wlr_log(WLR_DEBUG,
+		wlr_log(WLR_ERROR,
 		        "Refusing allocation because width %d and/or height %d is bad",
 		        width, height);
 		return NULL;
