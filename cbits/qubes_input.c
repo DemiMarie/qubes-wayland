@@ -314,21 +314,21 @@ static void handle_clipboard_request(struct tinywl_view *view)
 	wl_array_for_each(mime_type, &source->mime_types) {
 		// MIME types are already sanitized against injection attacks
 		wlr_log(WLR_DEBUG, "Received event of MIME type %s", *mime_type);
-		if (!strcmp(*mime_type, "text/plain")) {
-			int pipefds[2], res = pipe2(pipefds, O_CLOEXEC|O_NONBLOCK), ctrl = 0;
-			if (res == -1)
-				return;
-			assert(res == 0);
+		if (strcmp(*mime_type, "text/plain"))
+			continue;
+		int pipefds[2], res = pipe2(pipefds, O_CLOEXEC|O_NONBLOCK), ctrl = 0;
+		if (res == -1)
+			return;
+		assert(res == 0);
+		struct qubes_clipboard_handler *handler = qubes_clipboard_handler_create(server, pipefds[0]);
+		if (handler) {
 			res = ioctl(pipefds[1], FIONBIO, &ctrl);
 			assert(res == 0);
-			struct qubes_clipboard_handler *handler = qubes_clipboard_handler_create(server, pipefds[0]);
-			if (handler) {
-				wlr_data_source_send(source, *mime_type, pipefds[1]);
-			} else {
-				assert(close(pipefds[1]) == 0);
-			}
-			return;
+			wlr_data_source_send(source, *mime_type, pipefds[1]);
+		} else {
+			assert(close(pipefds[1]) == 0);
 		}
+		return;
 	}
 }
 
