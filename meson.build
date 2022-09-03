@@ -133,6 +133,9 @@ rust_parts = custom_target(
 threads = dependency('threads')
 vchan_xen = dependency('vchan-xen')
 drm = dependency('libdrm')
+wayland_server = dependency('wayland-server')
+xkbcommon = dependency('xkbcommon')
+pixman = dependency('pixman-1')
 systemd = dependency('libsystemd', required: false)
 conf_data = configuration_data()
 conf_data.set('QUBES_HAS_SYSTEMD', systemd.found(), description: 'Is systemd found?')
@@ -144,7 +147,7 @@ conf_h = configure_file(
 bin_compositor = executable(
   meson.project_name(),
   qubes_files,
-  dependencies: [wlroots, threads, vchan_xen, dl, systemd, qubesdb, drm],
+  dependencies: [wlroots, threads, vchan_xen, dl, systemd, qubesdb, drm, wayland_server, xkbcommon, pixman],
   include_directories: ['cbits', include_directories('.')],
   link_with: [rust_parts[0]],
   install: true,
