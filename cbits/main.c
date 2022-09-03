@@ -1084,8 +1084,15 @@ int main(int argc, char *argv[]) {
 	 * to dig your fingers in and play with their behavior if you want. Note that
 	 * the clients cannot set the selection directly without compositor approval,
 	 * see the handling of the request_set_selection event below.*/
-	wlr_compositor_create(server->wl_display, server->renderer);
-	wlr_data_device_manager_create(server->wl_display);
+	if (!(server->compositor = wlr_compositor_create(server->wl_display, server->renderer))) {
+		wlr_log(WLR_ERROR, "Cannot create compositor");
+		return 1;
+	}
+
+	if (!(server->data_device = wlr_data_device_manager_create(server->wl_display))) {
+		wlr_log(WLR_ERROR, "Cannot create data device");
+		return 1;
+	}
 
 	/* Enable server-side decorations.  By default, Wayland clients decorate
 	 * themselves, but that will lead to duplicate decorations on Qubes OS. */
