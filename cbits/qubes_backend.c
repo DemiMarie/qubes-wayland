@@ -113,7 +113,6 @@ static const struct wlr_input_device_impl qubes_input_device_impl = {
 };
 
 static bool qubes_backend_output_commit(struct wlr_output *unused __attribute__((unused))) {
-	assert(1 && "BUG: qubes_backend_output_commit should never be called!");
 	return true;
 }
 
