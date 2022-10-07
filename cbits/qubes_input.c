@@ -487,9 +487,11 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 		assert(hdr.untrusted_len == sizeof(struct msg_window_flags));
 		handle_window_flags(view, ptr);
 		break;
+	case MSG_DESTROY:
+		assert(0 && "handled by Rust code");
+		break;
 	case MSG_RESIZE:
 	case MSG_CREATE:
-	case MSG_DESTROY:
 	case MSG_UNMAP:
 	case MSG_MFNDUMP:
 	case MSG_SHMIMAGE:

@@ -30,7 +30,6 @@ pub const OUTPUT_NAME: &str = "qubes";
 pub struct QubesData {
     enabled: bool, // See NOTE: Enabling and disabling GUI messages
     pub agent: qubes_gui_client::Client,
-    pub connection: qubes_gui_gntalloc::Agent,
     wid: u32,
     pub map: BTreeMap<NonZeroU32, *mut c_void>,
     start: std::time::Instant,
@@ -51,7 +50,7 @@ impl QubesData {
 
     fn destroy_id(&mut self, id: u32) {
         if let Ok(id) = NonZeroU32::try_from(id) {
-            self.map.remove(&id).expect("double free!");
+            self.map.get_mut(&id).map(|e| *e = ptr::null_mut());
         }
     }
 
@@ -61,40 +60,60 @@ impl QubesData {
         callback: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, qubes_gui::Header, *const u8),
         global_userdata: *mut c_void,
     ) {
-        if self.agent.needs_reconnect() {
-            self.enabled = false;
+        let Self {
+            ref mut agent,
+            ref mut enabled,
+            ..
+        } = self;
+        let mut protocol_error = |agent: &qubes_gui_client::Client| {
+            *enabled = false;
             let hdr = qubes_gui::Header {
                 ty: 0,
-                window: 0,
-                untrusted_len: 1,
+                window: qubes_gui::WindowID { window: None },
+                untrusted_len: if agent.needs_reconnect() { 1 } else { 3 },
             };
-            callback(global_userdata, ptr::null_mut(), 0, hdr, ptr::null());
+            callback(global_userdata, ptr::null_mut(), 0, hdr, ptr::null())
+        };
+        if agent.needs_reconnect() {
+            protocol_error(agent);
             return;
         }
         if is_readable {
-            self.agent.wait();
+            agent.wait();
         }
         loop {
-            let res = self.agent.read_header();
+            let res = agent.read_message();
             match res {
                 Poll::Ready(Ok((hdr, body))) => {
                     assert!(body.len() < (1usize << 20));
                     assert_eq!(body.len() as u32, hdr.untrusted_len);
                     let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
-                    if let Ok(nz) = NonZeroU32::try_from(hdr.window) {
-                        if let Some(&userdata) = self.map.get(&nz) {
-                            callback(global_userdata, userdata, delta, hdr, body.as_ptr())
+                    if let Some(nz) = hdr.window.window {
+                        if hdr.ty == qubes_gui::MSG_DESTROY {
+                            use std::collections::btree_map::Entry;
+                            let p = self.map.entry(nz);
+                            match p {
+                                Entry::Vacant(_) => protocol_error(agent),
+                                Entry::Occupied(e) => match e.remove_entry() {
+                                    (_, v) if v.is_null() => {}
+                                    _ => protocol_error(agent),
+                                },
+                            }
+                        } else if let Some(&userdata) = self.map.get(&nz) {
+                            if !userdata.is_null() {
+                                callback(global_userdata, userdata, delta, hdr, body.as_ptr())
+                            }
                         }
                     } else {
                         callback(global_userdata, ptr::null_mut(), delta, hdr, body.as_ptr());
                     }
                 }
                 Poll::Pending => {
-                    if self.agent.reconnected() {
-                        self.enabled = true;
+                    if agent.reconnected() {
+                        *enabled = true;
                         let hdr = qubes_gui::Header {
                             ty: 0,
-                            window: 0,
+                            window: qubes_gui::WindowID { window: None },
                             untrusted_len: 2,
                         };
                         let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
@@ -104,13 +123,7 @@ impl QubesData {
                 }
 
                 Poll::Ready(Err(_)) => {
-                    self.enabled = false;
-                    let hdr = qubes_gui::Header {
-                        ty: 0,
-                        window: 0,
-                        untrusted_len: if self.agent.needs_reconnect() { 1 } else { 3 },
-                    };
-                    callback(global_userdata, ptr::null_mut(), 0, hdr, ptr::null());
+                    protocol_error(agent);
                     break;
                 }
             }
@@ -233,18 +246,16 @@ pub unsafe extern "C" fn qubes_rust_send_message(backend: *mut c_void, header: &
 #[no_mangle]
 pub unsafe extern "C" fn qubes_rust_backend_free(backend: *mut c_void) {
     if !backend.is_null() {
-        Box::from_raw(backend as *mut RustBackend);
+        drop(Box::from_raw(backend as *mut RustBackend))
     }
 }
 
 fn setup_qubes_backend(domid: u16) -> RustBackend {
-    let connection = qubes_gui_gntalloc::new(domid).unwrap();
     let (agent, conf) = qubes_gui_client::Client::agent(domid).unwrap();
     // we now have a agent 🙂
     eprintln!("Configuration parameters: {:?}", conf);
     QubesData {
         agent,
-        connection,
         enabled: true,
         wid: 1,
         map: Default::default(),
