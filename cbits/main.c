@@ -354,24 +354,22 @@ static void qubes_set_view_title(struct tinywl_view *view)
 	strncpy(view->last_title.data,
 	        view->xdg_surface->toplevel->title,
 	        sizeof(view->last_title.data) - 1);
+	view->last_title.data[sizeof(view->last_title.data) - 1] = '\0';
 	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, view->window_id);
 	struct {
 		struct msg_hdr header;
 		struct msg_wmname title;
-	} msg = {
-		.header = {
-			.type = MSG_WMNAME,
-			.window = view->window_id,
-			.untrusted_len = sizeof(struct msg_wmname),
-		},
-		.title = {
-			.data = { 0 },
-		},
+	} msg;
+	msg.header = (struct msg_hdr) {
+		.type = MSG_WMNAME,
+		.window = view->window_id,
+		.untrusted_len = sizeof(struct msg_wmname),
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.title);
 	strncpy(msg.title.data,
 	        view->xdg_surface->toplevel->title,
 	        sizeof(msg.title.data) - 1);
+	msg.title.data[sizeof(msg.title.data) - 1] = '\0';
 	// Asserted above, checked at call sites
 	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
 }
