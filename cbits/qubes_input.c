@@ -279,7 +279,7 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 
 	/* Ignore client-submitted resizes until this configure is acked, to avoid races */
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-		view->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
+		output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 		view->configure_serial =
 			wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
 		wlr_log(WLR_DEBUG,
@@ -352,7 +352,7 @@ static void qubes_recreate_window(struct tinywl_view *view)
 		wl_list_remove(&view->output.buffer_destroy.link);
 		qubes_output_dump_buffer(view, box);
 	}
-	if (qubes_output_mapped(view)) {
+	if (qubes_output_mapped(&view->output)) {
 		qubes_view_map(view);
 	}
 }
@@ -367,11 +367,11 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 		struct tinywl_view *view;
 		wl_list_for_each(view, backend->views, link) {
 			assert(QUBES_VIEW_MAGIC == view->magic);
-			view->flags &= ~QUBES_OUTPUT_CREATED;
+			view->output.flags &= ~QUBES_OUTPUT_CREATED;
 		}
 		wl_list_for_each(view, backend->views, link) {
 			assert(QUBES_VIEW_MAGIC == view->magic);
-			assert(!(view->flags & QUBES_OUTPUT_CREATED));
+			assert(!(view->output.flags & QUBES_OUTPUT_CREATED));
 			qubes_recreate_window(view);
 		}
 		return;

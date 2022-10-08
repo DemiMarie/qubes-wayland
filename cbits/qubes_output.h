@@ -15,6 +15,7 @@ struct qubes_output {
 	struct msg_keymap_notify keymap;
 	const struct wlr_drm_format_set *formats; /* global */
 	uint32_t window_id;
+	uint32_t flags;
 };
 
 struct tinywl_server;
@@ -44,7 +45,6 @@ struct tinywl_view {
 	int x, y, left, top;
 	int last_width, last_height;
 	uint32_t magic;
-	uint32_t flags;
 	uint32_t configure_serial;
 	struct msg_wmname last_title;
 };
@@ -55,16 +55,16 @@ enum {
 	QUBES_OUTPUT_IGNORE_CLIENT_RESIZE = 1 << 2,
 };
 
-static inline bool qubes_output_created(struct tinywl_view *view)
+static inline bool qubes_output_created(struct qubes_output *output)
 {
-	return view->flags & QUBES_OUTPUT_CREATED;
+	return output->flags & QUBES_OUTPUT_CREATED;
 }
 
-static inline bool qubes_output_mapped(struct tinywl_view *view)
+static inline bool qubes_output_mapped(struct qubes_output *output)
 {
-	if (!(view->flags & QUBES_OUTPUT_CREATED))
+	if (!(output->flags & QUBES_OUTPUT_CREATED))
 		return false;
-	return view->flags & QUBES_OUTPUT_MAPPED;
+	return output->flags & QUBES_OUTPUT_MAPPED;
 }
 
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,

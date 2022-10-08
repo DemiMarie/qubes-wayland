@@ -238,7 +238,7 @@ void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t hei
 {
 	struct qubes_output *output = &view->output;
 
-	if (!qubes_output_created(view))
+	if (!qubes_output_created(output))
 		return;
 	if (width <= 0 || height <= 0)
 		return;
