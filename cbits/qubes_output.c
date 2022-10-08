@@ -72,7 +72,7 @@ static void qubes_output_damage(struct tinywl_view *view, struct wlr_box box) {
 		wlr_log(WLR_DEBUG, "No damage!");
 		return;
 	}
-	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, view->window_id);
+	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, output->window_id);
 	for (int i = 0; i < n_rects; ++i) {
 		int32_t width, height;
 		// this is the correct approach ― the alternative leads to glitches
@@ -96,7 +96,7 @@ static void qubes_output_damage(struct tinywl_view *view, struct wlr_box box) {
 		} new_msg = {
 			.header = {
 				.type = MSG_SHMIMAGE,
-				.window = view->window_id,
+				.window = output->window_id,
 				.untrusted_len = sizeof(struct msg_shmimage),
 			},
 			.shmimage = { .x = x1, .y = y1, .width = width, .height = height },
@@ -110,11 +110,12 @@ static void qubes_output_damage(struct tinywl_view *view, struct wlr_box box) {
 void qubes_output_dump_buffer(struct tinywl_view *view, struct wlr_box box)
 {
 	struct qubes_output *output = &view->output;
+
 	assert(output->buffer->impl == qubes_buffer_impl_addr);
 	wl_signal_add(&output->buffer->events.destroy, &output->buffer_destroy);
-	wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32, MSG_WINDOW_DUMP, view->window_id);
+	wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32, MSG_WINDOW_DUMP, output->window_id);
 	struct qubes_buffer *buffer = wl_container_of(output->buffer, buffer, inner);
-	buffer->header.window = view->window_id;
+	buffer->header.window = output->window_id;
 	buffer->header.type = MSG_WINDOW_DUMP;
 	buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
 	qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header);
@@ -235,18 +236,20 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 
 void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t height)
 {
+	struct qubes_output *output = &view->output;
+
 	if (!qubes_output_created(view))
 		return;
 	if (width <= 0 || height <= 0)
 		return;
-	wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, view->window_id);
+	wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, output->window_id);
 	struct {
 		struct msg_hdr header;
 		struct msg_configure configure;
 	} msg = {
 		.header = {
 			.type = MSG_CONFIGURE,
-			.window = view->window_id,
+			.window = output->window_id,
 			.untrusted_len = sizeof(struct msg_configure),
 		},
 		.configure = {

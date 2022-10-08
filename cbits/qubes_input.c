@@ -174,15 +174,16 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uin
 	/* This is specifically *keyboard* focus */
 	struct msg_focus focus;
 	struct wlr_seat *seat = view->server->seat;
+	struct qubes_output *output = &view->output;
 
 	memcpy(&focus, ptr, sizeof focus);
 	switch (focus.type) {
 	case 9: // FocusIn
-		wlr_log(WLR_INFO, "Window %" PRIu32 " has gained keyboard focus", view->window_id);
+		wlr_log(WLR_INFO, "Window %" PRIu32 " has gained keyboard focus", output->window_id);
 		qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
 		break;
 	case 10: // FocusOut
-		wlr_log(WLR_INFO, "Window %" PRIu32 " has lost keyboard focus", view->window_id);
+		wlr_log(WLR_INFO, "Window %" PRIu32 " has lost keyboard focus", output->window_id);
 		if (seat->keyboard_state.focused_surface) {
 			/*
 			 * Deactivate the previously focused surface. This lets the client know
@@ -201,7 +202,7 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uin
 		wlr_seat_keyboard_notify_clear_focus(seat);
 		break;
 	default:
-		wlr_log(WLR_ERROR, "Window %" PRIu32 ": Bad Focus event type %" PRIu32, view->window_id, focus.type);
+		wlr_log(WLR_ERROR, "Window %" PRIu32 ": Bad Focus event type %" PRIu32, output->window_id, focus.type);
 		return;
 	}
 }
@@ -209,13 +210,15 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uin
 static void handle_window_flags(struct tinywl_view *view, const uint8_t *ptr)
 {
 	struct msg_window_flags flags;
+	struct qubes_output *output = &view->output;
+
 	memcpy(&flags, ptr, sizeof flags);
 
 	if (flags.flags_set & flags.flags_unset) {
 		wlr_log(WLR_ERROR,
 		        "GUI daemon tried to set and unset the same flag on window %" PRIu32
 		        "(flags_set: 0x%" PRIx32 ", flags_unset: 0x%" PRIx32 ")",
-		        view->window_id, flags.flags_set, flags.flags_unset);
+		        output->window_id, flags.flags_set, flags.flags_unset);
 		return;
 	}
 
@@ -223,7 +226,7 @@ static void handle_window_flags(struct tinywl_view *view, const uint8_t *ptr)
 		wlr_log(WLR_INFO,
 		        "GUI daemon tried to change flags for non-toplevel window %" PRIu32
 		        "(flags_set: 0x%" PRIx32 ", flags_unset: 0x%" PRIx32 ")",
-		        view->window_id, flags.flags_set, flags.flags_unset);
+		        output->window_id, flags.flags_set, flags.flags_unset);
 		return;
 	}
 
@@ -241,6 +244,8 @@ static void
 handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
 {
 	struct msg_configure configure;
+	struct qubes_output *output = &view->output;
+
 	memcpy(&configure, ptr, sizeof(configure));
 	view->left = configure.x;
 	view->top = configure.y;
@@ -262,7 +267,7 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 		        "Bad configure from GUI daemon: width %" PRIu32 " height %" PRIu32 " window %" PRIu32,
 		        configure.x,
 		        configure.y,
-		        view->window_id);
+		        output->window_id);
 		// this should never happen, but better to ACK the configure
 		// than to crash; return to avoid giving clients an invalid state
 		qubes_send_configure(view, configure.width, configure.height);
@@ -286,7 +291,7 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 		// ACK early
 		wlr_log(WLR_DEBUG,
 		        "Got a configure event for non-toplevel window %" PRIu32 "; returning early",
-		        view->window_id);
+		        output->window_id);
 		qubes_send_configure(view, configure.width, configure.height);
 	}
 }
@@ -403,6 +408,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 {
 	struct qubes_backend *backend = raw_backend;
 	struct tinywl_view *view = raw_view;
+	struct qubes_output *output = &view->output;
 
 	assert(raw_backend);
 	if (!ptr) {
@@ -438,7 +444,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 		memcpy(&backend->keymap, ptr, hdr.untrusted_len);
 		return;
 	}
-	assert(hdr.window == view->window_id);
+	assert(hdr.window == output->window_id);
 	switch (hdr.type) {
 	case MSG_KEYPRESS:
 		assert(hdr.untrusted_len == sizeof(struct msg_keypress));
