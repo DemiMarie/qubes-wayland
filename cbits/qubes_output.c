@@ -103,7 +103,7 @@ static void qubes_output_damage(struct tinywl_view *view, struct wlr_box box) {
 		};
 		QUBES_STATIC_ASSERT(sizeof new_msg == sizeof new_msg.header + sizeof new_msg.shmimage);
 		// Created above
-		qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&new_msg);
+		qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&new_msg);
 	}
 }
 
@@ -118,7 +118,7 @@ void qubes_output_dump_buffer(struct tinywl_view *view, struct wlr_box box)
 	buffer->header.window = output->window_id;
 	buffer->header.type = MSG_WINDOW_DUMP;
 	buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
-	qubes_rust_send_message(view->server->backend->rust_backend, &buffer->header);
+	qubes_rust_send_message(output->server->backend->rust_backend, &buffer->header);
 	qubes_output_damage(view, box);
 }
 
@@ -211,18 +211,18 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 	wlr_output_update_custom_mode(&output->output, output->last_width, output->last_height, 60000);
 	if (wlr_scene_output_commit(view->scene_output)) {
 		output->output.frame_pending = true;
-		if (!view->server->frame_pending) {
+		if (!output->server->frame_pending) {
 			// Schedule another timer callback
-			wl_event_source_timer_update(view->server->timer, 16);
-			view->server->frame_pending = true;
+			wl_event_source_timer_update(output->server->timer, 16);
+			output->server->frame_pending = true;
 		}
 	}
 }
 
-void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend, struct wl_display *display) {
+void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend, struct tinywl_server *server) {
 	memset(output, 0, sizeof *output);
 
-	wlr_output_init(&output->output, backend, &qubes_wlr_output_impl, display);
+	wlr_output_init(&output->output, backend, &qubes_wlr_output_impl, server->wl_display);
 	wlr_output_update_custom_mode(&output->output, 1280, 720, 0);
 	wlr_output_update_enabled(&output->output, true);
 	wlr_output_set_description(&output->output, "Qubes OS virtual output");
@@ -232,6 +232,7 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 	output->formats = &global_formats;
 	output->frame.notify = qubes_output_frame;
 	output->magic = QUBES_VIEW_MAGIC;
+	output->server = server;
 	wl_signal_add(&output->output.events.frame, &output->frame);
 }
 
@@ -263,7 +264,7 @@ void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t hei
 		},
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.configure);
-	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg);
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
 }
 
 /* vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8: */

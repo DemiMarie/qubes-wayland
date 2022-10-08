@@ -27,8 +27,9 @@ static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const 
 {
 	struct msg_keypress keypress;
 	enum wl_keyboard_key_state state;
-	struct wlr_seat *seat = view->server->seat;
-	struct qubes_backend *backend = view->server->backend;
+	struct qubes_output *output = &view->output;
+	struct wlr_seat *seat = output->server->seat;
+	struct qubes_backend *backend = output->server->backend;
 
 	memcpy(&keypress, ptr, sizeof(keypress));
 	switch (keypress.type) {
@@ -144,7 +145,8 @@ handle_pointer_movement(struct tinywl_view *view, int32_t x, int32_t y,
 
 static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
 {
-	struct wlr_seat *seat = view->server->seat;
+	struct qubes_output *output = &view->output;
+	struct wlr_seat *seat = output->server->seat;
 	struct msg_motion motion;
 	memcpy(&motion, ptr, sizeof motion);
 	handle_pointer_movement(view, motion.x, motion.y, timestamp, seat);
@@ -153,7 +155,8 @@ static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const ui
 static void handle_crossing(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
 {
 	struct msg_crossing crossing;
-	struct wlr_seat *seat = view->server->seat;
+	struct qubes_output *output = &view->output;
+	struct wlr_seat *seat = output->server->seat;
 
 	memcpy(&crossing, ptr, sizeof crossing);
 
@@ -175,8 +178,8 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uin
 {
 	/* This is specifically *keyboard* focus */
 	struct msg_focus focus;
-	struct wlr_seat *seat = view->server->seat;
 	struct qubes_output *output = &view->output;
+	struct wlr_seat *seat = output->server->seat;
 
 	memcpy(&focus, ptr, sizeof focus);
 	switch (focus.type) {
@@ -300,7 +303,7 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 
 static void handle_clipboard_data(struct tinywl_view *view, uint32_t len, const uint8_t *ptr)
 {
-	struct tinywl_server *server = view->server;
+	struct tinywl_server *server = view->output.server;
 	assert(server);
 	struct wlr_seat *seat = server->seat;
 	assert(seat);
@@ -310,7 +313,7 @@ static void handle_clipboard_data(struct tinywl_view *view, uint32_t len, const 
 
 static void handle_clipboard_request(struct tinywl_view *view)
 {
-	struct tinywl_server *server = view->server;
+	struct tinywl_server *server = view->output.server;
 	assert(server);
 	struct wlr_seat *seat = server->seat;
 	assert(seat);
@@ -462,7 +465,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 		break;
 	case MSG_BUTTON:
 		assert(hdr.untrusted_len == sizeof(struct msg_button));
-		handle_button(view->server->seat, timestamp, ptr);
+		handle_button(output->server->seat, timestamp, ptr);
 		break;
 	case MSG_MOTION:
 		assert(hdr.untrusted_len == sizeof(struct msg_motion));

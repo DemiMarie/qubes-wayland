@@ -14,6 +14,7 @@ struct qubes_output {
 	struct wl_listener frame;
 	struct msg_keymap_notify keymap;
 	const struct wlr_drm_format_set *formats; /* global */
+	struct tinywl_server *server;
 
 	int x, y, left, top;
 	int last_width, last_height;
@@ -28,7 +29,6 @@ struct wlr_xdg_surface;
 struct tinywl_view {
 	struct qubes_output output;
 	struct wl_list link;
-	struct tinywl_server *server;
 	struct wlr_xdg_surface *xdg_surface;
 	struct wlr_scene *scene;
 	struct wlr_scene_output *scene_output;
@@ -69,7 +69,7 @@ static inline bool qubes_output_mapped(struct qubes_output *output)
 }
 
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
-                       struct wl_display *display);
+                       struct tinywl_server *server);
 
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
 void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t height);

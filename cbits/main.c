@@ -112,10 +112,10 @@ void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface
 	if (view == NULL) {
 		return;
 	}
-	struct tinywl_server *server = view->server;
+	struct qubes_output *output = &view->output;
+	struct tinywl_server *server = output->server;
 	struct wlr_seat *seat = server->seat;
 	struct wlr_surface *prev_surface = seat->keyboard_state.focused_surface;
-	struct qubes_output *output = &view->output;
 
 	if (prev_surface == surface) {
 		/* Don't re-focus an already focused surface. */
@@ -343,7 +343,7 @@ static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_s
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.flags);
 	// Asserted above, checked at call sites
-	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
 }
 
 static void qubes_set_view_title(struct tinywl_view *view)
@@ -377,7 +377,7 @@ static void qubes_set_view_title(struct tinywl_view *view)
 	        sizeof(msg.title.data) - 1);
 	msg.title.data[sizeof(msg.title.data) - 1] = '\0';
 	// Asserted above, checked at call sites
-	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
 }
 
 static void qubes_set_view_app_id(struct tinywl_view *view)
@@ -404,7 +404,7 @@ static void qubes_set_view_app_id(struct tinywl_view *view)
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.class);
 	strncpy(msg.class.res_class, view->xdg_surface->toplevel->app_id, sizeof(msg.class.res_class) - 1);
 	// Asserted above, checked at call sites
-	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
 }
 
 bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
@@ -447,7 +447,7 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.create);
 	// This is MSG_CREATE
-	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr *)&msg);
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
 	output->flags |= QUBES_OUTPUT_CREATED;
 	return true;
 }
@@ -522,7 +522,7 @@ void qubes_view_map(struct tinywl_view *view)
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.info);
 	// Surface created above
-	qubes_rust_send_message(view->server->backend->rust_backend, (struct msg_hdr*)&msg);
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
 }
 
 static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribute__((unused))) {
@@ -543,7 +543,7 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 		.untrusted_len = 0,
 	};
 	if (qubes_output_created(output))
-		qubes_rust_send_message(view->server->backend->rust_backend, &header);
+		qubes_rust_send_message(output->server->backend->rust_backend, &header);
 }
 
 static void xdg_surface_destroy(struct wl_listener *listener, void *data __attribute__((unused))) {
@@ -573,8 +573,8 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		.untrusted_len = 0,
 	};
 	if (qubes_output_created(output))
-		qubes_rust_send_message(view->server->backend->rust_backend, &header);
-	qubes_rust_delete_id(view->server->backend->rust_backend, output->window_id);
+		qubes_rust_send_message(output->server->backend->rust_backend, &header);
+	qubes_rust_delete_id(output->server->backend->rust_backend, output->window_id);
 	if (view->scene_subsurface_tree)
 		wlr_scene_node_destroy(view->scene_subsurface_tree);
 	if (view->scene_output)
@@ -743,9 +743,9 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 	struct qubes_output *output = &view->output;
 
-	view->server = server;
+	output->server = server;
 	/* Add wlr_output */
-	qubes_output_init(output, &server->backend->backend, server->wl_display);
+	qubes_output_init(output, &server->backend->backend, server);
 	wlr_output_init_render(&output->output, server->allocator, server->renderer);
 	if (!(view->scene = wlr_scene_create()))
 		goto cleanup;
@@ -807,7 +807,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 	/* Get the window ID */
 	assert(output->window_id == 0);
-	output->window_id = qubes_rust_generate_id(view->server->backend->rust_backend, view);
+	output->window_id = qubes_rust_generate_id(output->server->backend->rust_backend, view);
 
 	/* Tell GUI daemon to create window */
 	struct wlr_box box;
@@ -826,7 +826,7 @@ cleanup:
 		if (view->scene_output)
 			wlr_scene_output_destroy(view->scene_output);
 		wlr_output_destroy(&output->output);
-		qubes_rust_delete_id(view->server->backend->rust_backend, output->window_id);
+		qubes_rust_delete_id(output->server->backend->rust_backend, output->window_id);
 		free(view);
 	}
 	return;
