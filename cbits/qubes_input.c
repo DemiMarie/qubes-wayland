@@ -349,7 +349,7 @@ static void qubes_recreate_window(struct tinywl_view *view)
 	struct wlr_box box;
 	struct qubes_output *output = &view->output;
 
-	if (!qubes_output_ensure_created(view, &box)) {
+	if (!qubes_view_ensure_created(view, &box)) {
 		return;
 	}
 	output->last_width = box.width, output->last_height = box.height;

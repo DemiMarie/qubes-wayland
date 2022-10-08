@@ -56,7 +56,7 @@ struct tinywl_server {
 	bool frame_pending, vchan_error;
 };
 
-bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box);
+bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box);
 void qubes_view_map(struct tinywl_view *view);
 
 #endif

@@ -407,7 +407,7 @@ static void qubes_set_view_app_id(struct tinywl_view *view)
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
 }
 
-bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
+bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 {
 	struct qubes_output *output = &view->output;
 
@@ -424,34 +424,9 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 		output->y = box->y;
 		wlr_scene_output_set_position(view->scene_output, output->x, output->y);
 	}
-	if (qubes_output_created(output))
-		return true;
-	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, output->window_id);
-	struct {
-		struct msg_hdr header;
-		struct msg_create create;
-	} msg = {
-		.header = {
-			.type = MSG_CREATE,
-			.window = output->window_id,
-			.untrusted_len = sizeof(struct msg_create),
-		},
-		.create = {
-			.x = output->left,
-			.y = output->top,
-			.width = box->width,
-			.height = box->height,
-			.parent = 0,
-			.override_redirect = view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0,
-		},
-	};
-	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.create);
-	// This is MSG_CREATE
-	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
-	output->flags |= QUBES_OUTPUT_CREATED;
+	qubes_output_ensure_created(output, *box, view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP);
 	return true;
 }
-
 
 static void xdg_surface_map(struct wl_listener *listener, void *data __attribute__((unused))) {
 	/* Called when the surface is mapped, or ready to display on-screen. */
@@ -466,9 +441,9 @@ void qubes_view_map(struct tinywl_view *view)
 	struct wlr_box box;
 	struct qubes_output *output = &view->output;
 
-	if (!qubes_output_ensure_created(view, &box))
-		return;
 	struct wlr_xdg_surface *xdg_surface = view->xdg_surface;
+	if (!qubes_view_ensure_created(view, &box))
+		return;
 	if (!qubes_output_mapped(output)) {
 		output->flags |= QUBES_OUTPUT_MAPPED;
 		wlr_scene_node_set_enabled(&view->scene_output->scene->node, true);
@@ -689,7 +664,7 @@ static void qubes_surface_commit(
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
 	assert(view->scene_output);
-	if (!qubes_output_ensure_created(view, &box))
+	if (!qubes_view_ensure_created(view, &box))
 		return;
 	if ((output->last_width != box.width || output->last_height != box.height) &&
 	    !(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {

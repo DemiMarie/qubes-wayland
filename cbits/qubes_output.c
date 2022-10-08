@@ -119,6 +119,35 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box)
 	qubes_output_damage(output, box);
 }
 
+void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box, bool override_redirect)
+{
+	if (qubes_output_created(output))
+		return;
+	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, output->window_id);
+	struct {
+		struct msg_hdr header;
+		struct msg_create create;
+	} msg = {
+		.header = {
+			.type = MSG_CREATE,
+			.window = output->window_id,
+			.untrusted_len = sizeof(struct msg_create),
+		},
+		.create = {
+			.x = output->left,
+			.y = output->top,
+			.width = box.width,
+			.height = box.height,
+			.parent = 0,
+			.override_redirect = override_redirect,
+		},
+	};
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.create);
+	// This is MSG_CREATE
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
+	output->flags |= QUBES_OUTPUT_CREATED;
+}
+
 static bool qubes_output_commit(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
@@ -126,7 +155,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 	struct tinywl_view *view = wl_container_of(output, view, output);
 
 	struct wlr_box box;
-	if (!qubes_output_ensure_created(view, &box))
+	if (!qubes_view_ensure_created(view, &box))
 		return false;
 
 	if (raw_output->pending.committed & WLR_OUTPUT_STATE_MODE) {
