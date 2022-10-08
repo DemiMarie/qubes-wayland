@@ -254,7 +254,8 @@ void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t hei
 			.y = view->top,
 			.width = width,
 			.height = height,
-			.override_redirect = view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0,
+			/* override_redirect is (thankfully) ignored in MSG_CONFIGURE */
+			.override_redirect = false,
 		},
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.configure);
