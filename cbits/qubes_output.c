@@ -125,8 +125,8 @@ void qubes_output_dump_buffer(struct tinywl_view *view, struct wlr_box box)
 static bool qubes_output_commit(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 	struct tinywl_view *view = wl_container_of(output, view, output);
-	assert(QUBES_VIEW_MAGIC == view->magic);
 
 	struct wlr_box box;
 	if (!qubes_output_ensure_created(view, &box))
@@ -200,8 +200,8 @@ static const struct wlr_output_impl qubes_wlr_output_impl = {
 
 static void qubes_output_frame(struct wl_listener *listener, void *data __attribute__((unused))) {
 	struct qubes_output *output = wl_container_of(listener, output, frame);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 	struct tinywl_view *view = wl_container_of(output, view, output);
-	assert(QUBES_VIEW_MAGIC == view->magic);
 	// HACK HACK
 	//
 	// This fixes a *nasty* bug: without it, really fast resizes can cause the
@@ -231,6 +231,7 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 	output->buffer_destroy.notify = qubes_unlink_buffer_listener;
 	output->formats = &global_formats;
 	output->frame.notify = qubes_output_frame;
+	output->magic = QUBES_VIEW_MAGIC;
 	wl_signal_add(&output->output.events.frame, &output->frame);
 }
 

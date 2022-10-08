@@ -96,7 +96,7 @@ static int qubes_send_frame_callbacks(void *data)
 	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
 	server->frame_pending = false;
 	wl_list_for_each(view, &server->views, link) {
-		assert(QUBES_VIEW_MAGIC == view->magic);
+		assert(QUBES_VIEW_MAGIC == view->output.magic);
 		view->output.output.frame_pending = false;
 		wlr_output_send_frame(&view->output.output);
 		wlr_scene_node_for_each_surface(
@@ -457,7 +457,7 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
 	struct tinywl_view *view = wl_container_of(listener, view, map);
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == view->output.magic);
 	qubes_view_map(view);
 }
 
@@ -531,7 +531,7 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	struct tinywl_view *view = wl_container_of(listener, view, unmap);
 	struct qubes_output *output = &view->output;
 
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 	output->flags &= ~(__typeof__(output->flags))QUBES_OUTPUT_MAPPED;
 	wlr_scene_node_set_enabled(&view->scene_output->scene->node, false);
 	wlr_scene_node_set_enabled(view->scene_subsurface_tree, false);
@@ -551,7 +551,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
 	struct qubes_output *output = &view->output;
 
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 	wl_list_remove(&view->link);
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
@@ -589,7 +589,7 @@ static void qubes_new_popup(
 		struct wl_listener *listener, void *data) {
 	struct tinywl_view *view = wl_container_of(listener, view, new_popup);
 	struct wlr_xdg_popup *popup __attribute__((unused)) = data;
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == view->output.magic);
 }
 
 static void qubes_request_maximize(
@@ -597,7 +597,9 @@ static void qubes_request_maximize(
 {
 	/* QUBES HOOK: MSG_WINDOW_FLAGS: ask GUI daemon to maximize window */
 	struct tinywl_view *view = wl_container_of(listener, view, request_maximize);
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	struct qubes_output *output = &view->output;
+
+	assert(QUBES_VIEW_MAGIC == output->magic);
 #ifdef WINDOW_FLAG_MAXIMIZE
 	if (qubes_output_mapped(output)) {
 		wlr_log(WLR_DEBUG, "Maximizing window " PRIu32, output->window_id);
@@ -616,7 +618,7 @@ static void qubes_request_minimize(
 	struct tinywl_view *view = wl_container_of(listener, view, request_minimize);
 	struct qubes_output *output = &view->output;
 
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 	if (qubes_output_mapped(output)) {
 		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " minimized", output->window_id);
 		// Mapped implies created
@@ -631,7 +633,7 @@ static void qubes_request_fullscreen(
 	struct tinywl_view *view = wl_container_of(listener, view, request_fullscreen);
 	struct qubes_output *output = &view->output;
 
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 	if (qubes_output_mapped(output)) {
 		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " fullscreen", output->window_id);
 		// Mapped implies created
@@ -646,7 +648,7 @@ static void qubes_set_title(
 	struct tinywl_view *view = wl_container_of(listener, view, set_title);
 	struct qubes_output *output = &view->output;
 
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 	assert(view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL);
 	if (qubes_output_mapped(output)) {
 		// Mapped implies created
@@ -661,7 +663,7 @@ static void qubes_set_app_id(
 	struct tinywl_view *view = wl_container_of(listener, view, set_app_id);
 	struct qubes_output *output = &view->output;
 
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 	assert(view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL);
 	if (qubes_output_mapped(output)) {
 		// Mapped implies created
@@ -685,7 +687,7 @@ static void qubes_surface_commit(
 	struct qubes_output *output = &view->output;
 	struct wlr_box box;
 
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 	assert(view->scene_output);
 	if (!qubes_output_ensure_created(view, &box))
 		return;
@@ -711,7 +713,7 @@ static void qubes_toplevel_ack_configure(struct wl_listener *listener, void *dat
 	struct tinywl_view *view = wl_container_of(listener, view, ack_configure);
 	struct qubes_output *output = &view->output;
 
-	assert(QUBES_VIEW_MAGIC == view->magic);
+	assert(QUBES_VIEW_MAGIC == output->magic);
 
 	if (output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE &&
 	    view->configure_serial == configure->serial) {
@@ -756,7 +758,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		goto cleanup;
 	wlr_scene_node_raise_to_top(view->scene_subsurface_tree);
 
-	view->magic = QUBES_VIEW_MAGIC;
 	view->xdg_surface = xdg_surface;
 
 	/* Listen to the various events it can emit */
