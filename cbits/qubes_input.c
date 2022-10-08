@@ -126,8 +126,10 @@ static void
 handle_pointer_movement(struct tinywl_view *view, int32_t x, int32_t y,
                         uint32_t timestamp, struct wlr_seat *seat)
 {
-	const double seat_relative_x = x + (double)view->x,
-	             seat_relative_y = y + (double)view->y;
+	struct qubes_output *output = &view->output;
+
+	const double seat_relative_x = x + (double)output->x,
+	             seat_relative_y = y + (double)output->y;
 	double sx, sy;
 	struct wlr_surface *surface = wlr_xdg_surface_surface_at(view->xdg_surface,
 		seat_relative_x, seat_relative_y, &sx, &sy);
@@ -247,13 +249,13 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 	struct qubes_output *output = &view->output;
 
 	memcpy(&configure, ptr, sizeof(configure));
-	view->left = configure.x;
-	view->top = configure.y;
+	output->left = configure.x;
+	output->top = configure.y;
 	// Just ACK the configure
 	wlr_log(WLR_DEBUG, "handle_configure: old size %u %u, new size %u %u",
-	        view->last_width, view->last_height, configure.width, configure.height);
-	if (configure.width == (uint32_t)view->last_width &&
-	    configure.height == (uint32_t)view->last_height) {
+	        output->last_width, output->last_height, configure.width, configure.height);
+	if (configure.width == (uint32_t)output->last_width &&
+	    configure.height == (uint32_t)output->last_height) {
 		// Just ACK without doing anything
 		qubes_send_configure(view, configure.width, configure.height);
 		return;
@@ -275,7 +277,7 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 	}
 
 	wlr_output_set_custom_mode(&view->output.output, configure.width, configure.height, 60000);
-	view->last_width = configure.width, view->last_height = configure.height;
+	output->last_width = configure.width, output->last_height = configure.height;
 
 	/* Ignore client-submitted resizes until this configure is acked, to avoid races */
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
@@ -342,10 +344,12 @@ static void handle_clipboard_request(struct tinywl_view *view)
 static void qubes_recreate_window(struct tinywl_view *view)
 {
 	struct wlr_box box;
+	struct qubes_output *output = &view->output;
+
 	if (!qubes_output_ensure_created(view, &box)) {
 		return;
 	}
-	view->last_width = box.width, view->last_height = box.height;
+	output->last_width = box.width, output->last_height = box.height;
 	qubes_send_configure(view, box.width, box.height);
 	if (view->output.buffer) {
 		// qubes_output_dump_buffer assumes this

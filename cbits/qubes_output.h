@@ -15,6 +15,8 @@ struct qubes_output {
 	struct msg_keymap_notify keymap;
 	const struct wlr_drm_format_set *formats; /* global */
 
+	int x, y, left, top;
+	int last_width, last_height;
 	uint32_t window_id;
 	uint32_t magic;
 	uint32_t flags;
@@ -44,8 +46,6 @@ struct tinywl_view {
 	struct wl_listener ack_configure;
 
 	struct qubes_output output;
-	int x, y, left, top;
-	int last_width, last_height;
 	uint32_t configure_serial;
 	struct msg_wmname last_title;
 };

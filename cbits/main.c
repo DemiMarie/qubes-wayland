@@ -419,10 +419,10 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 	    box->height > MAX_WINDOW_HEIGHT) {
 		return false;
 	}
-	if (view->x != box->x || view->y != box->y) {
-		view->x = box->x;
-		view->y = box->y;
-		wlr_scene_output_set_position(view->scene_output, view->x, view->y);
+	if (output->x != box->x || output->y != box->y) {
+		output->x = box->x;
+		output->y = box->y;
+		wlr_scene_output_set_position(view->scene_output, output->x, output->y);
 	}
 	if (qubes_output_created(output))
 		return true;
@@ -437,8 +437,8 @@ bool qubes_output_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 			.untrusted_len = sizeof(struct msg_create),
 		},
 		.create = {
-			.x = view->left,
-			.y = view->top,
+			.x = output->left,
+			.y = output->top,
 			.width = box->width,
 			.height = box->height,
 			.parent = 0,
@@ -691,16 +691,16 @@ static void qubes_surface_commit(
 	assert(view->scene_output);
 	if (!qubes_output_ensure_created(view, &box))
 		return;
-	if ((view->last_width != box.width || view->last_height != box.height) &&
+	if ((output->last_width != box.width || output->last_height != box.height) &&
 	    !(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {
 		qubes_send_configure(view, box.width, box.height);
 		wlr_log(WLR_DEBUG,
 		        "Resized window %u: old size %u %u, new size %u %u",
-		        (unsigned)output->window_id, view->last_width,
-		        view->last_height, box.width, box.height);
+		        (unsigned)output->window_id, output->last_width,
+		        output->last_height, box.width, box.height);
 		wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
-		view->last_width = box.width;
-		view->last_height = box.height;
+		output->last_width = box.width;
+		output->last_height = box.height;
 	}
 	// wlr_output_enable(&view->output.output, true);
 	assert(view->scene_output->output == &view->output.output);
@@ -718,7 +718,7 @@ static void qubes_toplevel_ack_configure(struct wl_listener *listener, void *dat
 	if (output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE &&
 	    view->configure_serial == configure->serial) {
 		output->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-		qubes_send_configure(view, view->last_width, view->last_height);
+		qubes_send_configure(view, output->last_width, output->last_height);
 	}
 }
 
@@ -791,9 +791,9 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		struct wlr_box geometry = wlr_xdg_positioner_get_geometry(&popup->positioner);
 		struct tinywl_view *parent_view = wlr_xdg_surface_from_wlr_surface(popup->parent)->data;
 		assert(parent_view);
-		view->left = geometry.x + parent_view->left;
-		view->top = geometry.y + parent_view->top;
-		view->last_width = geometry.width, view->last_height = geometry.height;
+		output->left = geometry.x + parent_view->output.left;
+		output->top = geometry.y + parent_view->output.top;
+		output->last_width = geometry.width, output->last_height = geometry.height;
 	} else {
 		abort();
 	}

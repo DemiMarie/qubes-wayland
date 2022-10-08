@@ -208,7 +208,7 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 	// wlr_output to lose sync with the qubes_output, causing parts of the
 	// window to *never* be displayed until the next window resize.  This bug
 	// took more than three days to fix.
-	wlr_output_update_custom_mode(&output->output, view->last_width, view->last_height, 60000);
+	wlr_output_update_custom_mode(&output->output, output->last_width, output->last_height, 60000);
 	if (wlr_scene_output_commit(view->scene_output)) {
 		output->output.frame_pending = true;
 		if (!view->server->frame_pending) {
@@ -254,8 +254,8 @@ void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t hei
 			.untrusted_len = sizeof(struct msg_configure),
 		},
 		.configure = {
-			.x = view->left,
-			.y = view->top,
+			.x = output->left,
+			.y = output->top,
 			.width = width,
 			.height = height,
 			/* override_redirect is (thankfully) ignored in MSG_CONFIGURE */
