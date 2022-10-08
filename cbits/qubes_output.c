@@ -236,10 +236,8 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 	wl_signal_add(&output->output.events.frame, &output->frame);
 }
 
-void qubes_send_configure(struct tinywl_view *view, uint32_t width, uint32_t height)
+void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t height)
 {
-	struct qubes_output *output = &view->output;
-
 	if (!qubes_output_created(output))
 		return;
 	if (width <= 0 || height <= 0)

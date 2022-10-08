@@ -260,7 +260,7 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 	if (configure.width == (uint32_t)output->last_width &&
 	    configure.height == (uint32_t)output->last_height) {
 		// Just ACK without doing anything
-		qubes_send_configure(view, configure.width, configure.height);
+		qubes_send_configure(output, configure.width, configure.height);
 		return;
 	}
 
@@ -275,7 +275,7 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 		        output->window_id);
 		// this should never happen, but better to ACK the configure
 		// than to crash; return to avoid giving clients an invalid state
-		qubes_send_configure(view, configure.width, configure.height);
+		qubes_send_configure(output, configure.width, configure.height);
 		return;
 	}
 
@@ -297,7 +297,7 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 		wlr_log(WLR_DEBUG,
 		        "Got a configure event for non-toplevel window %" PRIu32 "; returning early",
 		        output->window_id);
-		qubes_send_configure(view, configure.width, configure.height);
+		qubes_send_configure(output, configure.width, configure.height);
 	}
 }
 
@@ -353,7 +353,7 @@ static void qubes_recreate_window(struct tinywl_view *view)
 		return;
 	}
 	output->last_width = box.width, output->last_height = box.height;
-	qubes_send_configure(view, box.width, box.height);
+	qubes_send_configure(output, box.width, box.height);
 	if (view->output.buffer) {
 		// qubes_output_dump_buffer assumes this
 		wl_list_remove(&view->output.buffer_destroy.link);

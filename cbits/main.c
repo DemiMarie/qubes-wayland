@@ -693,7 +693,7 @@ static void qubes_surface_commit(
 		return;
 	if ((output->last_width != box.width || output->last_height != box.height) &&
 	    !(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {
-		qubes_send_configure(view, box.width, box.height);
+		qubes_send_configure(output, box.width, box.height);
 		wlr_log(WLR_DEBUG,
 		        "Resized window %u: old size %u %u, new size %u %u",
 		        (unsigned)output->window_id, output->last_width,
@@ -718,7 +718,7 @@ static void qubes_toplevel_ack_configure(struct wl_listener *listener, void *dat
 	if (output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE &&
 	    view->configure_serial == configure->serial) {
 		output->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-		qubes_send_configure(view, output->last_width, output->last_height);
+		qubes_send_configure(output, output->last_width, output->last_height);
 	}
 }
 
