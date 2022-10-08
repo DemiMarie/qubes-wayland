@@ -350,17 +350,17 @@ static void qubes_set_view_title(struct tinywl_view *view)
 {
 	struct qubes_output *output = &view->output;
 
-	if (!strncmp(view->last_title.data,
+	if (!strncmp(output->last_title.data,
 	             view->xdg_surface->toplevel->title,
-	             sizeof(view->last_title.data) - 1)) {
+	             sizeof(output->last_title.data) - 1)) {
 		return;
 	}
 	assert(qubes_output_created(output));
 	assert(output->window_id);
-	strncpy(view->last_title.data,
+	strncpy(output->last_title.data,
 	        view->xdg_surface->toplevel->title,
-	        sizeof(view->last_title.data) - 1);
-	view->last_title.data[sizeof(view->last_title.data) - 1] = '\0';
+	        sizeof(output->last_title.data) - 1);
+	output->last_title.data[sizeof(output->last_title.data) - 1] = '\0';
 	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, output->window_id);
 	struct {
 		struct msg_hdr header;

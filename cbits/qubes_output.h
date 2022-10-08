@@ -20,11 +20,13 @@ struct qubes_output {
 	uint32_t window_id;
 	uint32_t magic;
 	uint32_t flags;
+	struct msg_wmname last_title;
 };
 
 struct tinywl_server;
 struct wlr_xdg_surface;
 struct tinywl_view {
+	struct qubes_output output;
 	struct wl_list link;
 	struct tinywl_server *server;
 	struct wlr_xdg_surface *xdg_surface;
@@ -45,9 +47,7 @@ struct tinywl_view {
 	struct wl_listener set_app_id;
 	struct wl_listener ack_configure;
 
-	struct qubes_output output;
 	uint32_t configure_serial;
-	struct msg_wmname last_title;
 };
 
 enum {
