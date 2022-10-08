@@ -354,12 +354,12 @@ static void qubes_recreate_window(struct tinywl_view *view)
 	}
 	output->last_width = box.width, output->last_height = box.height;
 	qubes_send_configure(output, box.width, box.height);
-	if (view->output.buffer) {
+	if (output->buffer) {
 		// qubes_output_dump_buffer assumes this
 		wl_list_remove(&view->output.buffer_destroy.link);
-		qubes_output_dump_buffer(view, box);
+		qubes_output_dump_buffer(output, box);
 	}
-	if (qubes_output_mapped(&view->output)) {
+	if (qubes_output_mapped(output)) {
 		qubes_view_map(view);
 	}
 }
