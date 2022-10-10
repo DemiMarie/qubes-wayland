@@ -119,7 +119,7 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box)
 	qubes_output_damage(output, box);
 }
 
-void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box, bool override_redirect)
+void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box)
 {
 	if (qubes_output_created(output))
 		return;
@@ -139,7 +139,7 @@ void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 			.width = box.width,
 			.height = box.height,
 			.parent = 0,
-			.override_redirect = override_redirect,
+			.override_redirect = (output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT) ? 1 : 0,
 		},
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.create);
@@ -157,6 +157,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 	struct wlr_box box;
 	if (!qubes_view_ensure_created(view, &box))
 		return false;
+	qubes_output_ensure_created(output, box);
 
 	if (raw_output->pending.committed & WLR_OUTPUT_STATE_MODE) {
 		assert(raw_output->pending.mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
@@ -245,7 +246,8 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 	}
 }
 
-void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend, struct tinywl_server *server) {
+void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
+		                 struct tinywl_server *server, bool is_override_redirect) {
 	memset(output, 0, sizeof *output);
 
 	wlr_output_init(&output->output, backend, &qubes_wlr_output_impl, server->wl_display);
@@ -258,6 +260,7 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 	output->formats = &global_formats;
 	output->frame.notify = qubes_output_frame;
 	output->magic = QUBES_VIEW_MAGIC;
+	output->flags = is_override_redirect ? QUBES_OUTPUT_OVERRIDE_REDIRECT : 0,
 	output->server = server;
 	wl_signal_add(&output->output.events.frame, &output->frame);
 }

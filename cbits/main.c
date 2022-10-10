@@ -424,7 +424,6 @@ bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 		output->y = box->y;
 		wlr_scene_output_set_position(view->scene_output, output->x, output->y);
 	}
-	qubes_output_ensure_created(output, *box, view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP);
 	return true;
 }
 
@@ -444,6 +443,7 @@ void qubes_view_map(struct tinywl_view *view)
 	struct wlr_xdg_surface *xdg_surface = view->xdg_surface;
 	if (!qubes_view_ensure_created(view, &box))
 		return;
+	qubes_output_ensure_created(output, box);
 	if (!qubes_output_mapped(output)) {
 		output->flags |= QUBES_OUTPUT_MAPPED;
 		wlr_scene_node_set_enabled(&view->scene_output->scene->node, true);
@@ -711,6 +711,8 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	}
 	/* QUBES HOOK: MSG_CREATE: create toplevel window */
 
+	bool is_override_redirect = xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP;
+
 	/* Allocate a tinywl_view for this surface */
 	struct tinywl_view *view = calloc(1, sizeof(struct tinywl_view));
 	if (!view)
@@ -720,7 +722,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 	output->server = server;
 	/* Add wlr_output */
-	qubes_output_init(output, &server->backend->backend, server);
+	qubes_output_init(output, &server->backend->backend, server, is_override_redirect);
 	wlr_output_init_render(&output->output, server->allocator, server->renderer);
 	if (!(view->scene = wlr_scene_create()))
 		goto cleanup;

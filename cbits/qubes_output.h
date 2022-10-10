@@ -54,6 +54,7 @@ enum {
 	QUBES_OUTPUT_CREATED = 1 << 0,
 	QUBES_OUTPUT_MAPPED = 1 << 1,
 	QUBES_OUTPUT_IGNORE_CLIENT_RESIZE = 1 << 2,
+	QUBES_OUTPUT_OVERRIDE_REDIRECT = 1 << 3,
 };
 
 static inline bool qubes_output_created(struct qubes_output *output)
@@ -68,13 +69,19 @@ static inline bool qubes_output_mapped(struct qubes_output *output)
 	return output->flags & QUBES_OUTPUT_MAPPED;
 }
 
+static inline bool qubes_output_override_redirect(struct qubes_output *output)
+{
+	return output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT;
+}
+
+/* Initialize a qubes_output */
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
-                       struct tinywl_server *server);
+                       struct tinywl_server *server, bool override_redirect);
 
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
 void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t height);
 void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box);
-void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box, bool override_redirect);
+void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box);
 
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_OUTPUT_H */
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:
