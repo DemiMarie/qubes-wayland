@@ -43,7 +43,7 @@ static void qubes_unlink_buffer_listener(struct wl_listener *listener,
 
 static const struct wlr_output_impl qubes_wlr_output_impl;
 
-static void qubes_output_deinit(struct wlr_output *raw_output) {
+static void qubes_output_deinit_raw(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	wl_list_remove(&output->frame.link);
@@ -124,6 +124,7 @@ void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 	if (qubes_output_created(output))
 		return;
 	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, output->window_id);
+	output->window_id = qubes_rust_generate_id(output->server->backend->rust_backend, output);
 	struct {
 		struct msg_hdr header;
 		struct msg_create create;
@@ -216,7 +217,7 @@ static const struct wlr_drm_format_set *qubes_output_get_primary_formats(
 static const struct wlr_output_impl qubes_wlr_output_impl = {
 	.set_cursor = NULL,
 	.move_cursor = NULL,
-	.destroy = qubes_output_deinit,
+	.destroy = qubes_output_deinit_raw,
 	.test = qubes_output_test,
 	.commit = qubes_output_commit,
 	.get_gamma_size = qubes_get_gamma_size,
@@ -227,8 +228,6 @@ static const struct wlr_output_impl qubes_wlr_output_impl = {
 
 static void qubes_output_frame(struct wl_listener *listener, void *data __attribute__((unused))) {
 	struct qubes_output *output = wl_container_of(listener, output, frame);
-	assert(QUBES_VIEW_MAGIC == output->magic);
-	struct tinywl_view *view = wl_container_of(output, view, output);
 	// HACK HACK
 	//
 	// This fixes a *nasty* bug: without it, really fast resizes can cause the
@@ -236,13 +235,18 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 	// window to *never* be displayed until the next window resize.  This bug
 	// took more than three days to fix.
 	wlr_output_update_custom_mode(&output->output, output->last_width, output->last_height, 60000);
-	if (wlr_scene_output_commit(view->scene_output)) {
-		output->output.frame_pending = true;
-		if (!output->server->frame_pending) {
-			// Schedule another timer callback
-			wl_event_source_timer_update(output->server->timer, 16);
-			output->server->frame_pending = true;
+	if (QUBES_VIEW_MAGIC == output->magic) {
+		struct tinywl_view *view = wl_container_of(output, view, output);
+		if (wlr_scene_output_commit(view->scene_output)) {
+			output->output.frame_pending = true;
+			if (!output->server->frame_pending) {
+				// Schedule another timer callback
+				wl_event_source_timer_update(output->server->timer, 16);
+				output->server->frame_pending = true;
+			}
 		}
+	} else {
+		assert(QUBES_XWAYLAND_MAGIC == output->magic);
 	}
 }
 
@@ -292,6 +296,48 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t 
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.configure);
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
+}
+
+void qubes_output_deinit(struct qubes_output *output) {
+	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, output->window_id);
+	struct msg_hdr header = {
+		.type = MSG_DESTROY,
+		.window = output->window_id,
+		.untrusted_len = 0,
+	};
+	if (qubes_output_created(output))
+		qubes_rust_send_message(output->server->backend->rust_backend, &header);
+	qubes_rust_delete_id(output->server->backend->rust_backend, output->window_id);
+	wlr_output_destroy(&output->output);
+}
+
+void qubes_output_unmap(struct qubes_output *output) {
+	output->flags &= ~(__typeof__(output->flags))QUBES_OUTPUT_MAPPED;
+	wlr_output_enable(&output->output, false);
+	wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, output->window_id);
+	struct msg_hdr header = {
+		.type = MSG_UNMAP,
+		.window = output->window_id,
+		.untrusted_len = 0,
+	};
+	if (qubes_output_created(output))
+		qubes_rust_send_message(output->server->backend->rust_backend, &header);
+}
+
+void qubes_output_configure(struct qubes_output *output, struct wlr_box box) {
+	qubes_output_ensure_created(output, box);
+	if ((output->last_width != box.width || output->last_height != box.height) &&
+	    !(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {
+		qubes_send_configure(output, box.width, box.height);
+		wlr_log(WLR_DEBUG,
+		        "Resized window %u: old size %u %u, new size %u %u",
+		        (unsigned)output->window_id, output->last_width,
+		        output->last_height, box.width, box.height);
+		wlr_output_set_custom_mode(&output->output, box.width, box.height, 60000);
+		output->last_width = box.width;
+		output->last_height = box.height;
+	}
+	wlr_output_send_frame(&output->output);
 }
 
 /* vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8: */

@@ -29,7 +29,7 @@ struct tinywl_server {
 	struct wlr_allocator *allocator;
 
 	struct wlr_xdg_shell *xdg_shell;
-	struct wl_listener new_xdg_surface;
+	struct wl_listener new_xdg_surface, new_xwayland_surface;
 	struct wl_list views;
 
 	struct wlr_seat *seat;
@@ -51,6 +51,7 @@ struct tinywl_server {
 	struct wl_event_source *timer;
 	struct wlr_compositor *compositor;
 	struct wlr_data_device_manager *data_device;
+	struct wlr_xwayland *xwayland;
 	uint32_t magic;
 	uint16_t domid;
 	bool frame_pending, vchan_error;

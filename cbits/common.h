@@ -47,6 +47,7 @@ enum {
 	QUBES_VIEW_MAGIC = QUBES_MAGIC('v', 'i', 'e', 'w'),
 	QUBES_KEYBOARD_MAGIC = QUBES_MAGIC('k', 'e', 'y', 'b'),
 	QUBES_SERVER_MAGIC = QUBES_MAGIC('s', 'e', 'r', 'v'),
+	QUBES_XWAYLAND_MAGIC = QUBES_MAGIC('x', 'w', 'a', 'y'),
 };
 
 #undef QUBES_MAGIC

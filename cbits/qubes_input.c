@@ -14,6 +14,7 @@
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/xwayland.h>
 #include <wlr/util/log.h>
 
 #include <qubes-gui-protocol.h>
@@ -22,12 +23,12 @@
 #include "qubes_output.h"
 #include "qubes_backend.h"
 #include "qubes_data_source.h"
+#include "qubes_xwayland.h"
 
-static void handle_keypress(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
+static void handle_keypress(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
 {
 	struct msg_keypress keypress;
 	enum wl_keyboard_key_state state;
-	struct qubes_output *output = &view->output;
 	struct wlr_seat *seat = output->server->seat;
 	struct qubes_backend *backend = output->server->backend;
 
@@ -124,16 +125,17 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 }
 
 static void
-handle_pointer_movement(struct tinywl_view *view, int32_t x, int32_t y,
+handle_pointer_movement(struct qubes_output *output, int32_t x, int32_t y,
                         uint32_t timestamp, struct wlr_seat *seat)
 {
-	struct qubes_output *output = &view->output;
-
 	const double seat_relative_x = x + (double)output->x,
 	             seat_relative_y = y + (double)output->y;
 	double sx, sy;
-	struct wlr_surface *surface = wlr_xdg_surface_surface_at(view->xdg_surface,
-		seat_relative_x, seat_relative_y, &sx, &sy);
+	struct wlr_surface *surface = NULL;
+	if (QUBES_VIEW_MAGIC == output->magic) {
+		struct tinywl_view *view = wl_container_of(output, view, output);
+		surface = wlr_xdg_surface_surface_at(view->xdg_surface, seat_relative_x, seat_relative_y, &sx, &sy);
+	}
 	if (surface) {
 		wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
 		wlr_seat_pointer_notify_motion(seat, timestamp, sx, sy);
@@ -143,26 +145,24 @@ handle_pointer_movement(struct tinywl_view *view, int32_t x, int32_t y,
 	wlr_seat_pointer_notify_frame(seat);
 }
 
-static void handle_motion(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
+static void handle_motion(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
 {
-	struct qubes_output *output = &view->output;
 	struct wlr_seat *seat = output->server->seat;
 	struct msg_motion motion;
 	memcpy(&motion, ptr, sizeof motion);
-	handle_pointer_movement(view, motion.x, motion.y, timestamp, seat);
+	handle_pointer_movement(output, motion.x, motion.y, timestamp, seat);
 }
 
-static void handle_crossing(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
+static void handle_crossing(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
 {
 	struct msg_crossing crossing;
-	struct qubes_output *output = &view->output;
 	struct wlr_seat *seat = output->server->seat;
 
 	memcpy(&crossing, ptr, sizeof crossing);
 
 	switch (crossing.type) {
 	case 7: // EnterNotify
-		handle_pointer_movement(view, crossing.x, crossing.y, timestamp, seat);
+		handle_pointer_movement(output, crossing.x, crossing.y, timestamp, seat);
 		return;
 	case 8: // LeaveNotify
 		wlr_seat_pointer_notify_clear_focus(seat);
@@ -174,12 +174,17 @@ static void handle_crossing(struct tinywl_view *view, uint32_t timestamp, const 
 	}
 }
 
-static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
+static void handle_focus(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
 {
 	/* This is specifically *keyboard* focus */
 	struct msg_focus focus;
-	struct qubes_output *output = &view->output;
 	struct wlr_seat *seat = output->server->seat;
+
+	if (output->magic != QUBES_VIEW_MAGIC) {
+		assert(QUBES_XWAYLAND_MAGIC == output->magic);
+		return;
+	}
+	struct tinywl_view *view = wl_container_of(output, view, output);
 
 	memcpy(&focus, ptr, sizeof focus);
 	switch (focus.type) {
@@ -212,10 +217,9 @@ static void handle_focus(struct tinywl_view *view, uint32_t timestamp, const uin
 	}
 }
 
-static void handle_window_flags(struct tinywl_view *view, const uint8_t *ptr)
+static void handle_window_flags(struct qubes_output *output, const uint8_t *ptr)
 {
 	struct msg_window_flags flags;
-	struct qubes_output *output = &view->output;
 
 	memcpy(&flags, ptr, sizeof flags);
 
@@ -226,6 +230,14 @@ static void handle_window_flags(struct tinywl_view *view, const uint8_t *ptr)
 		        output->window_id, flags.flags_set, flags.flags_unset);
 		return;
 	}
+
+	if (QUBES_VIEW_MAGIC != output->magic) {
+		assert(QUBES_XWAYLAND_MAGIC == output->magic);
+		wlr_log(WLR_ERROR, "not yet implemented: setting flags for XWayland surfaces");
+		return;
+	}
+
+	struct tinywl_view *view = wl_container_of(output, view, output);
 
 	if (view->xdg_surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		wlr_log(WLR_INFO,
@@ -246,10 +258,9 @@ static void handle_window_flags(struct tinywl_view *view, const uint8_t *ptr)
 }
 
 static void
-handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *ptr)
+handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
 {
 	struct msg_configure configure;
-	struct qubes_output *output = &view->output;
 
 	memcpy(&configure, ptr, sizeof(configure));
 	output->left = configure.x;
@@ -279,31 +290,37 @@ handle_configure(struct tinywl_view *view, uint32_t timestamp, const uint8_t *pt
 		return;
 	}
 
-	wlr_output_set_custom_mode(&view->output.output, configure.width, configure.height, 60000);
 	output->last_width = configure.width, output->last_height = configure.height;
+	wlr_output_set_custom_mode(&output->output, configure.width, configure.height, 60000);
 
-	/* Ignore client-submitted resizes until this configure is acked, to avoid races */
-	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-		output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-		view->configure_serial =
-			wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
-		wlr_log(WLR_DEBUG,
-		        "Will ACK configure from GUI daemon (width %u, height %u)"
-		        " when client ACKS configure with serial %u",
-		        configure.width, configure.height, view->configure_serial);
-	} else {
-		// There won’t be a configure event ACKd by the client, so
-		// ACK early
-		wlr_log(WLR_DEBUG,
-		        "Got a configure event for non-toplevel window %" PRIu32 "; returning early",
-		        output->window_id);
-		qubes_send_configure(output, configure.width, configure.height);
+	if (QUBES_VIEW_MAGIC == output->magic) {
+		struct tinywl_view *view = wl_container_of(output, view, output);
+		/* Ignore client-submitted resizes until this configure is acked, to avoid races */
+		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+			output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
+			view->configure_serial =
+				wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
+			wlr_log(WLR_DEBUG,
+					  "Will ACK configure from GUI daemon (width %u, height %u)"
+					  " when client ACKS configure with serial %u",
+					  configure.width, configure.height, view->configure_serial);
+		} else {
+			// There won’t be a configure event ACKd by the client, so
+			// ACK early
+			wlr_log(WLR_DEBUG,
+					  "Got a configure event for non-toplevel window %" PRIu32 "; returning early",
+					  output->window_id);
+			qubes_send_configure(output, configure.width, configure.height);
+		}
+	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		wlr_xwayland_surface_configure(view->xwayland_surface, configure.x, configure.y, configure.width, configure.height);
 	}
 }
 
-static void handle_clipboard_data(struct tinywl_view *view, uint32_t len, const uint8_t *ptr)
+static void handle_clipboard_data(struct qubes_output *output, uint32_t len, const uint8_t *ptr)
 {
-	struct tinywl_server *server = view->output.server;
+	struct tinywl_server *server = output->server;
 	assert(server);
 	struct wlr_seat *seat = server->seat;
 	assert(seat);
@@ -311,9 +328,9 @@ static void handle_clipboard_data(struct tinywl_view *view, uint32_t len, const 
 	wlr_seat_set_selection(server->seat, (struct wlr_data_source *)source, wl_display_get_serial(server->wl_display));
 }
 
-static void handle_clipboard_request(struct tinywl_view *view)
+static void handle_clipboard_request(struct qubes_output *output)
 {
-	struct tinywl_server *server = view->output.server;
+	struct tinywl_server *server = output->server;
 	assert(server);
 	struct wlr_seat *seat = server->seat;
 	assert(seat);
@@ -414,8 +431,8 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
 {
 	struct qubes_backend *backend = raw_backend;
-	struct tinywl_view *view = raw_view;
-	struct qubes_output *output = &view->output;
+	QUBES_STATIC_ASSERT(offsetof(struct tinywl_view, output) == 0);
+	struct qubes_output *output = raw_view;
 
 	assert(raw_backend);
 	if (!ptr) {
@@ -423,7 +440,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 		return;
 	}
 
-	if (!view) {
+	if (!output) {
 		if (hdr.type != MSG_KEYMAP_NOTIFY) {
 			wlr_log(WLR_ERROR, "No window for message of type %" PRIu32, hdr.type);
 			return;
@@ -455,11 +472,11 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 	switch (hdr.type) {
 	case MSG_KEYPRESS:
 		assert(hdr.untrusted_len == sizeof(struct msg_keypress));
-		handle_keypress(view, timestamp, ptr);
+		handle_keypress(output, timestamp, ptr);
 		break;
 	case MSG_CONFIGURE:
 		assert(hdr.untrusted_len == sizeof(struct msg_configure));
-		handle_configure(view, timestamp, ptr);
+		handle_configure(output, timestamp, ptr);
 		break;
 	case MSG_MAP:
 		break;
@@ -469,36 +486,49 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 		break;
 	case MSG_MOTION:
 		assert(hdr.untrusted_len == sizeof(struct msg_motion));
-		handle_motion(view, timestamp, ptr);
+		handle_motion(output, timestamp, ptr);
 		break;
 	case MSG_CLOSE:
 		assert(hdr.untrusted_len == 0);
-		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
-			wlr_xdg_toplevel_send_close(view->xdg_surface);
-		else if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP)
-			wlr_xdg_popup_destroy(view->xdg_surface);
+		switch (output->magic) {
+		case QUBES_VIEW_MAGIC: {
+			struct tinywl_view *view = (struct tinywl_view *)output;
+			if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
+				wlr_xdg_toplevel_send_close(view->xdg_surface);
+			else if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP)
+				wlr_xdg_popup_destroy(view->xdg_surface);
+			break;
+	   }
+		case QUBES_XWAYLAND_MAGIC: {
+			struct qubes_xwayland_view *view = (struct qubes_xwayland_view *)output;
+			wlr_xwayland_surface_close(view->xwayland_surface);
+			break;
+		default:
+			assert(!"Invalid output type");
+		}
+		}
 		break;
 	case MSG_CROSSING:
 		assert(hdr.untrusted_len == sizeof(struct msg_crossing));
-		handle_crossing(view, timestamp, ptr);
+		handle_crossing(output, timestamp, ptr);
 		break;
 	case MSG_FOCUS:
 		assert(hdr.untrusted_len == sizeof(struct msg_focus));
-		handle_focus(view, timestamp, ptr);
+		handle_focus(output, timestamp, ptr);
 		break;
 	case MSG_CLIPBOARD_REQ:
 		assert(hdr.untrusted_len == 0);
-		handle_clipboard_request(view);
+		handle_clipboard_request(output);
 		break;
 	case MSG_CLIPBOARD_DATA:
-		handle_clipboard_data(view, hdr.untrusted_len, ptr);
+		handle_clipboard_data(output, hdr.untrusted_len, ptr);
 		break;
 	case MSG_KEYMAP_NOTIFY:
 		assert(hdr.untrusted_len == sizeof(struct msg_keymap_notify));
 		break;
 	case MSG_WINDOW_FLAGS:
 		assert(hdr.untrusted_len == sizeof(struct msg_window_flags));
-		handle_window_flags(view, ptr);
+		handle_window_flags(output, ptr);
 		break;
 	case MSG_DESTROY:
 		assert(0 && "handled by Rust code");

@@ -45,6 +45,7 @@
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
+#include <wlr/xwayland.h>
 
 #include <xkbcommon/xkbcommon.h>
 
@@ -52,6 +53,7 @@
 #include "qubes_output.h"
 #include "qubes_backend.h"
 #include "qubes_allocator.h"
+#include "qubes_xwayland.h"
 #include "main.h"
 
 /* NOT IMPLEMENTABLE:
@@ -507,26 +509,15 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	struct qubes_output *output = &view->output;
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
-	output->flags &= ~(__typeof__(output->flags))QUBES_OUTPUT_MAPPED;
 	wlr_scene_node_set_enabled(&view->scene_output->scene->node, false);
 	wlr_scene_node_set_enabled(view->scene_subsurface_tree, false);
-	wlr_output_enable(&view->output.output, false);
-	wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, output->window_id);
-	struct msg_hdr header = {
-		.type = MSG_UNMAP,
-		.window = output->window_id,
-		.untrusted_len = 0,
-	};
-	if (qubes_output_created(output))
-		qubes_rust_send_message(output->server->backend->rust_backend, &header);
+	qubes_output_unmap(&view->output);
 }
 
 static void xdg_surface_destroy(struct wl_listener *listener, void *data __attribute__((unused))) {
 	/* Called when the surface is destroyed and should never be shown again. */
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
-	struct qubes_output *output = &view->output;
 
-	assert(QUBES_VIEW_MAGIC == output->magic);
 	wl_list_remove(&view->link);
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
@@ -541,22 +532,13 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		wl_list_remove(&view->set_app_id.link);
 		wl_list_remove(&view->ack_configure.link);
 	}
-	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, output->window_id);
-	struct msg_hdr header = {
-		.type = MSG_DESTROY,
-		.window = output->window_id,
-		.untrusted_len = 0,
-	};
-	if (qubes_output_created(output))
-		qubes_rust_send_message(output->server->backend->rust_backend, &header);
-	qubes_rust_delete_id(output->server->backend->rust_backend, output->window_id);
 	if (view->scene_subsurface_tree)
 		wlr_scene_node_destroy(view->scene_subsurface_tree);
 	if (view->scene_output)
 		wlr_scene_output_destroy(view->scene_output);
-	wlr_output_destroy(&view->output.output);
 	if (view->scene)
 		wlr_scene_node_destroy(&view->scene->node);
+	qubes_output_deinit(&view->output);
 	free(view);
 }
 
@@ -664,22 +646,10 @@ static void qubes_surface_commit(
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
 	assert(view->scene_output);
+	assert(view->scene_output->output == &view->output.output);
 	if (!qubes_view_ensure_created(view, &box))
 		return;
-	if ((output->last_width != box.width || output->last_height != box.height) &&
-	    !(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {
-		qubes_send_configure(output, box.width, box.height);
-		wlr_log(WLR_DEBUG,
-		        "Resized window %u: old size %u %u, new size %u %u",
-		        (unsigned)output->window_id, output->last_width,
-		        output->last_height, box.width, box.height);
-		wlr_output_set_custom_mode(&view->output.output, box.width, box.height, 60000);
-		output->last_width = box.width;
-		output->last_height = box.height;
-	}
-	// wlr_output_enable(&view->output.output, true);
-	assert(view->scene_output->output == &view->output.output);
-	wlr_output_send_frame(&view->output.output);
+	qubes_output_configure(&view->output, box);
 }
 
 static void qubes_toplevel_ack_configure(struct wl_listener *listener, void *data)
@@ -703,6 +673,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	struct tinywl_server *server =
 		wl_container_of(listener, server, new_xdg_surface);
 	struct wlr_xdg_surface *xdg_surface = data;
+
 	assert(QUBES_SERVER_MAGIC == server->magic);
 	if (xdg_surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL &&
 	    xdg_surface->role != WLR_XDG_SURFACE_ROLE_POPUP) {
@@ -719,8 +690,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		goto cleanup;
 
 	struct qubes_output *output = &view->output;
-
-	output->server = server;
 	/* Add wlr_output */
 	qubes_output_init(output, &server->backend->backend, server, is_override_redirect);
 	wlr_output_init_render(&output->output, server->allocator, server->renderer);
@@ -731,7 +700,8 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 	if (!(view->scene_output = wlr_scene_output_create(view->scene, &output->output)))
 		goto cleanup;
-	if (!(view->scene_subsurface_tree = wlr_scene_subsurface_tree_create(&view->scene_output->scene->node, xdg_surface->surface)))
+	if (!(view->scene_subsurface_tree =
+				wlr_scene_subsurface_tree_create(&view->scene_output->scene->node, xdg_surface->surface)))
 		goto cleanup;
 	wlr_scene_node_raise_to_top(view->scene_subsurface_tree);
 
@@ -1172,6 +1142,20 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	sd_notify(0, "STATUS=About to start XWayland");
+	/* Create XWayland */
+	if (!(server->xwayland = wlr_xwayland_create(server->wl_display, server->compositor, true))) {
+		wlr_log(WLR_ERROR, "Cannot create XWayland device");
+		wlr_backend_destroy(&server->backend->backend);
+		return 1;
+	}
+
+	wlr_xwayland_set_seat(server->xwayland, server->seat);
+
+	server->new_xwayland_surface.notify = qubes_xwayland_new_xwayland_surface;
+	wl_signal_add(&server->xwayland->events.new_surface,
+	              &server->new_xwayland_surface);
+
 	struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
 	assert(loop);
 
@@ -1242,6 +1226,7 @@ int main(int argc, char *argv[]) {
 		// wlr_input_device_destroy(keyboard_to_free->input_device);
 		free(keyboard_to_free);
 	}
+	wlr_xwayland_destroy(server->xwayland);
 	wlr_renderer_destroy(server->renderer);
 	wlr_allocator_destroy(server->allocator);
 	wlr_output_layout_destroy(server->output_layout);
