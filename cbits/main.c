@@ -523,7 +523,6 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	wl_list_remove(&view->unmap.link);
 	wl_list_remove(&view->destroy.link);
 	wl_list_remove(&view->commit.link);
-	wl_list_remove(&view->new_popup.link);
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		wl_list_remove(&view->request_maximize.link);
 		wl_list_remove(&view->request_fullscreen.link);
@@ -540,13 +539,6 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		wlr_scene_node_destroy(&view->scene->node);
 	qubes_output_deinit(&view->output);
 	free(view);
-}
-
-static void qubes_new_popup(
-		struct wl_listener *listener, void *data) {
-	struct tinywl_view *view = wl_container_of(listener, view, new_popup);
-	struct wlr_xdg_popup *popup __attribute__((unused)) = data;
-	assert(QUBES_VIEW_MAGIC == view->output.magic);
 }
 
 static void qubes_request_maximize(
@@ -677,7 +669,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	assert(QUBES_SERVER_MAGIC == server->magic);
 	if (xdg_surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL &&
 	    xdg_surface->role != WLR_XDG_SURFACE_ROLE_POPUP) {
-		/* this is handled by the new_popup listener */
 		return;
 	}
 	/* QUBES HOOK: MSG_CREATE: create toplevel window */
@@ -714,8 +705,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	wl_signal_add(&xdg_surface->events.unmap, &view->unmap);
 	view->destroy.notify = xdg_surface_destroy;
 	wl_signal_add(&xdg_surface->events.destroy, &view->destroy);
-	view->new_popup.notify = qubes_new_popup;
-	wl_signal_add(&xdg_surface->events.new_popup, &view->new_popup);
 	xdg_surface->data = view;
 
 	/* And listen to the various emits the toplevel can emit */

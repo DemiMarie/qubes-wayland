@@ -36,7 +36,6 @@ struct tinywl_view {
 	struct wl_listener map;
 	struct wl_listener unmap;
 	struct wl_listener destroy;
-	struct wl_listener new_popup;
 	struct wl_listener commit;
 
 	/* only initialized for toplevels */
