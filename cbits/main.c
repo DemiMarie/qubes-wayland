@@ -451,9 +451,17 @@ void qubes_view_map(struct tinywl_view *view)
 			qubes_set_view_app_id(view);
 		}
 		if (xdg_surface->toplevel->parent) {
-			const struct tinywl_view *parent_view = xdg_surface->toplevel->parent->data;
-			transient_for_window = parent_view->output.window_id;
+			const struct qubes_output *parent_output = xdg_surface->toplevel->parent->data;
+			transient_for_window = parent_output->window_id;
 		}
+	} else if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
+		struct wlr_xdg_popup *popup = xdg_surface->popup;
+		if (popup->parent) {
+			const struct wlr_xdg_surface *parent_surface = wlr_xdg_surface_from_wlr_surface(popup->parent);
+			transient_for_window = ((struct qubes_output *)parent_surface->data)->window_id;
+		}
+	} else {
+		return;
 	}
 
 	wlr_log(WLR_INFO,
