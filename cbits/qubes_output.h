@@ -84,6 +84,7 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box);
 void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box);
 void qubes_output_configure(struct qubes_output *output, struct wlr_box box);
 void qubes_output_unmap(struct qubes_output *output);
+void qubes_change_window_flags(struct qubes_output *output, uint32_t flags_set, uint32_t flags_unset);
 
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_OUTPUT_H */
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:

@@ -324,30 +324,6 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	wlr_output_layout_add_auto(server->output_layout, wlr_output);
 }
 
-static void qubes_change_window_flags(struct tinywl_view *view, uint32_t flags_set, uint32_t flags_unset)
-{
-	struct qubes_output *output = &view->output;
-
-	assert(qubes_output_created(output));
-	struct {
-		struct msg_hdr header;
-		struct msg_window_flags flags;
-	} msg = {
-		.header = {
-			.type = MSG_WINDOW_FLAGS,
-			.window = output->window_id,
-			.untrusted_len = sizeof(struct msg_window_flags),
-		},
-		.flags = {
-			.flags_set = flags_set,
-			.flags_unset = flags_unset,
-		},
-	};
-	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.flags);
-	// Asserted above, checked at call sites
-	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
-}
-
 static void qubes_set_view_title(struct tinywl_view *view)
 {
 	struct qubes_output *output = &view->output;
@@ -464,7 +440,7 @@ void qubes_view_map(struct tinywl_view *view)
 		}
 		if (flags_to_set || flags_to_unset) {
 			// Window created above, so this is safe
-			qubes_change_window_flags(view, flags_to_set, flags_to_unset);
+			qubes_change_window_flags(&view->output, flags_to_set, flags_to_unset);
 		}
 		if (xdg_surface->toplevel->title) {
 			// Window created above, so this is safe
@@ -553,7 +529,7 @@ static void qubes_request_maximize(
 	if (qubes_output_mapped(output)) {
 		wlr_log(WLR_DEBUG, "Maximizing window " PRIu32, output->window_id);
 		// Mapped implies created
-		qubes_change_window_flags(view, WINDOW_FLAG_MAXIMIZE, 0);
+		qubes_change_window_flags(&view->output, WINDOW_FLAG_MAXIMIZE, 0);
 	}
 #else
 	wlr_log(WLR_ERROR, "window maximize: not implemented");
@@ -571,7 +547,7 @@ static void qubes_request_minimize(
 	if (qubes_output_mapped(output)) {
 		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " minimized", output->window_id);
 		// Mapped implies created
-		qubes_change_window_flags(view, WINDOW_FLAG_MINIMIZE, 0);
+		qubes_change_window_flags(&view->output, WINDOW_FLAG_MINIMIZE, 0);
 	}
 }
 
@@ -586,7 +562,7 @@ static void qubes_request_fullscreen(
 	if (qubes_output_mapped(output)) {
 		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " fullscreen", output->window_id);
 		// Mapped implies created
-		qubes_change_window_flags(view, WINDOW_FLAG_FULLSCREEN, 0);
+		qubes_change_window_flags(&view->output, WINDOW_FLAG_FULLSCREEN, 0);
 	}
 }
 

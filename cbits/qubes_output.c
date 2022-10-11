@@ -311,6 +311,28 @@ void qubes_output_deinit(struct qubes_output *output) {
 	wlr_output_destroy(&output->output);
 }
 
+void qubes_change_window_flags(struct qubes_output *output, uint32_t flags_set, uint32_t flags_unset)
+{
+	assert(qubes_output_created(output));
+	struct {
+		struct msg_hdr header;
+		struct msg_window_flags flags;
+	} msg = {
+		.header = {
+			.type = MSG_WINDOW_FLAGS,
+			.window = output->window_id,
+			.untrusted_len = sizeof(struct msg_window_flags),
+		},
+		.flags = {
+			.flags_set = flags_set,
+			.flags_unset = flags_unset,
+		},
+	};
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.flags);
+	// Asserted above, checked at call sites
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
+}
+
 void qubes_output_unmap(struct qubes_output *output) {
 	output->flags &= ~(__typeof__(output->flags))QUBES_OUTPUT_MAPPED;
 	wlr_output_enable(&output->output, false);
