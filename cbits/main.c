@@ -744,7 +744,7 @@ cleanup:
 			wlr_scene_node_destroy(view->scene_subsurface_tree);
 		if (view->scene_output)
 			wlr_scene_output_destroy(view->scene_output);
-		wlr_output_destroy(&output->output);
+		qubes_output_deinit(output);
 		qubes_rust_delete_id(output->server->backend->rust_backend, output->window_id);
 		free(view);
 	}
