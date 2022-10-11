@@ -121,10 +121,13 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box)
 
 void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box)
 {
+	// implemented in Rust
+	extern uint32_t qubes_rust_generate_id(void *backend, void *data) __attribute__((warn_unused_result));
 	if (qubes_output_created(output))
 		return;
+	if (!output->window_id)
+		output->window_id = qubes_rust_generate_id(output->server->backend->rust_backend, output);
 	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, output->window_id);
-	output->window_id = qubes_rust_generate_id(output->server->backend->rust_backend, output);
 	struct {
 		struct msg_hdr header;
 		struct msg_create create;
@@ -299,15 +302,17 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t 
 }
 
 void qubes_output_deinit(struct qubes_output *output) {
-	wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, output->window_id);
+	assert(output->magic == QUBES_VIEW_MAGIC || output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
 		.type = MSG_DESTROY,
 		.window = output->window_id,
 		.untrusted_len = 0,
 	};
-	if (qubes_output_created(output))
+	if (qubes_output_created(output)) {
+		wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, output->window_id);
 		qubes_rust_send_message(output->server->backend->rust_backend, &header);
-	qubes_rust_delete_id(output->server->backend->rust_backend, output->window_id);
+		qubes_rust_delete_id(output->server->backend->rust_backend, output->window_id);
+	}
 	wlr_output_destroy(&output->output);
 }
 

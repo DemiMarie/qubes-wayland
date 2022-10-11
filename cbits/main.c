@@ -719,7 +719,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 	/* Get the window ID */
 	assert(output->window_id == 0);
-	output->window_id = qubes_rust_generate_id(output->server->backend->rust_backend, view);
 
 	/* Tell GUI daemon to create window */
 	struct wlr_box box;

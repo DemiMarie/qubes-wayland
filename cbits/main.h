@@ -5,7 +5,6 @@
 
 #include <qubes-gui-protocol.h>
 void qubes_rust_send_message(void *backend, struct msg_hdr *header);
-uint32_t qubes_rust_generate_id(void *backend, void *data) __attribute__((warn_unused_result));
 void qubes_rust_delete_id(void *backend, uint32_t id);
 
 struct wlr_surface;
