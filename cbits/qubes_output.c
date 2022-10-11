@@ -254,7 +254,8 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 }
 
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
-		                 struct tinywl_server *server, bool is_override_redirect) {
+                       struct tinywl_server *server, bool is_override_redirect,
+                       uint32_t magic) {
 	memset(output, 0, sizeof *output);
 
 	wlr_output_init(&output->output, backend, &qubes_wlr_output_impl, server->wl_display);
@@ -266,12 +267,15 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 	output->buffer_destroy.notify = qubes_unlink_buffer_listener;
 	output->formats = &global_formats;
 	output->frame.notify = qubes_output_frame;
-	output->magic = QUBES_VIEW_MAGIC;
+	output->magic = magic;
 	output->flags = is_override_redirect ? QUBES_OUTPUT_OVERRIDE_REDIRECT : 0,
 	output->server = server;
 	wl_signal_add(&output->output.events.frame, &output->frame);
 
 	wl_list_insert(&server->views, &output->link);
+	assert(output->output.allocator == NULL);
+	assert(server->allocator != NULL);
+	wlr_output_init_render(&output->output, server->allocator, server->renderer);
 }
 
 void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t height)

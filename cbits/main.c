@@ -669,8 +669,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 
 	struct qubes_output *output = &view->output;
 	/* Add wlr_output */
-	qubes_output_init(output, &server->backend->backend, server, is_override_redirect);
-	wlr_output_init_render(&output->output, server->allocator, server->renderer);
+	qubes_output_init(output, &server->backend->backend, server, is_override_redirect, QUBES_VIEW_MAGIC);
 	if (!(output->scene = wlr_scene_create()))
 		goto cleanup;
 

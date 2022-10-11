@@ -75,7 +75,8 @@ static inline bool qubes_output_override_redirect(struct qubes_output *output)
 
 /* Initialize a qubes_output */
 void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
-                       struct tinywl_server *server, bool override_redirect);
+                       struct tinywl_server *server, bool override_redirect,
+                       uint32_t magic);
 void qubes_output_deinit(struct qubes_output *output);
 
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);

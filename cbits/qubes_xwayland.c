@@ -158,9 +158,7 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 
 	struct qubes_output *output = &view->output;
 
-	qubes_output_init(output, &server->backend->backend, server, surface->override_redirect);
-	output->magic = QUBES_XWAYLAND_MAGIC;
-	wlr_output_init_render(&output->output, server->allocator, server->renderer);
+	qubes_output_init(output, &server->backend->backend, server, surface->override_redirect, QUBES_XWAYLAND_MAGIC);
 
 	view->xwayland_surface = surface;
 
