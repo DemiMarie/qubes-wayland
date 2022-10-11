@@ -270,6 +270,8 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 	output->flags = is_override_redirect ? QUBES_OUTPUT_OVERRIDE_REDIRECT : 0,
 	output->server = server;
 	wl_signal_add(&output->output.events.frame, &output->frame);
+
+	wl_list_insert(&server->views, &output->link);
 }
 
 void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t height)
@@ -302,6 +304,7 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t 
 }
 
 void qubes_output_deinit(struct qubes_output *output) {
+	wl_list_remove(&output->link);
 	assert(output->magic == QUBES_VIEW_MAGIC || output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
 		.type = MSG_DESTROY,

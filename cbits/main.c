@@ -94,13 +94,16 @@ static int qubes_send_frame_callbacks(void *data)
 {
 	struct tinywl_server *server = data;
 	struct timespec now;
+	struct qubes_output *output;
 	struct tinywl_view *view;
 	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
 	server->frame_pending = false;
-	wl_list_for_each(view, &server->views, output.link) {
-		assert(QUBES_VIEW_MAGIC == view->output.magic);
-		view->output.output.frame_pending = false;
-		wlr_output_send_frame(&view->output.output);
+	wl_list_for_each(output, &server->views, link) {
+		output->output.frame_pending = false;
+		wlr_output_send_frame(&output->output);
+		if (QUBES_VIEW_MAGIC != output->magic)
+			continue;
+		view = wl_container_of(output, view, output);
 		wlr_scene_node_for_each_surface(
 			&view->scene_output->scene->node,
 			qubes_send_frame_done, &now);
@@ -502,7 +505,6 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	/* Called when the surface is destroyed and should never be shown again. */
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
 
-	wl_list_remove(&view->output.link);
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
 	wl_list_remove(&view->destroy.link);
@@ -721,9 +723,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	/* Listen to surface events */
 	view->commit.notify = qubes_surface_commit;
 	wl_signal_add(&xdg_surface->surface->events.commit, &view->commit);
-
-	/* Add it to the list of views. */
-	wl_list_insert(&server->views, &view->output.link);
 
 	/* Get the window ID */
 	assert(output->window_id == 0);
