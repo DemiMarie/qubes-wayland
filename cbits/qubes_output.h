@@ -16,6 +16,9 @@ struct qubes_output {
 	struct msg_keymap_notify keymap;
 	const struct wlr_drm_format_set *formats; /* global */
 	struct tinywl_server *server;
+	struct wlr_scene *scene;
+	struct wlr_scene_output *scene_output;
+	struct wlr_scene_node *scene_subsurface_tree;
 
 	int x, y, left, top;
 	int last_width, last_height;
@@ -30,9 +33,6 @@ struct wlr_xdg_surface;
 struct tinywl_view {
 	struct qubes_output output;
 	struct wlr_xdg_surface *xdg_surface;
-	struct wlr_scene *scene;
-	struct wlr_scene_output *scene_output;
-	struct wlr_scene_node *scene_subsurface_tree;
 	struct wl_listener map;
 	struct wl_listener unmap;
 	struct wl_listener destroy;

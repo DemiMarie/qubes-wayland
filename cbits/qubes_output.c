@@ -240,7 +240,7 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 	wlr_output_update_custom_mode(&output->output, output->last_width, output->last_height, 60000);
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
-		if (wlr_scene_output_commit(view->scene_output)) {
+		if (wlr_scene_output_commit(output->scene_output)) {
 			output->output.frame_pending = true;
 			if (!output->server->frame_pending) {
 				// Schedule another timer callback

@@ -105,7 +105,7 @@ static int qubes_send_frame_callbacks(void *data)
 			continue;
 		view = wl_container_of(output, view, output);
 		wlr_scene_node_for_each_surface(
-			&view->scene_output->scene->node,
+			&output->scene_output->scene->node,
 			qubes_send_frame_done, &now);
 	}
 	return 0;
@@ -403,7 +403,7 @@ bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 	if (output->x != box->x || output->y != box->y) {
 		output->x = box->x;
 		output->y = box->y;
-		wlr_scene_output_set_position(view->scene_output, output->x, output->y);
+		wlr_scene_output_set_position(output->scene_output, output->x, output->y);
 	}
 	return true;
 }
@@ -427,8 +427,8 @@ void qubes_view_map(struct tinywl_view *view)
 	qubes_output_ensure_created(output, box);
 	if (!qubes_output_mapped(output)) {
 		output->flags |= QUBES_OUTPUT_MAPPED;
-		wlr_scene_node_set_enabled(&view->scene_output->scene->node, true);
-		wlr_scene_node_set_enabled(view->scene_subsurface_tree, true);
+		wlr_scene_node_set_enabled(&output->scene_output->scene->node, true);
+		wlr_scene_node_set_enabled(output->scene_subsurface_tree, true);
 		wlr_output_enable(&view->output.output, true);
 	}
 	uint32_t transient_for_window = 0;
@@ -496,14 +496,15 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	struct qubes_output *output = &view->output;
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
-	wlr_scene_node_set_enabled(&view->scene_output->scene->node, false);
-	wlr_scene_node_set_enabled(view->scene_subsurface_tree, false);
+	wlr_scene_node_set_enabled(&output->scene_output->scene->node, false);
+	wlr_scene_node_set_enabled(output->scene_subsurface_tree, false);
 	qubes_output_unmap(&view->output);
 }
 
 static void xdg_surface_destroy(struct wl_listener *listener, void *data __attribute__((unused))) {
 	/* Called when the surface is destroyed and should never be shown again. */
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
+	struct qubes_output *output = &view->output;
 
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
@@ -517,12 +518,12 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		wl_list_remove(&view->set_app_id.link);
 		wl_list_remove(&view->ack_configure.link);
 	}
-	if (view->scene_subsurface_tree)
-		wlr_scene_node_destroy(view->scene_subsurface_tree);
-	if (view->scene_output)
-		wlr_scene_output_destroy(view->scene_output);
-	if (view->scene)
-		wlr_scene_node_destroy(&view->scene->node);
+	if (output->scene_subsurface_tree)
+		wlr_scene_node_destroy(output->scene_subsurface_tree);
+	if (output->scene_output)
+		wlr_scene_output_destroy(output->scene_output);
+	if (output->scene)
+		wlr_scene_node_destroy(&output->scene->node);
 	qubes_output_deinit(&view->output);
 	free(view);
 }
@@ -623,11 +624,11 @@ static void qubes_surface_commit(
 	struct wlr_box box;
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
-	assert(view->scene_output);
-	assert(view->scene_output->output == &view->output.output);
+	assert(output->scene_output);
+	assert(output->scene_output->output == &output->output);
 	if (!qubes_view_ensure_created(view, &box))
 		return;
-	qubes_output_configure(&view->output, box);
+	qubes_output_configure(output, box);
 }
 
 static void qubes_toplevel_ack_configure(struct wl_listener *listener, void *data)
@@ -670,17 +671,17 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	/* Add wlr_output */
 	qubes_output_init(output, &server->backend->backend, server, is_override_redirect);
 	wlr_output_init_render(&output->output, server->allocator, server->renderer);
-	if (!(view->scene = wlr_scene_create()))
+	if (!(output->scene = wlr_scene_create()))
 		goto cleanup;
 
 	assert(output->output.allocator);
 
-	if (!(view->scene_output = wlr_scene_output_create(view->scene, &output->output)))
+	if (!(output->scene_output = wlr_scene_output_create(output->scene, &output->output)))
 		goto cleanup;
-	if (!(view->scene_subsurface_tree =
-				wlr_scene_subsurface_tree_create(&view->scene_output->scene->node, xdg_surface->surface)))
+	if (!(output->scene_subsurface_tree =
+				wlr_scene_subsurface_tree_create(&output->scene_output->scene->node, xdg_surface->surface)))
 		goto cleanup;
-	wlr_scene_node_raise_to_top(view->scene_subsurface_tree);
+	wlr_scene_node_raise_to_top(output->scene_subsurface_tree);
 
 	view->xdg_surface = xdg_surface;
 
@@ -739,10 +740,10 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 cleanup:
 	wl_resource_post_no_memory(xdg_surface->resource);
 	if (view) {
-		if (view->scene_subsurface_tree)
-			wlr_scene_node_destroy(view->scene_subsurface_tree);
-		if (view->scene_output)
-			wlr_scene_output_destroy(view->scene_output);
+		if (output->scene_subsurface_tree)
+			wlr_scene_node_destroy(output->scene_subsurface_tree);
+		if (output->scene_output)
+			wlr_scene_output_destroy(output->scene_output);
 		qubes_output_deinit(output);
 		qubes_rust_delete_id(output->server->backend->rust_backend, output->window_id);
 		free(view);
