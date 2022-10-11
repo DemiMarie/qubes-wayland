@@ -97,7 +97,7 @@ static int qubes_send_frame_callbacks(void *data)
 	struct tinywl_view *view;
 	assert(clock_gettime(CLOCK_MONOTONIC, &now) == 0);
 	server->frame_pending = false;
-	wl_list_for_each(view, &server->views, link) {
+	wl_list_for_each(view, &server->views, output.link) {
 		assert(QUBES_VIEW_MAGIC == view->output.magic);
 		view->output.output.frame_pending = false;
 		wlr_output_send_frame(&view->output.output);
@@ -142,8 +142,8 @@ void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface
 	assert(keyboard);
 	assert(view->xdg_surface);
 	/* Move the view to the front */
-	wl_list_remove(&view->link);
-	wl_list_insert(&server->views, &view->link);
+	wl_list_remove(&view->output.link);
+	wl_list_insert(&server->views, &view->output.link);
 	/* Activate the new surface */
 	struct wlr_xdg_surface *view_surface = view->xdg_surface;
 	while (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
@@ -502,7 +502,7 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	/* Called when the surface is destroyed and should never be shown again. */
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
 
-	wl_list_remove(&view->link);
+	wl_list_remove(&view->output.link);
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
 	wl_list_remove(&view->destroy.link);
@@ -723,7 +723,7 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 	wl_signal_add(&xdg_surface->surface->events.commit, &view->commit);
 
 	/* Add it to the list of views. */
-	wl_list_insert(&server->views, &view->link);
+	wl_list_insert(&server->views, &view->output.link);
 
 	/* Get the window ID */
 	assert(output->window_id == 0);

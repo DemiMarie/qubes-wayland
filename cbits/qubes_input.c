@@ -389,11 +389,11 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 	case 2:
 		wlr_log(WLR_DEBUG, "Reconnecting to GUI daemon");
 		struct tinywl_view *view;
-		wl_list_for_each(view, backend->views, link) {
+		wl_list_for_each(view, backend->views, output.link) {
 			assert(QUBES_VIEW_MAGIC == view->output.magic);
 			view->output.flags &= ~QUBES_OUTPUT_CREATED;
 		}
-		wl_list_for_each(view, backend->views, link) {
+		wl_list_for_each(view, backend->views, output.link) {
 			assert(QUBES_VIEW_MAGIC == view->output.magic);
 			assert(!(view->output.flags & QUBES_OUTPUT_CREATED));
 			qubes_recreate_window(view);

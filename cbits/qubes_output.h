@@ -8,6 +8,7 @@
 #include <qubes-gui-protocol.h>
 
 struct qubes_output {
+	struct wl_list link;
 	struct wlr_output output;
 	struct wl_listener buffer_destroy;
 	struct wlr_buffer *buffer; /* owned by the compositor */
@@ -28,7 +29,6 @@ struct tinywl_server;
 struct wlr_xdg_surface;
 struct tinywl_view {
 	struct qubes_output output;
-	struct wl_list link;
 	struct wlr_xdg_surface *xdg_surface;
 	struct wlr_scene *scene;
 	struct wlr_scene_output *scene_output;
