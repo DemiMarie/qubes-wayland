@@ -1,6 +1,7 @@
+use qubes_gui::WindowID;
 use std::{
     collections::BTreeMap,
-    convert::{TryFrom, TryInto},
+    convert::TryInto,
     num::NonZeroU32,
     os::raw::{c_int, c_void},
     os::unix::io::AsRawFd,
@@ -48,9 +49,14 @@ impl QubesData {
         id
     }
 
-    fn destroy_id(&mut self, id: u32) {
-        if let Ok(id) = NonZeroU32::try_from(id) {
-            self.map.get_mut(&id).map(|e| *e = ptr::null_mut());
+    fn destroy_id(&mut self, WindowID { window }: WindowID) {
+        if let Some(id) = window {
+            let v = self
+                .map
+                .get_mut(&id)
+                .expect("Bogus call to delete_id: ID not found in map!");
+            assert!(!(*v).is_null(), "delete_id called twice");
+            *v = ptr::null_mut();
         }
     }
 
@@ -163,19 +169,6 @@ pub unsafe extern "C" fn qubes_rust_reconnect(backend: *mut c_void) -> bool {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn qubes_rust_delete_id(backend: *mut c_void, id: u32) {
-    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).destroy_id(id)) {
-        Ok(e) => e.into(),
-        Err(_) => {
-            drop(std::panic::catch_unwind(|| {
-                eprintln!("Unexpected panic");
-            }));
-            std::process::abort();
-        }
-    }
-}
-
-#[no_mangle]
 pub unsafe extern "C" fn qubes_rust_backend_fd(backend: *mut c_void) -> c_int {
     match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).agent.as_raw_fd()) {
         Ok(e) => e,
@@ -222,17 +215,24 @@ pub unsafe extern "C" fn qubes_rust_backend_on_fd_ready(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn qubes_rust_send_message(backend: *mut c_void, header: &qubes_gui::Header) {
+pub unsafe extern "C" fn qubes_rust_send_message(
+    backend: &mut RustBackend,
+    header: &qubes_gui::Header,
+) {
     // untrusted_len is actually trusted here
     let slice = core::slice::from_raw_parts(
         header as *const _ as *const u8,
         header.untrusted_len as usize + core::mem::size_of::<qubes_gui::Header>(),
     );
-    if !(*(backend as *const RustBackend)).enabled {
+    if !backend.enabled {
         return;
     }
-    match std::panic::catch_unwind(|| (*(backend as *mut RustBackend)).agent.send_raw_bytes(slice))
-    {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        if header.ty == qubes_gui::MSG_DESTROY {
+            backend.destroy_id(header.window);
+        }
+        backend.agent.send_raw_bytes(slice)
+    })) {
         Ok(_) => {}
         Err(_) => {
             core::mem::forget(std::panic::catch_unwind(|| {

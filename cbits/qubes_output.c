@@ -371,7 +371,6 @@ void qubes_output_deinit(struct qubes_output *output) {
 	if (qubes_output_created(output)) {
 		wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, output->window_id);
 		qubes_rust_send_message(output->server->backend->rust_backend, &header);
-		qubes_rust_delete_id(output->server->backend->rust_backend, output->window_id);
 	}
 	wlr_output_destroy(&output->output);
 }
