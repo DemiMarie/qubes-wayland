@@ -21,6 +21,7 @@
 #include "qubes_output.h"
 #include "qubes_allocator.h"
 #include "qubes_backend.h"
+#include "qubes_xwayland.h"
 #include "main.h"
 
 /* Qubes OS doesn’t support gamma LUTs */
@@ -66,10 +67,15 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box)
 	int n_rects = 0;
 	if (!(output->output.pending.committed & WLR_OUTPUT_STATE_DAMAGE))
 		return;
+	pixman_box32_t fake_rect = { .x1 = 0, .y1 = 0, .x2 = box.width, .y2 = box.height};
 	pixman_box32_t *rects = pixman_region32_rectangles(&output->output.pending.damage, &n_rects);
 	if (n_rects <= 0 || !rects) {
-		wlr_log(WLR_DEBUG, "No damage!");
-		return;
+		if (output->magic != QUBES_XWAYLAND_MAGIC) {
+			wlr_log(WLR_DEBUG, "No damage!");
+			return;
+		}
+		n_rects = 1;
+		rects = &fake_rect;
 	}
 	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, output->window_id);
 	for (int i = 0; i < n_rects; ++i) {
@@ -167,13 +173,24 @@ bool qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 static bool qubes_output_commit(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
-	assert(QUBES_VIEW_MAGIC == output->magic);
-	struct tinywl_view *view = wl_container_of(output, view, output);
-
 	struct wlr_box box;
-	if (!qubes_view_ensure_created(view, &box))
+	if (QUBES_VIEW_MAGIC == output->magic) {
+		struct tinywl_view *view = wl_container_of(output, view, output);
+		wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		struct wlr_xwayland_surface *surface = view->xwayland_surface;
+		assert(surface);
+		box.x = surface->x;
+		box.y = surface->y;
+		box.width = surface->width;
+		box.height = surface->height;
+	} else {
+		assert(!"Bad magic in qubes_output_commit");
+		abort();
+	}
+	if (!qubes_output_ensure_created(output, box))
 		return false;
-	qubes_output_ensure_created(output, box);
 
 	if (raw_output->pending.committed & WLR_OUTPUT_STATE_MODE) {
 		assert(raw_output->pending.mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
