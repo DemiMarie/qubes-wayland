@@ -49,12 +49,15 @@ static void xwayland_surface_destroy(struct wl_listener *listener, void *data __
 	memset(view, 0xFF, sizeof *view);
 	free(view);
 }
-static void xwayland_surface_map(struct wl_listener *listener, void *data __attribute__((unused))) {
+static void xwayland_surface_map(struct wl_listener *listener, void *data) {
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, map);
 	wlr_log(WLR_ERROR, "mapping surface at %p", view);
 	struct wlr_xwayland_surface *surface = view->xwayland_surface;
+	assert(surface == data);
+	assert(surface);
+	assert(surface->surface);
 	struct qubes_output *output = &view->output;
 	struct wlr_box box;
 
@@ -65,6 +68,9 @@ static void xwayland_surface_map(struct wl_listener *listener, void *data __attr
 		qubes_output_ensure_created(output, box);
 		output->flags |= QUBES_OUTPUT_MAPPED;
 	}
+
+	qubes_output_set_surface(output, surface->surface);
+	qubes_output_map(output, 0, surface->override_redirect);
 }
 
 static void xwayland_surface_unmap(struct wl_listener *listener, void *data)
@@ -118,37 +124,45 @@ static void xwayland_surface_request_minimize(struct wl_listener *listener, void
 }
 static void xwayland_surface_request_maximize(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_maximize);
-	(void)view;
+	struct wlr_xwayland_surface *surface = data;
+	(void)view, (void)surface;
 }
 static void xwayland_surface_request_fullscreen(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_fullscreen);
-	(void)view;
+	struct wlr_xwayland_surface *surface = data;
+	(void)view, (void)surface;
 }
 static void xwayland_surface_set_title(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_title);
-	(void)view;
+	struct wlr_xwayland_surface *surface = data;
+	(void)view, (void)surface;
 }
 static void xwayland_surface_set_class(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_class);
-	(void)view;
+	struct wlr_xwayland_surface *surface = data;
+	(void)view, (void)surface;
 }
 static void xwayland_surface_set_parent(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_parent);
-	(void)view;
+	struct wlr_xwayland_surface *surface = data;
+	(void)view, (void)surface;
 }
 static void xwayland_surface_set_hints(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_hints);
-	(void)view;
+	struct wlr_xwayland_surface *surface = data;
+	(void)view, (void)surface;
 }
 static void xwayland_surface_set_override_redirect(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_override_redirect);
-	(void)view;
+	struct wlr_xwayland_surface *surface = data;
+	(void)view, (void)surface;
 }
 
 void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *data)
 {
 	struct tinywl_server *server = wl_container_of(listener, server, new_xwayland_surface);
 	struct wlr_xwayland_surface *surface = data;
+	assert(surface);
 
 	assert(QUBES_SERVER_MAGIC == server->magic);
 
@@ -158,7 +172,10 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 
 	struct qubes_output *output = &view->output;
 
-	qubes_output_init(output, &server->backend->backend, server, surface->override_redirect, QUBES_XWAYLAND_MAGIC);
+	if (!qubes_output_init(output, server,
+	                       surface->override_redirect, surface->surface,
+	                       QUBES_XWAYLAND_MAGIC))
+		goto cleanup;
 
 	view->xwayland_surface = surface;
 
@@ -191,4 +208,11 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 	view->set_override_redirect.notify = xwayland_surface_set_override_redirect;
 	wl_signal_add(&surface->events.set_override_redirect, &view->set_override_redirect);
 	wlr_log(WLR_ERROR, "created surface at %p", view);
+	return;
+
+cleanup:
+	if (view) {
+		qubes_output_deinit(&view->output);
+		free(view);
+	}
 }

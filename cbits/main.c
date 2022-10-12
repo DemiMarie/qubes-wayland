@@ -425,12 +425,6 @@ void qubes_view_map(struct tinywl_view *view)
 	if (!qubes_view_ensure_created(view, &box))
 		return;
 	qubes_output_ensure_created(output, box);
-	if (!qubes_output_mapped(output)) {
-		output->flags |= QUBES_OUTPUT_MAPPED;
-		wlr_scene_node_set_enabled(&output->scene_output->scene->node, true);
-		wlr_scene_node_set_enabled(output->scene_subsurface_tree, true);
-		wlr_output_enable(&view->output.output, true);
-	}
 	uint32_t transient_for_window = 0;
 	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		uint32_t flags_to_set = 0, flags_to_unset = 0;
@@ -466,27 +460,7 @@ void qubes_view_map(struct tinywl_view *view)
 	} else {
 		return;
 	}
-
-	wlr_log(WLR_INFO,
-	        "Sending MSG_MAP (0x%x) to window %u (transient_for = %u)",
-	        MSG_MAP, output->window_id, transient_for_window);
-	struct {
-		struct msg_hdr header;
-		struct msg_map_info info;
-	} msg = {
-		.header = {
-			.type = MSG_MAP,
-			.window = output->window_id,
-			.untrusted_len = sizeof(struct msg_map_info),
-		},
-		.info = {
-			.transient_for = transient_for_window,
-			.override_redirect = view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0,
-		},
-	};
-	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.info);
-	// Surface created above
-	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
+	qubes_output_map(output, transient_for_window, view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0);
 }
 
 static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribute__((unused))) {
@@ -661,19 +635,10 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 		goto cleanup;
 
 	struct qubes_output *output = &view->output;
-	/* Add wlr_output */
-	qubes_output_init(output, &server->backend->backend, server, is_override_redirect, QUBES_VIEW_MAGIC);
-	if (!(output->scene = wlr_scene_create()))
+	if (!qubes_output_init(output, server,
+	                       is_override_redirect, xdg_surface->surface,
+	                       QUBES_VIEW_MAGIC))
 		goto cleanup;
-
-	assert(output->output.allocator);
-
-	if (!(output->scene_output = wlr_scene_output_create(output->scene, &output->output)))
-		goto cleanup;
-	if (!(output->scene_subsurface_tree =
-				wlr_scene_subsurface_tree_create(&output->scene_output->scene->node, xdg_surface->surface)))
-		goto cleanup;
-	wlr_scene_node_raise_to_top(output->scene_subsurface_tree);
 
 	view->xdg_surface = xdg_surface;
 

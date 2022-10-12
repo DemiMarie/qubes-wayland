@@ -12,7 +12,8 @@ struct qubes_output {
 	struct wlr_output output;
 	struct wl_listener buffer_destroy;
 	struct wlr_buffer *buffer; /* owned by the compositor */
-	struct wl_listener frame;
+	struct wlr_surface *surface; /* ditto */
+	struct wl_listener frame, surface_destroy;
 	struct msg_keymap_notify keymap;
 	const struct wlr_drm_format_set *formats; /* global */
 	struct tinywl_server *server;
@@ -74,9 +75,9 @@ static inline bool qubes_output_override_redirect(struct qubes_output *output)
 }
 
 /* Initialize a qubes_output */
-void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
-                       struct tinywl_server *server, bool override_redirect,
-                       uint32_t magic);
+bool qubes_output_init(struct qubes_output *output, struct tinywl_server *server,
+                       bool override_redirect, struct wlr_surface *surface,
+                       uint32_t magic) __attribute__((warn_unused_result));
 void qubes_output_deinit(struct qubes_output *output);
 
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr);
@@ -86,6 +87,8 @@ void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 void qubes_output_configure(struct qubes_output *output, struct wlr_box box);
 void qubes_output_unmap(struct qubes_output *output);
 void qubes_change_window_flags(struct qubes_output *output, uint32_t flags_set, uint32_t flags_unset);
+bool qubes_output_set_surface(struct qubes_output *const output, struct wlr_surface *const surface);
+void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window, bool override_redirect);
 
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_OUTPUT_H */
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:

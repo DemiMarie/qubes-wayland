@@ -253,10 +253,45 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 	}
 }
 
-void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
-                       struct tinywl_server *server, bool is_override_redirect,
-                       uint32_t magic) {
+static void qubes_output_clear_surface(struct qubes_output *const output)
+{
+	if (output->scene_subsurface_tree)
+		wlr_scene_node_destroy(output->scene_subsurface_tree);
+	output->scene_subsurface_tree = NULL;
+	output->surface = NULL;
+}
+
+static void qubes_output_clear_surface_hook(struct wl_listener *const listener, void *const data __attribute__((unused)))
+{
+	struct qubes_output *output = wl_container_of(listener, output, surface_destroy);
+	qubes_output_clear_surface(output);
+}
+
+bool qubes_output_set_surface(struct qubes_output *const output, struct wlr_surface *const surface)
+{
+	if (surface == output->surface)
+		return true; /* nothing to do */
+
+	qubes_output_clear_surface(output);
+
+	if (surface && !(output->scene_subsurface_tree =
+	      wlr_scene_subsurface_tree_create(&output->scene_output->scene->node, surface)))
+		return false;
+	output->surface = surface;
+	wl_signal_add(&surface->events.destroy, &output->surface_destroy);
+	wlr_scene_node_raise_to_top(output->scene_subsurface_tree);
+	return true;
+}
+
+bool qubes_output_init(struct qubes_output *const output, struct tinywl_server *const server,
+                       bool const is_override_redirect, struct wlr_surface *const surface,
+                       uint32_t const magic) {
+	assert(output);
 	memset(output, 0, sizeof *output);
+
+	assert(server);
+	struct wlr_backend *const backend = &server->backend->backend;
+	assert(magic == QUBES_VIEW_MAGIC || magic == QUBES_XWAYLAND_MAGIC);
 
 	wlr_output_init(&output->output, backend, &qubes_wlr_output_impl, server->wl_display);
 	wlr_output_update_custom_mode(&output->output, 1280, 720, 0);
@@ -271,11 +306,19 @@ void qubes_output_init(struct qubes_output *output, struct wlr_backend *backend,
 	output->flags = is_override_redirect ? QUBES_OUTPUT_OVERRIDE_REDIRECT : 0,
 	output->server = server;
 	wl_signal_add(&output->output.events.frame, &output->frame);
+	output->surface_destroy.notify = qubes_output_clear_surface_hook;
 
 	wl_list_insert(&server->views, &output->link);
 	assert(output->output.allocator == NULL);
 	assert(server->allocator != NULL);
+	/* Add wlr_output */
 	wlr_output_init_render(&output->output, server->allocator, server->renderer);
+	assert(output->output.allocator);
+	if (!(output->scene = wlr_scene_create()))
+		return false;
+	if (!(output->scene_output = wlr_scene_output_create(output->scene, &output->output)))
+		return false;
+	return qubes_output_set_surface(output, surface);
 }
 
 void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t height)
@@ -315,6 +358,9 @@ void qubes_output_deinit(struct qubes_output *output) {
 	if (output->scene)
 		wlr_scene_node_destroy(&output->scene->node);
 	wl_list_remove(&output->link);
+	if (output->surface_destroy.link.next)
+		wl_list_remove(&output->surface_destroy.link);
+	assert(!output->surface_destroy.link.next);
 	assert(output->magic == QUBES_VIEW_MAGIC || output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
 		.type = MSG_DESTROY,
@@ -362,6 +408,36 @@ void qubes_output_unmap(struct qubes_output *output) {
 	};
 	if (qubes_output_created(output))
 		qubes_rust_send_message(output->server->backend->rust_backend, &header);
+}
+
+void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window, bool override_redirect) {
+	if (!qubes_output_mapped(output)) {
+		output->flags |= QUBES_OUTPUT_MAPPED;
+		wlr_scene_node_set_enabled(&output->scene_output->scene->node, true);
+		wlr_scene_node_set_enabled(output->scene_subsurface_tree, true);
+		wlr_output_enable(&output->output, true);
+	}
+
+	wlr_log(WLR_INFO,
+	        "Sending MSG_MAP (0x%x) to window %u (transient_for = %u)",
+	        MSG_MAP, output->window_id, transient_for_window);
+	struct {
+		struct msg_hdr header;
+		struct msg_map_info info;
+	} msg = {
+		.header = {
+			.type = MSG_MAP,
+			.window = output->window_id,
+			.untrusted_len = sizeof(struct msg_map_info),
+		},
+		.info = {
+			.transient_for = transient_for_window,
+			.override_redirect = override_redirect,
+		},
+	};
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.info);
+	// Surface created above
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
 }
 
 void qubes_output_configure(struct qubes_output *output, struct wlr_box box) {
