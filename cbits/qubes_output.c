@@ -88,7 +88,7 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box)
 			continue;
 		}
 		int32_t const x = use_delta ? x1 - box.x : x1, y = use_delta ? y1 - box.y : y1;
-		wlr_log(WLR_DEBUG, "Submitting damage to GUI daemon: x %" PRIi32 " y %" PRIi32 " width %" PRIu32 " height %" PRIu32, x, y, width, height);
+		wlr_log(WLR_DEBUG, "Submitting damage to GUI daemon: window %" PRIu32" x %" PRIi32 " y %" PRIi32 " width %" PRIu32 " height %" PRIu32, output->window_id, x, y, width, height);
 		struct {
 			struct msg_hdr header;
 			struct msg_shmimage shmimage;
@@ -127,7 +127,6 @@ void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 		return;
 	if (!output->window_id)
 		output->window_id = qubes_rust_generate_id(output->server->backend->rust_backend, output);
-	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, output->window_id);
 	struct {
 		struct msg_hdr header;
 		struct msg_create create;
@@ -148,6 +147,7 @@ void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.create);
 	// This is MSG_CREATE
+	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, output->window_id);
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
 	output->flags |= QUBES_OUTPUT_CREATED;
 }
@@ -255,6 +255,7 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 
 static void qubes_output_clear_surface(struct qubes_output *const output)
 {
+	wlr_log(WLR_DEBUG, "Surface clear for window %" PRIu32, output->window_id);
 	if (output->scene_subsurface_tree)
 		wlr_scene_node_destroy(output->scene_subsurface_tree);
 	output->scene_subsurface_tree = NULL;
@@ -327,7 +328,6 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t 
 		return;
 	if (width <= 0 || height <= 0)
 		return;
-	wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, output->window_id);
 	struct {
 		struct msg_hdr header;
 		struct msg_configure configure;
@@ -347,6 +347,7 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t 
 		},
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.configure);
+	wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32, MSG_CONFIGURE, output->window_id);
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
 }
 
@@ -394,20 +395,22 @@ void qubes_change_window_flags(struct qubes_output *output, uint32_t flags_set, 
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.flags);
 	// Asserted above, checked at call sites
+	wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_FLAGS (0x%x) to window %" PRIu32, MSG_DESTROY, output->window_id);
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
 }
 
 void qubes_output_unmap(struct qubes_output *output) {
 	output->flags &= ~(__typeof__(output->flags))QUBES_OUTPUT_MAPPED;
 	wlr_output_enable(&output->output, false);
-	wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, output->window_id);
 	struct msg_hdr header = {
 		.type = MSG_UNMAP,
 		.window = output->window_id,
 		.untrusted_len = 0,
 	};
-	if (qubes_output_created(output))
+	if (qubes_output_created(output)) {
+		wlr_log(WLR_DEBUG, "Sending MSG_UNMAP (0x%x) to window %" PRIu32, MSG_UNMAP, output->window_id);
 		qubes_rust_send_message(output->server->backend->rust_backend, &header);
+	}
 }
 
 void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window, bool override_redirect) {
@@ -418,9 +421,6 @@ void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window
 		wlr_output_enable(&output->output, true);
 	}
 
-	wlr_log(WLR_INFO,
-	        "Sending MSG_MAP (0x%x) to window %u (transient_for = %u)",
-	        MSG_MAP, output->window_id, transient_for_window);
 	struct {
 		struct msg_hdr header;
 		struct msg_map_info info;
@@ -437,6 +437,9 @@ void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.info);
 	// Surface created above
+	wlr_log(WLR_INFO,
+	        "Sending MSG_MAP (0x%x) to window %u (transient_for = %u)",
+	        MSG_MAP, output->window_id, transient_for_window);
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
 }
 

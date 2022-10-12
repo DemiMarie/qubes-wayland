@@ -79,6 +79,7 @@ retry:;
 		};
 		assert(clipboard_data->size >= sizeof header && "Data too small???");
 		memcpy(clipboard_data->data, &header, sizeof header);
+		wlr_log(WLR_DEBUG, "Setting clipboard data");
 		qubes_rust_send_message(handler->server->backend->rust_backend, clipboard_data->data);
 		goto done;
 	} else if (res == -1) {
