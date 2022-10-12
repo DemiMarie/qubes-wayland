@@ -119,12 +119,23 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box)
 	qubes_output_damage(output, box);
 }
 
-void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box)
+bool qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box)
 {
 	// implemented in Rust
 	extern uint32_t qubes_rust_generate_id(void *backend, void *data) __attribute__((warn_unused_result));
+	if (box.width <= 0 ||
+	    box.height <= 0 ||
+	    box.width > MAX_WINDOW_WIDTH ||
+	    box.height > MAX_WINDOW_HEIGHT) {
+		return false;
+	}
+	if (output->x != box.x || output->y != box.y) {
+		output->x = box.x;
+		output->y = box.y;
+		wlr_scene_output_set_position(output->scene_output, output->x, output->y);
+	}
 	if (qubes_output_created(output))
-		return;
+		return true;
 	if (!output->window_id)
 		output->window_id = qubes_rust_generate_id(output->server->backend->rust_backend, output);
 	struct {
@@ -150,6 +161,7 @@ void qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 	wlr_log(WLR_DEBUG, "Sending MSG_CREATE (0x%x) to window %" PRIu32, MSG_CREATE, output->window_id);
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
 	output->flags |= QUBES_OUTPUT_CREATED;
+	return true;
 }
 
 static bool qubes_output_commit(struct wlr_output *raw_output) {
@@ -238,18 +250,15 @@ static void qubes_output_frame(struct wl_listener *listener, void *data __attrib
 	// window to *never* be displayed until the next window resize.  This bug
 	// took more than three days to fix.
 	wlr_output_update_custom_mode(&output->output, output->last_width, output->last_height, 60000);
-	if (QUBES_VIEW_MAGIC == output->magic) {
-		struct tinywl_view *view = wl_container_of(output, view, output);
-		if (wlr_scene_output_commit(output->scene_output)) {
-			output->output.frame_pending = true;
-			if (!output->server->frame_pending) {
-				// Schedule another timer callback
-				wl_event_source_timer_update(output->server->timer, 16);
-				output->server->frame_pending = true;
-			}
+	assert(QUBES_VIEW_MAGIC == output->magic ||
+	       QUBES_XWAYLAND_MAGIC == output->magic);
+	if (wlr_scene_output_commit(output->scene_output)) {
+		output->output.frame_pending = true;
+		if (!output->server->frame_pending) {
+			// Schedule another timer callback
+			wl_event_source_timer_update(output->server->timer, 16);
+			output->server->frame_pending = true;
 		}
-	} else {
-		assert(QUBES_XWAYLAND_MAGIC == output->magic);
 	}
 }
 
@@ -259,15 +268,7 @@ static void qubes_output_clear_surface(struct qubes_output *const output)
 	if (output->scene_subsurface_tree)
 		wlr_scene_node_destroy(output->scene_subsurface_tree);
 	output->scene_subsurface_tree = NULL;
-	if (output->surface)
-		wl_list_remove(&output->surface_destroy.link);
 	output->surface = NULL;
-}
-
-static void qubes_output_clear_surface_hook(struct wl_listener *const listener, void *const data __attribute__((unused)))
-{
-	struct qubes_output *output = wl_container_of(listener, output, surface_destroy);
-	qubes_output_clear_surface(output);
 }
 
 bool qubes_output_set_surface(struct qubes_output *const output, struct wlr_surface *const surface)
@@ -281,7 +282,6 @@ bool qubes_output_set_surface(struct qubes_output *const output, struct wlr_surf
 	      wlr_scene_subsurface_tree_create(&output->scene_output->scene->node, surface)))
 		return false;
 	output->surface = surface;
-	wl_signal_add(&surface->events.destroy, &output->surface_destroy);
 	wlr_scene_node_raise_to_top(output->scene_subsurface_tree);
 	return true;
 }
@@ -309,7 +309,6 @@ bool qubes_output_init(struct qubes_output *const output, struct tinywl_server *
 	output->flags = is_override_redirect ? QUBES_OUTPUT_OVERRIDE_REDIRECT : 0,
 	output->server = server;
 	wl_signal_add(&output->output.events.frame, &output->frame);
-	output->surface_destroy.notify = qubes_output_clear_surface_hook;
 
 	wl_list_insert(&server->views, &output->link);
 	assert(output->output.allocator == NULL);
@@ -361,9 +360,6 @@ void qubes_output_deinit(struct qubes_output *output) {
 	if (output->scene)
 		wlr_scene_node_destroy(&output->scene->node);
 	wl_list_remove(&output->link);
-	if (output->surface_destroy.link.next)
-		wl_list_remove(&output->surface_destroy.link);
-	assert(!output->surface_destroy.link.next);
 	assert(output->magic == QUBES_VIEW_MAGIC || output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
 		.type = MSG_DESTROY,

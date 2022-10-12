@@ -390,22 +390,9 @@ static void qubes_set_view_app_id(struct tinywl_view *view)
 
 bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box)
 {
-	struct qubes_output *output = &view->output;
-
 	assert(box);
 	wlr_xdg_surface_get_geometry(view->xdg_surface, box);
-	if (box->width <= 0 ||
-	    box->height <= 0 ||
-	    box->width > MAX_WINDOW_WIDTH ||
-	    box->height > MAX_WINDOW_HEIGHT) {
-		return false;
-	}
-	if (output->x != box->x || output->y != box->y) {
-		output->x = box->x;
-		output->y = box->y;
-		wlr_scene_output_set_position(output->scene_output, output->x, output->y);
-	}
-	return true;
+	return qubes_output_ensure_created(&view->output, *box);
 }
 
 static void xdg_surface_map(struct wl_listener *listener, void *data __attribute__((unused))) {
@@ -424,7 +411,6 @@ void qubes_view_map(struct tinywl_view *view)
 	struct wlr_xdg_surface *xdg_surface = view->xdg_surface;
 	if (!qubes_view_ensure_created(view, &box))
 		return;
-	qubes_output_ensure_created(output, box);
 	uint32_t transient_for_window = 0;
 	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		uint32_t flags_to_set = 0, flags_to_unset = 0;
