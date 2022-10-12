@@ -259,6 +259,8 @@ static void qubes_output_clear_surface(struct qubes_output *const output)
 	if (output->scene_subsurface_tree)
 		wlr_scene_node_destroy(output->scene_subsurface_tree);
 	output->scene_subsurface_tree = NULL;
+	if (output->surface)
+		wl_list_remove(&output->surface_destroy.link);
 	output->surface = NULL;
 }
 
