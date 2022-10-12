@@ -504,7 +504,6 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 static void xdg_surface_destroy(struct wl_listener *listener, void *data __attribute__((unused))) {
 	/* Called when the surface is destroyed and should never be shown again. */
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
-	struct qubes_output *output = &view->output;
 
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
@@ -518,12 +517,6 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		wl_list_remove(&view->set_app_id.link);
 		wl_list_remove(&view->ack_configure.link);
 	}
-	if (output->scene_subsurface_tree)
-		wlr_scene_node_destroy(output->scene_subsurface_tree);
-	if (output->scene_output)
-		wlr_scene_output_destroy(output->scene_output);
-	if (output->scene)
-		wlr_scene_node_destroy(&output->scene->node);
 	qubes_output_deinit(&view->output);
 	free(view);
 }
@@ -739,10 +732,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
 cleanup:
 	wl_resource_post_no_memory(xdg_surface->resource);
 	if (view) {
-		if (output->scene_subsurface_tree)
-			wlr_scene_node_destroy(output->scene_subsurface_tree);
-		if (output->scene_output)
-			wlr_scene_output_destroy(output->scene_output);
 		qubes_output_deinit(output);
 		free(view);
 	}

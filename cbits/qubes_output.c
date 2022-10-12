@@ -308,6 +308,12 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t 
 }
 
 void qubes_output_deinit(struct qubes_output *output) {
+	if (output->scene_subsurface_tree)
+		wlr_scene_node_destroy(output->scene_subsurface_tree);
+	if (output->scene_output)
+		wlr_scene_output_destroy(output->scene_output);
+	if (output->scene)
+		wlr_scene_node_destroy(&output->scene->node);
 	wl_list_remove(&output->link);
 	assert(output->magic == QUBES_VIEW_MAGIC || output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
