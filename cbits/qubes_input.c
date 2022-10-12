@@ -135,6 +135,9 @@ handle_pointer_movement(struct qubes_output *output, int32_t x, int32_t y,
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		surface = wlr_xdg_surface_surface_at(view->xdg_surface, seat_relative_x, seat_relative_y, &sx, &sy);
+	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		surface = view->xwayland_surface->surface;
 	}
 	if (surface) {
 		wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
@@ -182,6 +185,7 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp, const 
 
 	if (output->magic != QUBES_VIEW_MAGIC) {
 		assert(QUBES_XWAYLAND_MAGIC == output->magic);
+		wlr_log(WLR_ERROR, "NYI: giving focus to an XWayland surface");
 		return;
 	}
 	struct tinywl_view *view = wl_container_of(output, view, output);
@@ -315,6 +319,8 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		wlr_xwayland_surface_configure(view->xwayland_surface, configure.x, configure.y, configure.width, configure.height);
+	} else {
+		abort();
 	}
 }
 
@@ -394,8 +400,10 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 			output->flags &= ~QUBES_OUTPUT_CREATED;
 		}
 		wl_list_for_each(output, backend->views, link) {
-			if (QUBES_VIEW_MAGIC != output->magic)
+			if (QUBES_VIEW_MAGIC != output->magic) {
+				wlr_log(WLR_ERROR, "NYI: recreating an XWayland surface");
 				continue;
+			}
 			view = wl_container_of(output, view, output);
 			assert(!(view->output.flags & QUBES_OUTPUT_CREATED));
 			qubes_recreate_window(view);
@@ -500,7 +508,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, st
 			else if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP)
 				wlr_xdg_popup_destroy(view->xdg_surface);
 			break;
-	   }
+		}
 		case QUBES_XWAYLAND_MAGIC: {
 			struct qubes_xwayland_view *view = (struct qubes_xwayland_view *)output;
 			wlr_xwayland_surface_close(view->xwayland_surface);

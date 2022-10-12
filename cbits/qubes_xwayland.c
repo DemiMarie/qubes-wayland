@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include <wlr/util/log.h>
+#include <wlr/types/wlr_scene.h>
 
 #include "qubes_backend.h"
 #include "qubes_xwayland.h"
@@ -45,6 +46,7 @@ static void xwayland_surface_destroy(struct wl_listener *listener, void *data __
 	wl_list_remove(&view->set_parent.link);
 	wl_list_remove(&view->set_hints.link);
 	wl_list_remove(&view->set_override_redirect.link);
+	wl_list_remove(&view->commit.link);
 	qubes_output_deinit(&view->output);
 	memset(view, 0xFF, sizeof *view);
 	free(view);
@@ -68,6 +70,11 @@ static void xwayland_surface_map(struct wl_listener *listener, void *data) {
 		qubes_output_ensure_created(output, box);
 		output->flags |= QUBES_OUTPUT_MAPPED;
 	}
+
+	assert(surface->surface);
+	if (view->commit.link.next)
+		wl_list_remove(&view->commit.link);
+	wl_signal_add(&surface->surface->events.commit, &view->commit);
 
 	qubes_output_set_surface(output, surface->surface);
 	qubes_output_map(output, 0, surface->override_redirect);
@@ -188,6 +195,23 @@ static void xwayland_surface_set_override_redirect(struct wl_listener *listener,
 	        view->output.window_id);
 }
 
+static void qubes_xwayland_surface_commit(
+		struct wl_listener *listener, void *data __attribute__((unused)))
+{
+	/* QUBES HOOK: MSG_WINDOW_HINTS, plus do a bunch of actual rendering stuff :) */
+	struct qubes_xwayland_view *view = wl_container_of(listener, view, commit);
+	struct qubes_output *output = &view->output;
+	struct wlr_box box;
+
+	assert(QUBES_XWAYLAND_MAGIC == output->magic);
+	assert(output->scene_output);
+	assert(output->scene_output->output == &output->output);
+	if (!xwayland_get_box(view->xwayland_surface, &box))
+		return;
+	qubes_output_ensure_created(&view->output, box);
+	qubes_output_configure(output, box);
+}
+
 void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *data)
 {
 	struct tinywl_server *server = wl_container_of(listener, server, new_xwayland_surface);
@@ -237,6 +261,7 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 	wl_signal_add(&surface->events.set_hints, &view->set_hints);
 	view->set_override_redirect.notify = xwayland_surface_set_override_redirect;
 	wl_signal_add(&surface->events.set_override_redirect, &view->set_override_redirect);
+	view->commit.notify = qubes_xwayland_surface_commit;
 	wlr_log(WLR_ERROR, "created surface at %p", view);
 	return;
 
