@@ -80,12 +80,8 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box)
 	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, output->window_id);
 	for (int i = 0; i < n_rects; ++i) {
 		int32_t width, height;
-		// this is the correct approach ― the alternative leads to glitches
-		static const bool use_delta = false;
-		int32_t x1 = use_delta ? QUBES_MAX(rects[i].x1, box.x) : rects[i].x1;
-		int32_t y1 = use_delta ? QUBES_MAX(rects[i].y1, box.y) : rects[i].y1;
-		if (__builtin_sub_overflow(rects[i].x2, x1, &width) ||
-		    __builtin_sub_overflow(rects[i].y2, y1, &height)) {
+		if (__builtin_sub_overflow(rects[i].x2, rects[i].x1, &width) ||
+		    __builtin_sub_overflow(rects[i].y2, rects[i].y1, &height)) {
 			wlr_log(WLR_ERROR, "Overflow in damage calc");
 			return;
 		}
@@ -93,8 +89,7 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box)
 			wlr_log(WLR_ERROR, "Negative width or height - skipping");
 			continue;
 		}
-		int32_t const x = use_delta ? x1 - box.x : x1, y = use_delta ? y1 - box.y : y1;
-		wlr_log(WLR_DEBUG, "Submitting damage to GUI daemon: window %" PRIu32" x %" PRIi32 " y %" PRIi32 " width %" PRIu32 " height %" PRIu32, output->window_id, x, y, width, height);
+		wlr_log(WLR_DEBUG, "Submitting damage to GUI daemon: window %" PRIu32" x %" PRIi32 " y %" PRIi32 " width %" PRIu32 " height %" PRIu32, output->window_id, rects[i].x1, rects[i].y1, width, height);
 		struct {
 			struct msg_hdr header;
 			struct msg_shmimage shmimage;
@@ -104,7 +99,12 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box)
 				.window = output->window_id,
 				.untrusted_len = sizeof(struct msg_shmimage),
 			},
-			.shmimage = { .x = x1, .y = y1, .width = width, .height = height },
+			.shmimage = {
+				.x = rects[i].x1,
+				.y = rects[i].y1,
+				.width = width,
+				.height = height
+			},
 		};
 		QUBES_STATIC_ASSERT(sizeof new_msg == sizeof new_msg.header + sizeof new_msg.shmimage);
 		// Created above
