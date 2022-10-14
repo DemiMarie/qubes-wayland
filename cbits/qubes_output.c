@@ -369,6 +369,22 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t 
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
 }
 
+struct wlr_surface *qubes_output_surface(struct qubes_output *output) {
+	switch (output->magic) {
+	case QUBES_VIEW_MAGIC: {
+		struct tinywl_view *view = wl_container_of(output, view, output);
+		return view->xdg_surface->surface;
+	}
+	case QUBES_XWAYLAND_MAGIC: {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		return view->xwayland_surface->surface;
+	}
+	default:
+		assert(!"Bad magic in qubes_output_surface!");
+		abort();
+	}
+}
+
 void qubes_output_deinit(struct qubes_output *output) {
 	if (output->scene_subsurface_tree)
 		wlr_scene_node_destroy(output->scene_subsurface_tree);

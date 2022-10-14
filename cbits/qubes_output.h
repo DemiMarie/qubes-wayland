@@ -89,6 +89,7 @@ void qubes_output_unmap(struct qubes_output *output);
 void qubes_change_window_flags(struct qubes_output *output, uint32_t flags_set, uint32_t flags_unset);
 bool qubes_output_set_surface(struct qubes_output *const output, struct wlr_surface *const surface);
 void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window, bool override_redirect);
+struct wlr_surface *qubes_output_surface(struct qubes_output *output);
 
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_OUTPUT_H */
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:
