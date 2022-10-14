@@ -41,6 +41,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_server_decoration.h>
+#include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -974,6 +975,11 @@ int main(int argc, char *argv[]) {
 
 	if (!(server->data_device = wlr_data_device_manager_create(server->wl_display))) {
 		wlr_log(WLR_ERROR, "Cannot create data device");
+		return 1;
+	}
+
+	if (!wlr_viewporter_create(server->wl_display)) {
+		wlr_log(WLR_ERROR, "Cannot create viewporter");
 		return 1;
 	}
 
