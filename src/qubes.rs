@@ -63,7 +63,13 @@ impl QubesData {
     unsafe fn on_fd_ready(
         &mut self,
         is_readable: bool,
-        callback: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, qubes_gui::Header, *const u8),
+        callback: unsafe extern "C" fn(
+            *mut c_void,
+            *mut c_void,
+            u32,
+            qubes_gui::UntrustedHeader,
+            *const u8,
+        ),
         global_userdata: *mut c_void,
     ) {
         let Self {
@@ -73,7 +79,7 @@ impl QubesData {
         } = self;
         let mut protocol_error = |agent: &qubes_gui_client::Client| {
             *enabled = false;
-            let hdr = qubes_gui::Header {
+            let hdr = qubes_gui::UntrustedHeader {
                 ty: 0,
                 window: qubes_gui::WindowID { window: None },
                 untrusted_len: if agent.needs_reconnect() { 1 } else { 3 },
@@ -92,10 +98,10 @@ impl QubesData {
             match res {
                 Poll::Ready(Ok((hdr, body))) => {
                     assert!(body.len() < (1usize << 20));
-                    assert_eq!(body.len() as u32, hdr.untrusted_len);
+                    assert_eq!(body.len(), hdr.len());
                     let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
-                    if let Some(nz) = hdr.window.window {
-                        if hdr.ty == qubes_gui::MSG_DESTROY {
+                    if let Some(nz) = hdr.untrusted_window().window {
+                        if hdr.ty() == qubes_gui::MSG_DESTROY {
                             use std::collections::btree_map::Entry;
                             let p = self.map.entry(nz);
                             match p {
@@ -107,17 +113,29 @@ impl QubesData {
                             }
                         } else if let Some(&userdata) = self.map.get(&nz) {
                             if !userdata.is_null() {
-                                callback(global_userdata, userdata, delta, hdr, body.as_ptr())
+                                callback(
+                                    global_userdata,
+                                    userdata,
+                                    delta,
+                                    hdr.inner(),
+                                    body.as_ptr(),
+                                )
                             }
                         }
                     } else {
-                        callback(global_userdata, ptr::null_mut(), delta, hdr, body.as_ptr());
+                        callback(
+                            global_userdata,
+                            ptr::null_mut(),
+                            delta,
+                            hdr.inner(),
+                            body.as_ptr(),
+                        );
                     }
                 }
                 Poll::Pending => {
                     if agent.reconnected() {
                         *enabled = true;
-                        let hdr = qubes_gui::Header {
+                        let hdr = qubes_gui::UntrustedHeader {
                             ty: 0,
                             window: qubes_gui::WindowID { window: None },
                             untrusted_len: 2,
@@ -198,7 +216,13 @@ pub extern "C" fn qubes_rust_backend_create(domid: u16) -> *mut c_void {
 pub unsafe extern "C" fn qubes_rust_backend_on_fd_ready(
     backend: *mut c_void,
     is_readable: bool,
-    callback: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, qubes_gui::Header, *const u8),
+    callback: unsafe extern "C" fn(
+        *mut c_void,
+        *mut c_void,
+        u32,
+        qubes_gui::UntrustedHeader,
+        *const u8,
+    ),
     global_userdata: *mut c_void,
 ) -> bool {
     match std::panic::catch_unwind(|| {
@@ -217,12 +241,12 @@ pub unsafe extern "C" fn qubes_rust_backend_on_fd_ready(
 #[no_mangle]
 pub unsafe extern "C" fn qubes_rust_send_message(
     backend: &mut RustBackend,
-    header: &qubes_gui::Header,
+    header: &qubes_gui::UntrustedHeader,
 ) {
     // untrusted_len is actually trusted here
     let slice = core::slice::from_raw_parts(
         header as *const _ as *const u8,
-        header.untrusted_len as usize + core::mem::size_of::<qubes_gui::Header>(),
+        header.untrusted_len as usize + core::mem::size_of::<qubes_gui::UntrustedHeader>(),
     );
     if !backend.enabled {
         return;
