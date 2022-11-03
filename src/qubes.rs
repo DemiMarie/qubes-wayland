@@ -96,9 +96,9 @@ impl QubesData {
         loop {
             let res = agent.read_message();
             match res {
-                Poll::Ready(Ok((hdr, body))) => {
-                    assert!(body.len() < (1usize << 20));
-                    assert_eq!(body.len(), hdr.len());
+                Poll::Ready(Ok(buffer)) => {
+                    let (hdr, body) = (buffer.hdr(), buffer.body());
+                    assert_eq!(hdr.len(), body.len());
                     let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
                     if let Some(nz) = hdr.untrusted_window().window {
                         if hdr.ty() == qubes_gui::MSG_DESTROY {

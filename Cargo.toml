@@ -22,9 +22,6 @@ path = "gui-rust/qubes-gui"
 [dependencies.qubes-castable]
 path = "gui-rust/qubes-castable"
 
-[dependencies.qubes-gui-gntalloc]
-path = "gui-rust/qubes-gui-gntalloc"
-
 [features]
 default = []
 
