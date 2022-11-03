@@ -160,9 +160,8 @@ static const struct wlr_data_source_impl qubes_data_source_impl = {
 
 struct qubes_data_source *qubes_data_source_create(struct wl_display *display, uint32_t len, const uint8_t *ptr)
 {
-
-	struct qubes_data_source *source = NULL;
-	struct qubes_clipboard_data *data = NULL;
+	struct qubes_data_source *source;
+	struct qubes_clipboard_data *data;
 	char *mime_types[] = {
 		strdup("UTF8_STRING"),
 		strdup("COMPOUND_TEXT"),
@@ -171,18 +170,19 @@ struct qubes_data_source *qubes_data_source_create(struct wl_display *display, u
 		strdup("text/plain;charset=utf-8"),
 		strdup("text/plain"),
 	};
-	source = calloc(sizeof(*source), 1);
-	source->data = data = calloc(offsetof(__typeof__(*data), data) + len, 1);
-	if (!source || !data)
-		goto fail;
-	for (size_t i = 0; i < sizeof(mime_types)/sizeof(mime_types[0]); ++i) {
+	for (size_t i = 0; i < sizeof(mime_types)/sizeof(mime_types[0]); ++i)
 		if (!mime_types[i])
-			goto fail;
-	}
-	wlr_data_source_init(&source->inner, &qubes_data_source_impl);
-	memcpy(data->data, (char *)ptr, (size_t)len);
+			goto destroy_mime;
+	if (!(source = calloc(sizeof(*source), 1)))
+		goto destroy_mime;
+	if (!(data = malloc(offsetof(__typeof__(*data), data) + len)))
+		goto free_source;
 	data->refcount = 1;
 	data->size = len;
+	memcpy(data->data, (char *)ptr, (size_t)len);
+	source->data = data;
+
+	wlr_data_source_init(&source->inner, &qubes_data_source_impl);
 	source->display = display;
 	char **mime_ptr = wl_array_add(&source->inner.mime_types, sizeof(mime_types));
 	if (!mime_ptr) {
@@ -192,12 +192,10 @@ struct qubes_data_source *qubes_data_source_create(struct wl_display *display, u
 	memcpy(mime_ptr, mime_types, sizeof(mime_types));
 	wlr_log(WLR_DEBUG, "Creating data source for %" PRIu32 " bytes of data", len);
 	return source;
-fail:
+free_source:
 	free(source);
-	free(data);
 destroy_mime:
-	for (size_t i = 0; i < sizeof(mime_types)/sizeof(mime_types[0]); ++i) {
+	for (size_t i = 0; i < sizeof(mime_types)/sizeof(mime_types[0]); ++i)
 		free(mime_types[i]);
-	}
 	return NULL;
 }

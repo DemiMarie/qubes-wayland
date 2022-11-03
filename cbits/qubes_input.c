@@ -418,7 +418,8 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 	}
 }
 
-void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp, struct msg_hdr hdr, const uint8_t *ptr)
+void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
+                       struct msg_hdr hdr, const uint8_t *ptr)
 {
 	struct qubes_backend *backend = raw_backend;
 	QUBES_STATIC_ASSERT(offsetof(struct tinywl_view, output) == 0);
