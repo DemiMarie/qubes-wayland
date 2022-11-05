@@ -275,9 +275,8 @@ pub unsafe extern "C" fn qubes_rust_backend_free(backend: *mut c_void) {
 }
 
 fn setup_qubes_backend(domid: u16) -> RustBackend {
-    let (agent, conf) = qubes_gui_client::Client::agent(domid).unwrap();
+    let agent = qubes_gui_client::Client::agent(domid).unwrap();
     // we now have a agent 🙂
-    eprintln!("Configuration parameters: {:?}", conf);
     QubesData {
         agent,
         enabled: true,
