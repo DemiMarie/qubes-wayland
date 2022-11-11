@@ -47,12 +47,13 @@ struct tinywl_server {
 	struct wlr_server_decoration_manager *old_manager;
 	struct wlr_xdg_decoration_manager_v1 *new_manager;
 	struct wl_listener new_decoration;
-	struct wl_event_source *timer;
+	struct wl_event_source *timer, *listener;
 	struct wlr_compositor *compositor;
 	struct wlr_data_device_manager *data_device;
 	uint32_t magic;
 	uint16_t domid;
 	bool frame_pending, vchan_error;
+	int listening_socket;
 };
 
 bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box);
