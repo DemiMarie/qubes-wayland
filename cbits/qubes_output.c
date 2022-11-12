@@ -21,6 +21,7 @@
 #include "qubes_output.h"
 #include "qubes_allocator.h"
 #include "qubes_backend.h"
+#include "qubes_xwayland.h"
 #include "main.h"
 
 /* Qubes OS doesn’t support gamma LUTs */
@@ -66,10 +67,15 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box)
 	int n_rects = 0;
 	if (!(output->output.pending.committed & WLR_OUTPUT_STATE_DAMAGE))
 		return;
+	pixman_box32_t fake_rect = { .x1 = 0, .y1 = 0, .x2 = box.width, .y2 = box.height};
 	pixman_box32_t *rects = pixman_region32_rectangles(&output->output.pending.damage, &n_rects);
 	if (n_rects <= 0 || !rects) {
-		wlr_log(WLR_DEBUG, "No damage!");
-		return;
+		if (output->magic != QUBES_XWAYLAND_MAGIC) {
+			wlr_log(WLR_DEBUG, "No damage!");
+			return;
+		}
+		n_rects = 1;
+		rects = &fake_rect;
 	}
 	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, output->window_id);
 	for (int i = 0; i < n_rects; ++i) {
@@ -171,6 +177,14 @@ static bool qubes_output_commit(struct wlr_output *raw_output) {
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		struct wlr_xwayland_surface *surface = view->xwayland_surface;
+		assert(surface);
+		box.x = surface->x;
+		box.y = surface->y;
+		box.width = surface->width;
+		box.height = surface->height;
 	} else {
 		assert(!"Bad magic in qubes_output_commit");
 		abort();
@@ -246,14 +260,16 @@ static const struct wlr_output_impl qubes_wlr_output_impl = {
 
 static void qubes_output_frame(struct wl_listener *listener, void *data __attribute__((unused))) {
 	struct qubes_output *output = wl_container_of(listener, output, frame);
-	assert(QUBES_VIEW_MAGIC == output->magic);
 	// HACK HACK
 	//
 	// This fixes a *nasty* bug: without it, really fast resizes can cause the
 	// wlr_output to lose sync with the qubes_output, causing parts of the
 	// window to *never* be displayed until the next window resize.  This bug
 	// took more than three days to fix.
-	wlr_output_update_custom_mode(&output->output, output->last_width, output->last_height, 60000);
+	if (output->last_width && output->last_height)
+		wlr_output_update_custom_mode(&output->output, output->last_width, output->last_height, 60000);
+	assert(QUBES_VIEW_MAGIC == output->magic ||
+	       QUBES_XWAYLAND_MAGIC == output->magic);
 	if (wlr_scene_output_commit(output->scene_output)) {
 		output->output.frame_pending = true;
 		if (!output->server->frame_pending) {
@@ -279,8 +295,10 @@ bool qubes_output_set_surface(struct qubes_output *const output, struct wlr_surf
 		return true; /* nothing to do */
 
 	qubes_output_clear_surface(output);
+	if (!surface)
+		return true;
 
-	if (surface && !(output->scene_subsurface_tree =
+	if (!(output->scene_subsurface_tree =
 	      wlr_scene_subsurface_tree_create(&output->scene_output->scene->node, surface)))
 		return false;
 	output->surface = surface;
@@ -295,8 +313,8 @@ bool qubes_output_init(struct qubes_output *const output, struct tinywl_server *
 	memset(output, 0, sizeof *output);
 
 	assert(server);
-	assert(magic == QUBES_VIEW_MAGIC);
 	struct wlr_backend *const backend = &server->backend->backend;
+	assert(magic == QUBES_VIEW_MAGIC || magic == QUBES_XWAYLAND_MAGIC);
 
 	wlr_output_init(&output->output, backend, &qubes_wlr_output_impl, server->wl_display);
 	wlr_output_update_custom_mode(&output->output, 1280, 720, 0);
@@ -360,6 +378,10 @@ struct wlr_surface *qubes_output_surface(struct qubes_output *output) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		return view->xdg_surface->surface;
 	}
+	case QUBES_XWAYLAND_MAGIC: {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		return view->xwayland_surface->surface;
+	}
 	default:
 		assert(!"Bad magic in qubes_output_surface!");
 		abort();
@@ -374,7 +396,7 @@ void qubes_output_deinit(struct qubes_output *output) {
 	if (output->scene)
 		wlr_scene_node_destroy(&output->scene->node);
 	wl_list_remove(&output->link);
-	assert(output->magic == QUBES_VIEW_MAGIC);
+	assert(output->magic == QUBES_VIEW_MAGIC || output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
 		.type = MSG_DESTROY,
 		.window = output->window_id,
@@ -455,6 +477,8 @@ void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window
 }
 
 void qubes_output_configure(struct qubes_output *output, struct wlr_box box) {
+	if (!box.width || !box.height)
+		return;
 	qubes_output_ensure_created(output, box);
 	if ((output->last_width != box.width || output->last_height != box.height) &&
 	    !(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {

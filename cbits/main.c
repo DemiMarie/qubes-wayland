@@ -49,6 +49,7 @@
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
+#include <wlr/xwayland.h>
 
 #include <xkbcommon/xkbcommon.h>
 
@@ -56,6 +57,7 @@
 #include "qubes_output.h"
 #include "qubes_backend.h"
 #include "qubes_allocator.h"
+#include "qubes_xwayland.h"
 #include "main.h"
 
 /* NOT IMPLEMENTABLE:
@@ -1084,6 +1086,19 @@ int main(int argc, char *argv[]) {
 	}
 
 	wlr_log(WLR_ERROR, "Socket path: %s", socket_path);
+	sd_notify(0, "STATUS=About to start XWayland");
+	/* Create XWayland */
+	if (!(server->xwayland = wlr_xwayland_create(server->wl_display, server->compositor, true))) {
+		wlr_log(WLR_ERROR, "Cannot create XWayland device");
+		wlr_backend_destroy(&server->backend->backend);
+		return 1;
+	}
+
+	wlr_xwayland_set_seat(server->xwayland, server->seat);
+
+	server->new_xwayland_surface.notify = qubes_xwayland_new_xwayland_surface;
+	wl_signal_add(&server->xwayland->events.new_surface,
+	              &server->new_xwayland_surface);
 
 	struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
 	assert(loop);
@@ -1197,6 +1212,7 @@ int main(int argc, char *argv[]) {
 		// wlr_input_device_destroy(keyboard_to_free->input_device);
 		free(keyboard_to_free);
 	}
+	wlr_xwayland_destroy(server->xwayland);
 	wlr_renderer_destroy(server->renderer);
 	wlr_allocator_destroy(server->allocator);
 	wlr_output_layout_destroy(server->output_layout);
