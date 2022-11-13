@@ -138,6 +138,8 @@ handle_pointer_movement(struct qubes_output *output, int32_t x, int32_t y,
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		surface = view->xwayland_surface->surface;
+		sx = x;
+		sy = y;
 	}
 	if (surface) {
 		wlr_seat_pointer_notify_enter(seat, surface, sx, sy);
