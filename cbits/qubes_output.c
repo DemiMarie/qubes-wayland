@@ -331,6 +331,12 @@ bool qubes_output_init(struct qubes_output *const output, struct tinywl_server *
 	wlr_output_init(&output->output, backend, &qubes_wlr_output_impl, server->wl_display);
 	wlr_output_update_custom_mode(&output->output, 1280, 720, 0);
 	wlr_output_update_enabled(&output->output, true);
+
+	if (asprintf(&output->name, "Virtual Output %" PRIu64, server->output_counter++) < 0) {
+		output->name = NULL;
+		return false;
+	}
+	wlr_output_set_name(&output->output, output->name);
 	wlr_output_set_description(&output->output, "Qubes OS virtual output");
 
 	output->buffer = NULL;
@@ -419,6 +425,7 @@ void qubes_output_deinit(struct qubes_output *output) {
 		qubes_rust_send_message(output->server->backend->rust_backend, &header);
 	}
 	wlr_output_destroy(&output->output);
+	free(output->name);
 }
 
 void qubes_change_window_flags(struct qubes_output *output, uint32_t flags_set, uint32_t flags_unset)

@@ -160,6 +160,7 @@ qubes_backend_create(struct wl_display *display, uint16_t domid, struct wl_list 
 	output->phys_width = 344, output->phys_height = 194;
 	wlr_output_init(output, &backend->backend, &qubes_backend_output_impl, display);
 	wlr_output_set_description(output, "Qubes OS Virtual Output Device");
+	wlr_output_set_name(output, "Qubes OS Virtual Output Device");
 	assert(wl_list_empty(&output->modes));
 	wlr_output_set_mode(output, &backend->mode);
 	wlr_output_enable(output, true);

@@ -54,6 +54,7 @@ struct tinywl_server {
 	uint16_t domid;
 	bool frame_pending, vchan_error;
 	int listening_socket;
+	uint64_t output_counter;
 };
 
 bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box);

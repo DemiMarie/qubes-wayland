@@ -20,6 +20,7 @@ struct qubes_output {
 	struct wlr_scene *scene;
 	struct wlr_scene_output *scene_output;
 	struct wlr_scene_node *scene_subsurface_tree;
+	char *name;
 
 	int x, y, left, top;
 	int last_width, last_height;
