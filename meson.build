@@ -30,6 +30,7 @@ qubes_files = [
   'cbits/qubes_clipboard.c',
   'cbits/qubes_xwayland.c',
   'cbits/qubes_data_source.c',
+  'cbits/xdg_view.c',
   'cbits/main.c',
 ]
 

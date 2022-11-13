@@ -9,7 +9,6 @@ void qubes_rust_delete_id(void *backend, uint32_t id);
 
 struct wlr_surface;
 struct tinywl_view;
-void qubes_give_view_keyboard_focus(struct tinywl_view *view, struct wlr_surface *surface);
 
 /* For brevity's sake, struct members are annotated where they are used. */
 enum tinywl_cursor_mode {

@@ -104,12 +104,22 @@ static void xwayland_surface_request_configure(struct wl_listener *listener, voi
 		wlr_log(WLR_ERROR, "Bad message from client: width %" PRIu16 " height %" PRIu16, event->width, event->height);
 		return; /* cannot handle this */
 	}
-	qubes_output_configure(output, (struct wlr_box) {
-		.x = event->x,
-		.y = event->y,
-		.width = event->width,
-		.height = event->height,
-	});
+	if (output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE) {
+		if (output->left != event->x ||
+			 output->top != event->y ||
+			 output->last_width != event->width ||
+			 output->last_height != event->height)
+			return;
+		output->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
+		qubes_send_configure(output, output->last_width, output->last_height);
+	} else {
+		qubes_output_configure(output, (struct wlr_box) {
+			.x = event->x,
+			.y = event->y,
+			.width = event->width,
+			.height = event->height,
+		});
+	}
 }
 
 static void xwayland_surface_request_move(struct wl_listener *listener, void *data) {

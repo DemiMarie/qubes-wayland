@@ -177,24 +177,86 @@ static void handle_crossing(struct qubes_output *output, uint32_t timestamp, con
 	}
 }
 
+static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct wlr_surface *surface)
+{
+	/* Note: this function only deals with keyboard focus. */
+	struct tinywl_server *server = output->server;
+	struct wlr_seat *seat = server->seat;
+	struct wlr_surface *prev_surface = seat->keyboard_state.focused_surface;
+
+	if (prev_surface == surface) {
+		/* Don't re-focus an already focused surface. */
+		if (output->magic == QUBES_VIEW_MAGIC) {
+			struct tinywl_view *view = wl_container_of(output, view, output);
+			if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL &&
+			    !view->xdg_surface->toplevel->pending.activated)
+				wlr_xdg_toplevel_set_activated(view->xdg_surface, true);
+		} else if (output->magic == QUBES_XWAYLAND_MAGIC) {
+			struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+			wlr_xwayland_surface_activate(view->xwayland_surface, true);
+		} else {
+			abort();
+		}
+		return;
+	}
+	wlr_log(WLR_INFO, "Giving keyboard focus to window %u", output->window_id);
+	if (prev_surface) {
+		/*
+		 * Deactivate the previously focused surface. This lets the client know
+		 * it no longer has focus and the client will repaint accordingly, e.g.
+		 * stop displaying a caret.
+		*/
+		if (wlr_surface_is_xdg_surface(prev_surface)) {
+			struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(prev_surface);
+			if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+				wlr_xdg_toplevel_set_activated(previous, false);
+			}
+		} else {
+			struct wlr_xwayland_surface *previous = wlr_xwayland_surface_from_wlr_surface(prev_surface);
+			wlr_xwayland_surface_activate(previous, false);
+		}
+	}
+	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
+	assert(keyboard);
+	/* Move the view to the front */
+	wl_list_remove(&output->link);
+	wl_list_insert(&server->views, &output->link);
+	/* Activate the new surface */
+	if (output->magic == QUBES_VIEW_MAGIC) {
+		struct tinywl_view *view = wl_container_of(output, view, output);
+		struct wlr_xdg_surface *view_surface = view->xdg_surface;
+		while (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
+			view_surface = wlr_xdg_surface_from_wlr_surface(view_surface->popup->parent);
+		}
+		if (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+			wlr_xdg_toplevel_set_activated(view_surface, true);
+		}
+	} else if (output->magic == QUBES_XWAYLAND_MAGIC) {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		wlr_xwayland_surface_activate(view->xwayland_surface, true);
+	}
+	/*
+	 * Tell the seat to have the keyboard enter this surface. wlroots will keep
+	 * track of this and automatically send key events to the appropriate
+	 * clients without additional work on your part.
+	 */
+	if (surface)
+		wlr_seat_keyboard_notify_enter(seat, surface,
+			keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+}
+
+
 static void handle_focus(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
 {
 	/* This is specifically *keyboard* focus */
 	struct msg_focus focus;
 	struct wlr_seat *seat = output->server->seat;
 
-	if (output->magic != QUBES_VIEW_MAGIC) {
-		assert(QUBES_XWAYLAND_MAGIC == output->magic);
-		wlr_log(WLR_ERROR, "NYI: giving focus to an XWayland surface");
-		return;
-	}
-	struct tinywl_view *view = wl_container_of(output, view, output);
-
 	memcpy(&focus, ptr, sizeof focus);
 	switch (focus.type) {
 	case 9: // FocusIn
 		wlr_log(WLR_INFO, "Window %" PRIu32 " has gained keyboard focus", output->window_id);
-		qubes_give_view_keyboard_focus(view, view->xdg_surface->surface);
+		qubes_give_view_keyboard_focus(output, qubes_output_surface(output));
 		break;
 	case 10: // FocusOut
 		wlr_log(WLR_INFO, "Window %" PRIu32 " has lost keyboard focus", output->window_id);
@@ -204,13 +266,19 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp, const 
 			 * it no longer has focus and the client will repaint accordingly, e.g.
 			 * stop displaying a caret.
 			 */
-			struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(
+			if (wlr_surface_is_xdg_surface(seat->keyboard_state.focused_surface)) {
+				struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(
+							seat->keyboard_state.focused_surface);
+				if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+					wlr_xdg_toplevel_set_activated(previous, false);
+				} else if (previous->role == WLR_XDG_SURFACE_ROLE_POPUP) {
+					wlr_xdg_popup_destroy(previous);
+					assert(seat->keyboard_state.focused_surface == NULL);
+				}
+			} else {
+				struct wlr_xwayland_surface *previous = wlr_xwayland_surface_from_wlr_surface(
 						seat->keyboard_state.focused_surface);
-			if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-				wlr_xdg_toplevel_set_activated(previous, false);
-			} else if (previous->role == WLR_XDG_SURFACE_ROLE_POPUP) {
-				wlr_xdg_popup_destroy(previous);
-				assert(seat->keyboard_state.focused_surface == NULL);
+				wlr_xwayland_surface_activate(previous, false);
 			}
 		}
 		wlr_seat_keyboard_notify_clear_focus(seat);
@@ -296,12 +364,12 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 
 	output->last_width = configure.width, output->last_height = configure.height;
 	wlr_output_set_custom_mode(&output->output, configure.width, configure.height, 60000);
+	output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		/* Ignore client-submitted resizes until this configure is acked, to avoid races */
 		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-			output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 			view->configure_serial =
 				wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
 			wlr_log(WLR_DEBUG,
@@ -318,7 +386,9 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 		}
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
-		wlr_xwayland_surface_configure(view->xwayland_surface, configure.x, configure.y, configure.width, configure.height);
+		wlr_xwayland_surface_configure(view->xwayland_surface,
+				configure.x, configure.y, configure.width, configure.height);
+		qubes_send_configure(output, configure.width, configure.height);
 	} else {
 		abort();
 	}
