@@ -138,7 +138,19 @@ bool qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 	if (output->x != box.x || output->y != box.y) {
 		output->x = box.x;
 		output->y = box.y;
-		wlr_scene_output_set_position(output->scene_output, output->x, output->y);
+		/*
+		 * The Qubes GUI protocol uses coordinates relative to the top left of the
+		 * screen, since those are the coordinates X11 uses.  Native Wayland
+		 * windows, however, use output-relative coordinates.  Therefore, wlr_scene
+		 * needs to be told of its position so that it can translate coordinates
+		 * appropriately.  XWayland windows, however, are already in the
+		 * coordinates used by the Qubes GUI protocol, so they must not be
+		 * translated.  The symptom of getting this wrong is black bars near the
+		 * edge of a maximized window, or non-maximized windows not displaying
+		 * anything if its position on screen is wrong.
+		 */
+		if (output->magic == QUBES_VIEW_MAGIC)
+			wlr_scene_output_set_position(output->scene_output, output->x, output->y);
 	}
 	if (qubes_output_created(output))
 		return true;
