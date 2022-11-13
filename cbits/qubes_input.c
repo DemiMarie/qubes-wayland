@@ -365,24 +365,25 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 
 	output->last_width = configure.width, output->last_height = configure.height;
 	wlr_output_set_custom_mode(&output->output, configure.width, configure.height, 60000);
+	/* Ignore client-submitted resizes until this configure is acked, to avoid races.
+	 * Neglecting this for XWayland cost two weeks of debugging. */
 	output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
-		/* Ignore client-submitted resizes until this configure is acked, to avoid races */
 		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 			view->configure_serial =
 				wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
 			wlr_log(WLR_DEBUG,
-					  "Will ACK configure from GUI daemon (width %u, height %u)"
-					  " when client ACKS configure with serial %u",
-					  configure.width, configure.height, view->configure_serial);
+			        "Will ACK configure from GUI daemon (width %u, height %u)"
+			        " when client ACKS configure with serial %u",
+			        configure.width, configure.height, view->configure_serial);
 		} else {
 			// There won’t be a configure event ACKd by the client, so
 			// ACK early
 			wlr_log(WLR_DEBUG,
-					  "Got a configure event for non-toplevel window %" PRIu32 "; returning early",
-					  output->window_id);
+			        "Got a configure event for non-toplevel window %" PRIu32 "; returning early",
+			        output->window_id);
 			qubes_send_configure(output, configure.width, configure.height);
 		}
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
