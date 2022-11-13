@@ -127,7 +127,7 @@ endif
 rust_parts = custom_target(
   'Build Rust code',
   depfile: 'libqubes_gui_rust.d',
-  command: ['./build_rust.sh', '@DEPFILE@', '@OUTDIR@', '@PRIVATE_DIR@', 'release'],
+  command: ['./build_rust.sh', '@DEPFILE@', '@OUTDIR@', '@PRIVATE_DIR@', '@SOURCE_ROOT@', 'release'],
   output: ['libqubes_gui_rust.a'],
   build_by_default: true,
 )
