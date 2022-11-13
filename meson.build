@@ -102,11 +102,9 @@ endforeach
 
 wlroots_options = [
   'examples=false',
-  'no-gpu=true',
-  'session=disabled',
-  'xwayland=disabled',
+  'xwayland=enabled',
   'xcb-errors=disabled',
-  'renderers=["auto"]',
+  'renderers=[]',
   'backends=[]',
   'allocators=[]',
   'auto_features=disabled',
