@@ -148,7 +148,7 @@ bin_compositor = executable(
   meson.project_name(),
   qubes_files,
   dependencies: [wlroots, threads, vchan_xen, dl, systemd, qubesdb, drm, wayland_server, xkbcommon, pixman],
-  include_directories: ['cbits', include_directories('.')],
+  include_directories: ['cbits'],
   link_with: [rust_parts[0]],
   install: true,
   gnu_symbol_visibility: 'hidden',
