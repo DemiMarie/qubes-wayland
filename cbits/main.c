@@ -793,7 +793,7 @@ int main(int argc, char *argv[]) {
 	 * loop configuration to listen to libinput events, DRM events, generate
 	 * frame events at the refresh rate, and so on. */
 	wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s",
-			socket);
+			socket_path);
 #ifdef QUBES_HAS_SYSTEMD
 	if (sd_notify(0, "READY=1") < 0)
 		return 1;
