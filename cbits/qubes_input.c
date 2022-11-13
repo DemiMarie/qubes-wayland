@@ -281,7 +281,8 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp, const 
 			} else {
 				struct wlr_xwayland_surface *previous = wlr_xwayland_surface_from_wlr_surface(
 						seat->keyboard_state.focused_surface);
-				wlr_xwayland_surface_activate(previous, false);
+				if (previous)
+					wlr_xwayland_surface_activate(previous, false);
 			}
 		}
 		wlr_seat_keyboard_notify_clear_focus(seat);
