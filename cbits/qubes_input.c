@@ -213,7 +213,8 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct w
 			}
 		} else {
 			struct wlr_xwayland_surface *previous = wlr_xwayland_surface_from_wlr_surface(prev_surface);
-			wlr_xwayland_surface_activate(previous, false);
+			if (previous)
+				wlr_xwayland_surface_activate(previous, false);
 		}
 	}
 	struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
