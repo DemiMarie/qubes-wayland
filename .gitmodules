@@ -4,7 +4,6 @@
 [submodule "smithay"]
 	path = smithay
 	url = https://github.com/Smithay/smithay.git
-[submodule "wlroots"]
-	path = subprojects/wlroots
-	url = https://gitlab.freedesktop.org/wlroots/wlroots.git
-	branch = qubes
+[submodule "subprojects/wlroots"]
+	url = git+ssh://git@gitlab.freedesktop.org/DemiMarie/wlroots.git
+	branch = fix-assert
