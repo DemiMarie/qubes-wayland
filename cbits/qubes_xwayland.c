@@ -247,6 +247,11 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 	                       QUBES_XWAYLAND_MAGIC))
 		goto cleanup;
 
+	output->left = surface->x;
+	output->top = surface->y;
+	output->last_width = surface->width;
+	output->last_height = surface->height;
+
 	view->xwayland_surface = surface;
 
 	view->destroy.notify = xwayland_surface_destroy;
