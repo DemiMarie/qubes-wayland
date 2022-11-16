@@ -381,8 +381,7 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t 
 			.y = output->top,
 			.width = width,
 			.height = height,
-			/* override_redirect is (thankfully) ignored in MSG_CONFIGURE */
-			.override_redirect = false,
+			.override_redirect = output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT ? 1 : 0,
 		},
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.configure);
