@@ -28,7 +28,7 @@ static void xwayland_surface_destroy(struct wl_listener *listener, void *data __
 {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, destroy);
 
-	wlr_log(WLR_ERROR, "freeing view at %p", view);
+	wlr_log(WLR_DEBUG, "freeing view at %p", view);
 
 	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 
@@ -56,7 +56,7 @@ static void xwayland_surface_map(struct wl_listener *listener, void *data) {
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, map);
-	wlr_log(WLR_ERROR, "mapping surface at %p", view);
+	wlr_log(WLR_DEBUG, "mapping surface at %p", view);
 	struct wlr_xwayland_surface *surface = view->xwayland_surface;
 	assert(surface == data);
 	assert(surface);
@@ -82,7 +82,7 @@ static void xwayland_surface_unmap(struct wl_listener *listener, void *data)
 {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, unmap);
 
-	wlr_log(WLR_ERROR, "unmapping surface at %p", view);
+	wlr_log(WLR_DEBUG, "unmapping surface at %p", view);
 	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 	qubes_output_set_surface(&view->output, NULL);
 	qubes_output_unmap(&view->output);
@@ -109,7 +109,7 @@ static void xwayland_surface_set_size(struct qubes_xwayland_view *view,
 	                                   uint32_t width,
 	                                   uint32_t height) {
 	struct qubes_output *output = &view->output;
-	wlr_log(WLR_ERROR, "configuring surface at %p", view);
+	wlr_log(WLR_DEBUG, "configuring surface at %p", view);
 	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 	if (width <= 0 || height <= 0 ||
 	    width > MAX_WINDOW_WIDTH || height > MAX_WINDOW_HEIGHT ||
@@ -299,7 +299,7 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 	view->commit.notify = qubes_xwayland_surface_commit;
 	if (surface->surface)
 		wl_signal_add(&surface->surface->events.commit, &view->commit);
-	wlr_log(WLR_ERROR, "created surface at %p", view);
+	wlr_log(WLR_DEBUG, "created surface at %p", view);
 	return;
 
 cleanup:
