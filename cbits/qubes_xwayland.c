@@ -89,37 +89,47 @@ static void xwayland_surface_unmap(struct wl_listener *listener, void *data)
 	wl_list_remove(&view->commit.link);
 }
 
+static void xwayland_surface_set_size(struct qubes_xwayland_view *view,
+	                                   int32_t x,
+	                                   int32_t y,
+	                                   uint32_t width,
+	                                   uint32_t height);
+
 static void xwayland_surface_request_configure(struct wl_listener *listener, void *data)
 {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_configure);
-	struct qubes_output *output = &view->output;
 	struct wlr_xwayland_surface_configure_event *event = data;
 
+	wlr_xwayland_surface_configure(view->xwayland_surface, event->x, event->y, event->width, event->height);
+}
+
+static void xwayland_surface_set_size(struct qubes_xwayland_view *view,
+	                                   int32_t x,
+	                                   int32_t y,
+	                                   uint32_t width,
+	                                   uint32_t height) {
+	struct qubes_output *output = &view->output;
 	wlr_log(WLR_ERROR, "configuring surface at %p", view);
 	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
-	if (event->width <= 0 ||
-		 event->height <= 0 ||
-		 event->width > MAX_WINDOW_WIDTH ||
-		 event->height > MAX_WINDOW_HEIGHT) {
-		wlr_log(WLR_ERROR, "Bad message from client: width %" PRIu16 " height %" PRIu16, event->width, event->height);
+	if (width <= 0 || height <= 0 ||
+	    width > MAX_WINDOW_WIDTH || height > MAX_WINDOW_HEIGHT ||
+		 x < -MAX_WINDOW_WIDTH || x > 2 * MAX_WINDOW_WIDTH ||
+		 y < -MAX_WINDOW_HEIGHT || y > 2 * MAX_WINDOW_HEIGHT) {
+		wlr_log(WLR_ERROR, "Bad message from client: width %" PRIu16 " height %" PRIu16, width, height);
 		return; /* cannot handle this */
 	}
 	if (output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE) {
-		if (output->left != event->x ||
-			 output->top != event->y ||
-			 output->last_width != event->width ||
-			 output->last_height != event->height)
+		if (output->left != x ||
+		    output->top != y ||
+		    output->last_width != (int32_t)width ||
+		    output->last_height != (int32_t)height) {
+			wlr_xwayland_surface_configure(view->xwayland_surface,
+					output->left, output->top, output->last_width, output->last_height);
 			return;
+		}
 		output->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-		qubes_send_configure(output, output->last_width, output->last_height);
-	} else {
-		qubes_output_configure(output, (struct wlr_box) {
-			.x = event->x,
-			.y = event->y,
-			.width = event->width,
-			.height = event->height,
-		});
 	}
+	qubes_send_configure(output, width, height);
 }
 
 static void xwayland_surface_request_move(struct wl_listener *listener, void *data) {
@@ -172,6 +182,18 @@ static void xwayland_surface_set_title(struct wl_listener *listener, void *data)
 	wlr_log(WLR_ERROR, "Set-title request for XWayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
+
+static void xwayland_surface_set_geometry(struct wl_listener *listener, void *data) {
+	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_geometry);
+	(void)data; /* always NULL */
+
+	xwayland_surface_set_size(view,
+	                          view->xwayland_surface->x,
+	                          view->xwayland_surface->y,
+	                          view->xwayland_surface->width,
+	                          view->xwayland_surface->height);
+}
+
 static void xwayland_surface_set_class(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_class);
 	struct wlr_xwayland_surface *surface = data;
@@ -272,6 +294,8 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 	wl_signal_add(&surface->events.set_hints, &view->set_hints);
 	view->set_override_redirect.notify = xwayland_surface_set_override_redirect;
 	wl_signal_add(&surface->events.set_override_redirect, &view->set_override_redirect);
+	view->set_geometry.notify = xwayland_surface_set_geometry;
+	wl_signal_add(&surface->events.set_geometry, &view->set_geometry);
 	view->commit.notify = qubes_xwayland_surface_commit;
 	if (surface->surface)
 		wl_signal_add(&surface->surface->events.commit, &view->commit);

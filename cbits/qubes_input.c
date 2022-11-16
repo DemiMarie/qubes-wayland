@@ -368,10 +368,10 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 
 	output->last_width = configure.width, output->last_height = configure.height;
 	wlr_output_set_custom_mode(&output->output, configure.width, configure.height, 60000);
+
 	/* Ignore client-submitted resizes until this configure is acked, to avoid races.
 	 * Neglecting this for XWayland cost two weeks of debugging. */
 	output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {

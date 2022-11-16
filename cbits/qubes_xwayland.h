@@ -18,6 +18,7 @@ struct qubes_xwayland_view {
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
 	struct wl_listener request_activate;
+	struct wl_listener set_geometry;
 
 	struct wl_listener map;
 	struct wl_listener unmap;
