@@ -113,21 +113,10 @@ static void xwayland_surface_set_size(struct qubes_xwayland_view *view,
 	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 	if (width <= 0 || height <= 0 ||
 	    width > MAX_WINDOW_WIDTH || height > MAX_WINDOW_HEIGHT ||
-		 x < -MAX_WINDOW_WIDTH || x > 2 * MAX_WINDOW_WIDTH ||
-		 y < -MAX_WINDOW_HEIGHT || y > 2 * MAX_WINDOW_HEIGHT) {
-		wlr_log(WLR_ERROR, "Bad message from client: width %" PRIu16 " height %" PRIu16, width, height);
+	    x < -MAX_WINDOW_WIDTH || x > 2 * MAX_WINDOW_WIDTH ||
+	    y < -MAX_WINDOW_HEIGHT || y > 2 * MAX_WINDOW_HEIGHT) {
+	    wlr_log(WLR_ERROR, "Bad message from client: width %" PRIu16 " height %" PRIu16, width, height);
 		return; /* cannot handle this */
-	}
-	if (output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE) {
-		if (output->left != x ||
-		    output->top != y ||
-		    output->last_width != (int32_t)width ||
-		    output->last_height != (int32_t)height) {
-			wlr_xwayland_surface_configure(view->xwayland_surface,
-					output->left, output->top, output->last_width, output->last_height);
-			return;
-		}
-		output->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 	}
 	qubes_send_configure(output, width, height);
 }
