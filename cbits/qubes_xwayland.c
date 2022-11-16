@@ -202,10 +202,12 @@ static void xwayland_surface_set_hints(struct wl_listener *listener, void *data)
 static void xwayland_surface_set_override_redirect(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_override_redirect);
 	struct wlr_xwayland_surface *surface = data;
-	(void)view, (void)surface;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Set-override-redirect request for XWayland window %" PRIu32 " not yet implemented",
-	        view->output.window_id);
+	assert(view->output.magic == QUBES_XWAYLAND_MAGIC);
+	if (surface->override_redirect)
+		view->output.flags |= QUBES_OUTPUT_OVERRIDE_REDIRECT;
+	else
+		view->output.flags &= ~QUBES_OUTPUT_OVERRIDE_REDIRECT;
 }
 
 static void qubes_xwayland_surface_commit(
