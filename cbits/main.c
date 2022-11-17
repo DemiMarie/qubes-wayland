@@ -687,11 +687,11 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
-	wlr_log(WLR_ERROR, "Socket path: %s", socket_path);
-	sd_notify(0, "STATUS=About to start XWayland");
+	wlr_log(WLR_INFO, "Socket path: %s", socket_path);
+	sd_notify(0, "STATUS=About to start Xwayland");
 	/* Create XWayland */
 	if (!(server->xwayland = wlr_xwayland_create(server->wl_display, server->compositor, true))) {
-		wlr_log(WLR_ERROR, "Cannot create XWayland device");
+		wlr_log(WLR_ERROR, "Cannot create Xwayland device");
 		wlr_backend_destroy(&server->backend->backend);
 		return 1;
 	}
@@ -792,8 +792,9 @@ int main(int argc, char *argv[]) {
 	 * compositor. Starting the backend rigged up all of the necessary event
 	 * loop configuration to listen to libinput events, DRM events, generate
 	 * frame events at the refresh rate, and so on. */
-	wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s",
-			socket_path);
+	wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket_path);
+	sd_notifyf(0, "Running Wayland compositor on WAYLAND_DISPLAY=%s", socket_path);
+	/* Create XWayland */
 #ifdef QUBES_HAS_SYSTEMD
 	if (sd_notify(0, "READY=1") < 0)
 		return 1;

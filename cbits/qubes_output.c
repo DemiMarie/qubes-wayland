@@ -63,7 +63,8 @@ static bool qubes_output_test(struct wlr_output *raw_output) {
 }
 
 static void qubes_output_damage(struct qubes_output *output, struct wlr_box box) {
-	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32, (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
+	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32,
+	        (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
 	int n_rects = 0;
 	if (!(output->output.pending.committed & WLR_OUTPUT_STATE_DAMAGE))
 		return;
@@ -394,7 +395,7 @@ void qubes_set_view_title(struct qubes_output *output,
 {
 	assert(qubes_output_created(output));
 	assert(output->window_id);
-	wlr_log(WLR_ERROR, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, output->window_id);
+	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, output->window_id);
 	struct {
 		struct msg_hdr header;
 		struct msg_wmname title;
@@ -510,7 +511,7 @@ void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.info);
 	// Surface created above
-	wlr_log(WLR_INFO,
+	wlr_log(WLR_DEBUG,
 	        "Sending MSG_MAP (0x%x) to window %u (transient_for = %u)",
 	        MSG_MAP, output->window_id, transient_for_window);
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);

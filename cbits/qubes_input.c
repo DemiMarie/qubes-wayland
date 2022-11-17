@@ -309,7 +309,7 @@ static void handle_window_flags(struct qubes_output *output, const uint8_t *ptr)
 
 	if (QUBES_VIEW_MAGIC != output->magic) {
 		assert(QUBES_XWAYLAND_MAGIC == output->magic);
-		wlr_log(WLR_ERROR, "not yet implemented: setting flags for XWayland surfaces");
+		wlr_log(WLR_ERROR, "not yet implemented: setting flags for Xwayland surfaces");
 		return;
 	}
 
@@ -468,7 +468,7 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 	extern bool qubes_rust_reconnect(struct qubes_rust_backend *backend);
 	switch (msg_type)  {
 	case 2:
-		wlr_log(WLR_DEBUG, "Reconnecting to GUI daemon");
+		wlr_log(WLR_INFO, "Reconnecting to GUI daemon");
 		struct tinywl_view *view;
 		struct qubes_output *output;
 		wl_list_for_each(output, backend->views, link) {
@@ -476,7 +476,7 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 		}
 		wl_list_for_each(output, backend->views, link) {
 			if (QUBES_VIEW_MAGIC != output->magic) {
-				wlr_log(WLR_ERROR, "NYI: recreating an XWayland surface");
+				wlr_log(WLR_ERROR, "NYI: recreating an Xwayland surface");
 				continue;
 			}
 			view = wl_container_of(output, view, output);
@@ -485,7 +485,7 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 		}
 		return;
 	case 1:
-		wlr_log(WLR_DEBUG, "Must reconnect to GUI daemon");
+		wlr_log(WLR_INFO, "Must reconnect to GUI daemon");
 		// GUI agent needs reconnection
 		wl_event_source_remove(backend->source);
 		backend->source = NULL;

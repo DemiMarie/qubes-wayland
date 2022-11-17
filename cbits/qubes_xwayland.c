@@ -118,7 +118,7 @@ static void xwayland_surface_request_move(struct wl_listener *listener, void *da
 	struct wlr_xwayland_move_event *event = data;
 	(void)event, (void)view;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Move request for XWayland window %" PRIu32 " not yet implemented",
+	wlr_log(WLR_ERROR, "Move request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
 
@@ -127,7 +127,7 @@ static void xwayland_surface_request_resize(struct wl_listener *listener, void *
 	struct wlr_xwayland_resize_event *event = data;
 	(void)event, (void)view;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Resize request for XWayland window %" PRIu32 " not yet implemented",
+	wlr_log(WLR_ERROR, "Resize request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
 
@@ -136,7 +136,7 @@ static void xwayland_surface_request_minimize(struct wl_listener *listener, void
 	struct wlr_xwayland_minimize_event *event = data;
 	(void)event, (void)view;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Minimize request for XWayland window %" PRIu32 " not yet implemented",
+	wlr_log(WLR_ERROR, "Minimize request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
 static void xwayland_surface_request_maximize(struct wl_listener *listener, void *data) {
@@ -144,7 +144,7 @@ static void xwayland_surface_request_maximize(struct wl_listener *listener, void
 	struct wlr_xwayland_surface *surface = data;
 	(void)view, (void)surface;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Maximize request for XWayland window %" PRIu32 " not yet implemented",
+	wlr_log(WLR_ERROR, "Maximize request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
 static void xwayland_surface_request_fullscreen(struct wl_listener *listener, void *data) {
@@ -152,7 +152,7 @@ static void xwayland_surface_request_fullscreen(struct wl_listener *listener, vo
 	struct wlr_xwayland_surface *surface = data;
 	(void)view, (void)surface;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Fullscreen request for XWayland window %" PRIu32 " not yet implemented",
+	wlr_log(WLR_ERROR, "Fullscreen request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
 static void xwayland_surface_set_title(struct wl_listener *listener, void *data) {
@@ -179,7 +179,7 @@ static void xwayland_surface_set_class(struct wl_listener *listener, void *data)
 	struct wlr_xwayland_surface *surface = data;
 	(void)view, (void)surface;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Set-class request for XWayland window %" PRIu32 " not yet implemented",
+	wlr_log(WLR_ERROR, "Set-class request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
 static void xwayland_surface_set_parent(struct wl_listener *listener, void *data) {
@@ -187,7 +187,7 @@ static void xwayland_surface_set_parent(struct wl_listener *listener, void *data
 	struct wlr_xwayland_surface *surface = data;
 	(void)view, (void)surface;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Set-parent request for XWayland window %" PRIu32 " not yet implemented",
+	wlr_log(WLR_ERROR, "Set-parent request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
 static void xwayland_surface_set_hints(struct wl_listener *listener, void *data) {
@@ -195,7 +195,7 @@ static void xwayland_surface_set_hints(struct wl_listener *listener, void *data)
 	struct wlr_xwayland_surface *surface = data;
 	(void)view, (void)surface;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Set-hints request for XWayland window %" PRIu32 " not yet implemented",
+	wlr_log(WLR_ERROR, "Set-hints request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
 static void xwayland_surface_set_override_redirect(struct wl_listener *listener, void *data) {
