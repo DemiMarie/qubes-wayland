@@ -157,11 +157,10 @@ static void xwayland_surface_request_fullscreen(struct wl_listener *listener, vo
 }
 static void xwayland_surface_set_title(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_title);
-	struct wlr_xwayland_surface *surface = data;
-	(void)view, (void)surface;
+	(void)data;
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Set-title request for XWayland window %" PRIu32 " not yet implemented",
-	        view->output.window_id);
+	if (view->xwayland_surface->title)
+		qubes_set_view_title(&view->output, view->xwayland_surface->title);
 }
 
 static void xwayland_surface_set_geometry(struct wl_listener *listener, void *data) {

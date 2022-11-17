@@ -389,6 +389,28 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width, uint32_t 
 	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
 }
 
+void qubes_set_view_title(struct qubes_output *output,
+                          const char *const title)
+{
+	assert(qubes_output_created(output));
+	assert(output->window_id);
+	wlr_log(WLR_ERROR, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, output->window_id);
+	struct {
+		struct msg_hdr header;
+		struct msg_wmname title;
+	} msg;
+	msg.header = (struct msg_hdr) {
+		.type = MSG_WMNAME,
+		.window = output->window_id,
+		.untrusted_len = sizeof(struct msg_wmname),
+	};
+	strncpy(msg.title.data, title, sizeof msg.title.data - 1);
+	msg.title.data[sizeof msg.title.data - 1] = 0;
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.title);
+	// Asserted above, checked at call sites
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
+}
+
 struct wlr_surface *qubes_output_surface(struct qubes_output *output) {
 	switch (output->magic) {
 	case QUBES_VIEW_MAGIC: {

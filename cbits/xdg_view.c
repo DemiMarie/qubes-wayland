@@ -72,40 +72,6 @@ static void qubes_request_fullscreen(
 	}
 }
 
-static void qubes_set_view_title(struct tinywl_view *view)
-{
-	struct qubes_output *output = &view->output;
-
-	if (!strncmp(output->last_title.data,
-	             view->xdg_surface->toplevel->title,
-	             sizeof(output->last_title.data) - 1)) {
-		return;
-	}
-	assert(qubes_output_created(output));
-	assert(output->window_id);
-	strncpy(output->last_title.data,
-	        view->xdg_surface->toplevel->title,
-	        sizeof(output->last_title.data) - 1);
-	output->last_title.data[sizeof(output->last_title.data) - 1] = '\0';
-	wlr_log(WLR_DEBUG, "Sending MSG_WMNAME (0x%x) to window %" PRIu32, MSG_WMNAME, output->window_id);
-	struct {
-		struct msg_hdr header;
-		struct msg_wmname title;
-	} msg;
-	msg.header = (struct msg_hdr) {
-		.type = MSG_WMNAME,
-		.window = output->window_id,
-		.untrusted_len = sizeof(struct msg_wmname),
-	};
-	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.title);
-	strncpy(msg.title.data,
-	        view->xdg_surface->toplevel->title,
-	        sizeof(msg.title.data) - 1);
-	msg.title.data[sizeof(msg.title.data) - 1] = '\0';
-	// Asserted above, checked at call sites
-	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
-}
-
 static void qubes_set_title(
 		struct wl_listener *listener, void *data __attribute__((unused)))
 {
@@ -117,7 +83,7 @@ static void qubes_set_title(
 	assert(view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL);
 	if (qubes_output_mapped(output)) {
 		// Mapped implies created
-		qubes_set_view_title(view);
+		qubes_set_view_title(&view->output, view->xdg_surface->toplevel->title);
 	}
 }
 
@@ -348,7 +314,7 @@ void qubes_view_map(struct tinywl_view *view)
 		}
 		if (xdg_surface->toplevel->title) {
 			// Window created above, so this is safe
-			qubes_set_view_title(view);
+			qubes_set_view_title(&view->output, xdg_surface->toplevel->title);
 		}
 		if (xdg_surface->toplevel->app_id) {
 			// Window created above, so this is safe
