@@ -52,7 +52,7 @@ static void qubes_output_deinit_raw(struct wlr_output *raw_output) {
 	wlr_buffer_unlock(output->buffer);
 }
 
-static bool qubes_output_test(struct wlr_output *raw_output, const struct wlr_output_state *state __attribute__((unused))) {
+static bool qubes_output_test(struct wlr_output *raw_output, const struct wlr_output_state *state) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	if ((state->committed & WLR_OUTPUT_STATE_BUFFER) &&
@@ -62,21 +62,25 @@ static bool qubes_output_test(struct wlr_output *raw_output, const struct wlr_ou
 	return true;
 }
 
-static void qubes_output_damage(struct qubes_output *output, struct wlr_box box) {
+static void qubes_output_damage(struct qubes_output *output, struct wlr_box box, const struct wlr_output_state *state) {
 	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32,
 	        (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
-	int n_rects = 0;
-	if (!(output->output.pending.committed & WLR_OUTPUT_STATE_DAMAGE) && 0)
+	int n_rects = 1;
+	if (state && !(state->committed & WLR_OUTPUT_STATE_DAMAGE))
 		return;
 	pixman_box32_t fake_rect = { .x1 = 0, .y1 = 0, .x2 = box.width, .y2 = box.height};
-	pixman_box32_t *rects = pixman_region32_rectangles(&output->output.pending.damage, &n_rects);
-	if (n_rects <= 0 || !rects) {
-		if (output->magic != QUBES_XWAYLAND_MAGIC && 0) {
-			wlr_log(WLR_DEBUG, "No damage!");
-			return;
+	pixman_box32_t *rects = &fake_rect;
+	if (state) {
+		n_rects = 0;
+		rects = pixman_region32_rectangles((pixman_region32_t *)&state->damage, &n_rects);
+		if (n_rects <= 0 || !rects) {
+			if (output->magic != QUBES_XWAYLAND_MAGIC) {
+				wlr_log(WLR_DEBUG, "No damage!");
+				return;
+			}
+			n_rects = 1;
+			rects = &fake_rect;
 		}
-		n_rects = 1;
-		rects = &fake_rect;
 	}
 	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, output->window_id);
 	for (int i = 0; i < n_rects; ++i) {
@@ -113,7 +117,7 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box)
 	}
 }
 
-void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box)
+void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box, const struct wlr_output_state *state)
 {
 	assert(output->buffer->impl == qubes_buffer_impl_addr);
 	wl_signal_add(&output->buffer->events.destroy, &output->buffer_destroy);
@@ -123,7 +127,7 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box)
 	buffer->header.type = MSG_WINDOW_DUMP;
 	buffer->header.untrusted_len = sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
 	qubes_rust_send_message(output->server->backend->rust_backend, &buffer->header);
-	qubes_output_damage(output, box);
+	qubes_output_damage(output, box, state);
 }
 
 bool qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box)
@@ -183,8 +187,9 @@ bool qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 	return true;
 }
 
-static bool qubes_output_commit(struct wlr_output *raw_output, const struct wlr_output_state *state __attribute__((unused))) {
+static bool qubes_output_commit(struct wlr_output *raw_output, const struct wlr_output_state *state) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
+	assert(state);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	struct wlr_box box;
 	if (QUBES_VIEW_MAGIC == output->magic) {
@@ -222,7 +227,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output, const struct wlr_
 
 		if ((output->buffer = state->buffer)) {
 			wlr_buffer_lock(output->buffer);
-			qubes_output_dump_buffer(output, box);
+			qubes_output_dump_buffer(output, box, state);
 		}
 	}
 	if (state->committed & WLR_OUTPUT_STATE_ENABLED)
@@ -297,7 +302,7 @@ static void qubes_output_clear_surface(struct qubes_output *const output)
 {
 	wlr_log(WLR_DEBUG, "Surface clear for window %" PRIu32, output->window_id);
 	if (output->scene_subsurface_tree)
-		wlr_scene_node_destroy(output->scene_subsurface_tree);
+		wlr_scene_node_destroy(&output->scene_subsurface_tree->node);
 	output->scene_subsurface_tree = NULL;
 	output->surface = NULL;
 }
@@ -312,10 +317,10 @@ bool qubes_output_set_surface(struct qubes_output *const output, struct wlr_surf
 		return true;
 
 	if (!(output->scene_subsurface_tree =
-	      wlr_scene_subsurface_tree_create(&output->scene_output->scene->node, surface)))
+	      wlr_scene_subsurface_tree_create(&output->scene_output->scene->tree, surface)))
 		return false;
 	output->surface = surface;
-	wlr_scene_node_raise_to_top(output->scene_subsurface_tree);
+	wlr_scene_node_raise_to_top(&output->scene_subsurface_tree->node);
 	return true;
 }
 
@@ -432,7 +437,7 @@ void qubes_output_deinit(struct qubes_output *output) {
 	if (output->scene)
 		wlr_scene_output_destroy(output->scene_output);
 	if (output->scene_subsurface_tree)
-		wlr_scene_node_destroy(output->scene_subsurface_tree);
+		wlr_scene_node_destroy(&output->scene_subsurface_tree->node);
 	wl_list_remove(&output->link);
 	assert(output->magic == QUBES_VIEW_MAGIC || output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
@@ -488,7 +493,7 @@ void qubes_output_unmap(struct qubes_output *output) {
 void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window, bool override_redirect) {
 	if (!qubes_output_mapped(output)) {
 		output->flags |= QUBES_OUTPUT_MAPPED;
-		wlr_scene_node_set_enabled(output->scene_subsurface_tree, true);
+		wlr_scene_node_set_enabled(&output->scene_subsurface_tree->node, true);
 		wlr_output_enable(&output->output, true);
 	}
 

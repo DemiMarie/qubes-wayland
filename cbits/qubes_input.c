@@ -455,7 +455,7 @@ static void qubes_recreate_window(struct tinywl_view *view)
 	if (output->buffer) {
 		// qubes_output_dump_buffer assumes this
 		wl_list_remove(&view->output.buffer_destroy.link);
-		qubes_output_dump_buffer(output, box);
+		qubes_output_dump_buffer(output, box, NULL);
 	}
 	if (qubes_output_mapped(output)) {
 		qubes_view_map(view);
