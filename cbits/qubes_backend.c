@@ -7,7 +7,7 @@
 
 #include <wlr/backend.h>
 #include <wlr/backend/interface.h>
-#include <wlr/interfaces/wlr_input_device.h>
+#include <wlr/types/wlr_input_device.h>
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/interfaces/wlr_output.h>
 #include <wlr/interfaces/wlr_pointer.h>
@@ -71,9 +71,12 @@ static bool qubes_backend_start(struct wlr_backend *raw_backend) {
 		return false;
 	}
 	backend->source = source;
+	assert(backend);
+	assert(backend->keyboard);
+	assert(backend->pointer);
 	wl_signal_emit(&raw_backend->events.new_output, backend->output);
-	wl_signal_emit(&raw_backend->events.new_input, backend->keyboard_input);
-	wl_signal_emit(&raw_backend->events.new_input, backend->pointer_input);
+	wl_signal_emit(&raw_backend->events.new_input, &backend->keyboard->base);
+	wl_signal_emit(&raw_backend->events.new_input, &backend->pointer->base);
 	wlr_log(WLR_DEBUG, "Qubes backend started successfully");
 	return true;
 }
@@ -88,29 +91,26 @@ int qubes_backend_on_fd(int fd __attribute__((unused)), uint32_t mask, void *dat
 
 static void
 qubes_backend_destroy(struct qubes_backend *backend) {
+	wlr_keyboard_finish(backend->keyboard);
+	free(backend->keyboard);
+	backend->keyboard = NULL;
+	wlr_pointer_finish(backend->pointer);
+	free(backend->pointer);
+	backend->pointer = NULL;
 	// MUST come before freeing the Rust backend, as that closes the file descriptor.
 	if (backend->source)
 		wl_event_source_remove(backend->source);
 	qubes_rust_backend_free(backend->rust_backend);
 	wlr_output_destroy(backend->output);
-	wlr_input_device_destroy(backend->keyboard_input);
-	wlr_input_device_destroy(backend->pointer_input);
 	wl_list_remove(&backend->display_destroy.link);
 	free(backend);
 }
 
 static const struct wlr_keyboard_impl qubes_keyboard_impl = {
-	.destroy = NULL,
 	.led_update = NULL,
 };
 
-static const struct wlr_pointer_impl qubes_pointer_impl = {
-	.destroy = NULL,
-};
-
-static const struct wlr_input_device_impl qubes_input_device_impl = {
-	.destroy = NULL,
-};
+static const struct wlr_pointer_impl qubes_pointer_impl = {};
 
 static bool qubes_backend_output_commit(struct wlr_output *unused __attribute__((unused))) {
 	return true;
@@ -133,11 +133,9 @@ qubes_backend_create(struct wl_display *display, uint16_t domid, struct wl_list 
 	struct wlr_keyboard *keyboard = calloc(sizeof(*keyboard), 1);
 	struct wlr_output *output = calloc(sizeof(*output), 1);
 	struct wlr_pointer *pointer = calloc(sizeof(*pointer), 1);
-	struct wlr_input_device *keyboard_input = calloc(sizeof(*keyboard_input), 1);
-	struct wlr_input_device *pointer_input = calloc(sizeof(*pointer_input), 1);
 
 	if (backend == NULL || keyboard == NULL || output == NULL ||
-	    pointer == NULL || keyboard_input == NULL || pointer_input == NULL)
+	    pointer == NULL)
 		goto fail;
 	if (!(backend->rust_backend = qubes_rust_backend_create(domid))) {
 		wlr_log(WLR_ERROR, "Cannot create Rust backend for domain %" PRIu16, domid);
@@ -151,8 +149,6 @@ qubes_backend_create(struct wl_display *display, uint16_t domid, struct wl_list 
 	backend->views = views;
 	backend->output = output;
 	backend->display = display;
-	backend->keyboard_input = keyboard_input;
-	backend->pointer_input = pointer_input;
 	wlr_backend_init(&backend->backend, &qubes_backend_impl);
 	strncpy(output->make, "Qubes OS Virtual Output", sizeof output->make - 1);
 	strncpy(output->model, "GUI Agent", sizeof output->model - 1);
@@ -169,15 +165,11 @@ qubes_backend_create(struct wl_display *display, uint16_t domid, struct wl_list 
 	output->current_mode = &backend->mode;
 	assert(!wl_list_empty(&output->modes));
 	assert(output->current_mode);
-	wlr_keyboard_init(keyboard, &qubes_keyboard_impl);
+	wlr_keyboard_init(keyboard, &qubes_keyboard_impl, "Qubes OS Virtual Keyboard");
 	wlr_keyboard_set_repeat_info(keyboard, 0, 0);
-	wlr_pointer_init(pointer, &qubes_pointer_impl);
-	wlr_input_device_init(keyboard_input, WLR_INPUT_DEVICE_KEYBOARD, &qubes_input_device_impl,
-			"Qubes OS Virtual Keyboard", 0, 0);
-	keyboard_input->keyboard = keyboard;
-	pointer_input->pointer = pointer;
-	wlr_input_device_init(pointer_input, WLR_INPUT_DEVICE_POINTER, &qubes_input_device_impl,
-			"Qubes OS Virtual Pointer", 0, 0);
+	backend->keyboard = keyboard;
+	wlr_pointer_init(pointer, &qubes_pointer_impl, "Qubes OS Virtual Pointer");
+	backend->pointer = pointer;
 	backend->display_destroy.notify = qubes_backend_handle_display_destroy;
 	wl_display_add_destroy_listener(display, &backend->display_destroy);
 	return backend;
@@ -186,8 +178,6 @@ fail:
 	free(keyboard);
 	free(output);
 	free(pointer);
-	free(keyboard_input);
-	free(pointer_input);
 	return NULL;
 }
 

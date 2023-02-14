@@ -2,6 +2,7 @@
 #define QUBES_WAYLAND_COMPOSITOR_MAIN_H _Pragma("GCC error \"double-include guard referenced\"")
 #include "common.h"
 #include <wlr/util/box.h>
+#include <wlr/types/wlr_subcompositor.h>
 
 #include <qubes-gui-protocol.h>
 void qubes_rust_send_message(void *backend, struct msg_hdr *header);
@@ -48,6 +49,7 @@ struct tinywl_server {
 	struct wl_listener new_decoration;
 	struct wl_event_source *timer, *listener;
 	struct wlr_compositor *compositor;
+	struct wlr_subcompositor *subcompositor;
 	struct wlr_data_device_manager *data_device;
 	struct wlr_xwayland *xwayland;
 	uint32_t magic;

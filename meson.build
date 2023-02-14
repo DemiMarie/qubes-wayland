@@ -111,13 +111,13 @@ wlroots_options = [
 ]
 if false
   wlroots = dependency('wlroots',
-                       version: ['>=0.15.0', '<0.16.0'],
+                       version: ['>=0.16.0', '<0.17.0'],
                        default_options: wlroots_options)
 else
   wlroots_proj = subproject(
     'wlroots',
     default_options: wlroots_options,
-    version: ['>=0.15.1', '<0.16.0'],
+    version: ['>=0.16.0', '<0.17.0'],
   )
   wlroots = wlroots_proj.get_variable('wlroots')
 endif

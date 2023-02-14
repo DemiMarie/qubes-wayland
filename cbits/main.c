@@ -37,6 +37,8 @@
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/interfaces/wlr_keyboard.h>
+#include <wlr/interfaces/wlr_pointer.h>
 #include <wlr/types/wlr_matrix.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
@@ -81,7 +83,7 @@ struct tinywl_output {
 struct tinywl_keyboard {
 	struct wl_list link;
 	struct tinywl_server *server;
-	struct wlr_input_device *device;
+	struct wlr_keyboard *keyboard;
 
 	struct wl_listener modifiers;
 	struct wl_listener key;
@@ -148,10 +150,10 @@ static void keyboard_handle_modifiers(
 	 * same seat. You can swap out the underlying wlr_keyboard like this and
 	 * wlr_seat handles this transparently.
 	 */
-	wlr_seat_set_keyboard(keyboard->server->seat, keyboard->device);
+	wlr_seat_set_keyboard(keyboard->server->seat, keyboard->keyboard);
 	/* Send modifiers to the client. */
 	wlr_seat_keyboard_notify_modifiers(keyboard->server->seat,
-		&keyboard->device->keyboard->modifiers);
+		&keyboard->keyboard->modifiers);
 }
 
 static void keyboard_handle_key(
@@ -161,25 +163,25 @@ static void keyboard_handle_key(
 	struct tinywl_keyboard *keyboard =
 		wl_container_of(listener, keyboard, key);
 	struct tinywl_server *server = keyboard->server;
-	struct wlr_event_keyboard_key *event = data;
+	struct wlr_keyboard_key_event *event = data;
 	struct wlr_seat *seat = server->seat;
 	assert(QUBES_KEYBOARD_MAGIC == keyboard->magic);
 
 	/* Translate libinput keycode -> xkbcommon */
-	wlr_seat_set_keyboard(seat, keyboard->device);
+	wlr_seat_set_keyboard(seat, keyboard->keyboard);
 	wlr_seat_keyboard_notify_key(seat, event->time_msec,
 		event->keycode, event->state);
 }
 
 static void server_new_keyboard(struct tinywl_server *server,
-		struct wlr_input_device *device) {
-	assert(device->keyboard);
+		struct wlr_keyboard *device) {
 	struct tinywl_keyboard *keyboard =
 		calloc(1, sizeof(struct tinywl_keyboard));
+	assert(device);
 	assert(keyboard);
 	keyboard->magic = QUBES_KEYBOARD_MAGIC;
 	keyboard->server = server;
-	keyboard->device = device;
+	keyboard->keyboard = device;
 
 	/* We need to prepare an XKB keymap and assign it to the keyboard. This
 	 * assumes the defaults (e.g. layout = "us"). */
@@ -187,18 +189,18 @@ static void server_new_keyboard(struct tinywl_server *server,
 	struct xkb_keymap *keymap = xkb_keymap_new_from_names(context, NULL,
 		XKB_KEYMAP_COMPILE_NO_FLAGS);
 
-	if (keymap && device->keyboard) {
-		wlr_keyboard_set_keymap(device->keyboard, keymap);
+	if (keymap && device) {
+		wlr_keyboard_set_keymap(device, keymap);
 		xkb_keymap_unref(keymap);
-		wlr_keyboard_set_repeat_info(device->keyboard, 0, 0);
+		wlr_keyboard_set_repeat_info(device, 0, 0);
 	}
 	xkb_context_unref(context);
 
 	/* Here we set up listeners for keyboard events. */
 	keyboard->modifiers.notify = keyboard_handle_modifiers;
-	wl_signal_add(&device->keyboard->events.modifiers, &keyboard->modifiers);
+	wl_signal_add(&device->events.modifiers, &keyboard->modifiers);
 	keyboard->key.notify = keyboard_handle_key;
-	wl_signal_add(&device->keyboard->events.key, &keyboard->key);
+	wl_signal_add(&device->events.key, &keyboard->key);
 
 	wlr_seat_set_keyboard(server->seat, device);
 
@@ -215,7 +217,7 @@ static void server_new_input(struct wl_listener *listener, void *data) {
 	assert(QUBES_SERVER_MAGIC == server->magic);
 	switch (device->type) {
 	case WLR_INPUT_DEVICE_KEYBOARD:
-		server_new_keyboard(server, device);
+		server_new_keyboard(server, device->keyboard);
 		break;
 	case WLR_INPUT_DEVICE_POINTER:
 		break;
@@ -606,6 +608,11 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 
+	if (!(server->subcompositor = wlr_subcompositor_create(server->wl_display))) {
+		wlr_log(WLR_ERROR, "Cannot create subcompositor");
+		return 1;
+	}
+
 	if (!(server->data_device = wlr_data_device_manager_create(server->wl_display))) {
 		wlr_log(WLR_ERROR, "Cannot create data device");
 		return 1;
@@ -806,13 +813,13 @@ int main(int argc, char *argv[]) {
 	wl_event_source_remove(sighup);
 	wl_event_source_remove(sigint);
 	wl_event_source_remove(sigterm);
+	wl_event_source_remove(server->timer);
 
 	struct tinywl_keyboard *keyboard_to_free, *tmp_keyboard;
 	wl_list_for_each_safe(keyboard_to_free, tmp_keyboard, &server->keyboards, link) {
 		wl_list_remove(&keyboard_to_free->key.link);
 		wl_list_remove(&keyboard_to_free->modifiers.link);
 		wl_list_remove(&keyboard_to_free->link);
-		// wlr_input_device_destroy(keyboard_to_free->input_device);
 		free(keyboard_to_free);
 	}
 	wlr_xwayland_destroy(server->xwayland);

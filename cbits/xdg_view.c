@@ -255,7 +255,8 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data) {
 		wl_signal_add(&xdg_surface->events.ack_configure, &view->ack_configure);
 	} else if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
 		struct wlr_xdg_popup *const popup = xdg_surface->popup;
-		struct wlr_box geometry = wlr_xdg_positioner_get_geometry(&popup->positioner);
+		struct wlr_box geometry;
+		wlr_xdg_positioner_rules_get_geometry(&popup->positioner_rules, &geometry);
 		struct tinywl_view *parent_view = wlr_xdg_surface_from_wlr_surface(popup->parent)->data;
 		assert(parent_view);
 		output->left = geometry.x + parent_view->output.left;
@@ -321,7 +322,7 @@ void qubes_view_map(struct tinywl_view *view)
 			qubes_set_view_app_id(view);
 		}
 		if (xdg_surface->toplevel->parent) {
-			const struct qubes_output *parent_output = xdg_surface->toplevel->parent->data;
+			const struct qubes_output *parent_output = xdg_surface->toplevel->parent->base->data;
 			transient_for_window = parent_output->window_id;
 		}
 	} else if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {

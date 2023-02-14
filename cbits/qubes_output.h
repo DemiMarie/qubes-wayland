@@ -4,6 +4,7 @@
 #include "common.h"
 #include <wayland-server-core.h>
 #include <wlr/interfaces/wlr_output.h>
+#include <wlr/util/box.h>
 
 #include <qubes-gui-protocol.h>
 

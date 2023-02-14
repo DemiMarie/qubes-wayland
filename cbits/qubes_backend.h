@@ -18,12 +18,13 @@ struct qubes_backend {
 	struct wl_display *display;
 	struct wlr_output_mode mode;
 	struct wlr_output *output;
-	struct wlr_input_device *keyboard_input, *pointer_input;
 	struct qubes_rust_backend *rust_backend;
 	struct wl_event_source *source;
 	struct msg_keymap_notify keymap;
 	struct wl_list *views;
 	struct wl_listener display_destroy;
+	struct wlr_keyboard *keyboard;
+	struct wlr_pointer *pointer;
 };
 extern int qubes_rust_backend_fd(struct qubes_rust_backend *backend);
 

@@ -59,7 +59,7 @@ static void handle_keypress(struct qubes_output *output, uint32_t timestamp, con
 	backend->keymap.keys[i] = (backend->keymap.keys[i] & ~(1 << j)) | (3 - keypress.type) << j;
 
 	if (was_pressed) {
-		struct wlr_event_keyboard_key event = {
+		struct wlr_keyboard_key_event event = {
 			.time_msec = timestamp,
 			.keycode = keycode,
 			.update_state = true,
@@ -192,7 +192,7 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct w
 			struct tinywl_view *view = wl_container_of(output, view, output);
 			if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL &&
 			    !view->xdg_surface->toplevel->pending.activated)
-				wlr_xdg_toplevel_set_activated(view->xdg_surface, true);
+				wlr_xdg_toplevel_set_activated(view->xdg_surface->toplevel, true);
 		} else if (output->magic == QUBES_XWAYLAND_MAGIC) {
 			struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 			wlr_xwayland_surface_activate(view->xwayland_surface, true);
@@ -211,7 +211,7 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct w
 		if (wlr_surface_is_xdg_surface(prev_surface)) {
 			struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(prev_surface);
 			if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-				wlr_xdg_toplevel_set_activated(previous, false);
+				wlr_xdg_toplevel_set_activated(previous->toplevel, false);
 			}
 		} else {
 			struct wlr_xwayland_surface *previous = wlr_xwayland_surface_from_wlr_surface(prev_surface);
@@ -232,7 +232,7 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct w
 			view_surface = wlr_xdg_surface_from_wlr_surface(view_surface->popup->parent);
 		}
 		if (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-			wlr_xdg_toplevel_set_activated(view_surface, true);
+			wlr_xdg_toplevel_set_activated(view_surface->toplevel, true);
 		}
 	} else if (output->magic == QUBES_XWAYLAND_MAGIC) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
@@ -273,9 +273,9 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp, const 
 				struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(
 							seat->keyboard_state.focused_surface);
 				if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-					wlr_xdg_toplevel_set_activated(previous, false);
+					wlr_xdg_toplevel_set_activated(previous->toplevel, false);
 				} else if (previous->role == WLR_XDG_SURFACE_ROLE_POPUP) {
-					wlr_xdg_popup_destroy(previous);
+					wlr_xdg_popup_destroy(previous->popup);
 					assert(seat->keyboard_state.focused_surface == NULL);
 				}
 			} else {
@@ -324,11 +324,11 @@ static void handle_window_flags(struct qubes_output *output, const uint8_t *ptr)
 	}
 
 	if ((flags.flags_set | flags.flags_unset) & WINDOW_FLAG_FULLSCREEN)
-		wlr_xdg_toplevel_set_fullscreen(view->xdg_surface, flags.flags_set & WINDOW_FLAG_FULLSCREEN);
+		wlr_xdg_toplevel_set_fullscreen(view->xdg_surface->toplevel, flags.flags_set & WINDOW_FLAG_FULLSCREEN);
 
 	// Setting the "minimized" flag directly would be better, but xdg-shell doesn't support that
 	if ((flags.flags_set | flags.flags_unset) & WINDOW_FLAG_MINIMIZE)
-		wlr_xdg_toplevel_set_activated(view->xdg_surface, !(flags.flags_set & WINDOW_FLAG_MINIMIZE));
+		wlr_xdg_toplevel_set_activated(view->xdg_surface->toplevel, !(flags.flags_set & WINDOW_FLAG_MINIMIZE));
 
 	// DEMANDS_ATTENTION has no Wayland analog
 }
@@ -374,7 +374,7 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 			view->configure_serial =
-				wlr_xdg_toplevel_set_size(view->xdg_surface, configure.width, configure.height);
+				wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel, configure.width, configure.height);
 			wlr_log(WLR_DEBUG,
 			        "Will ACK configure from GUI daemon (width %u, height %u)"
 			        " when client ACKS configure with serial %u",
@@ -531,7 +531,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 			wlr_log(WLR_ERROR, "No window for message of type %" PRIu32, hdr.type);
 			return;
 		}
-		struct wlr_keyboard *keyboard = backend->keyboard_input->keyboard;
+		struct wlr_keyboard *keyboard = backend->keyboard;
 		assert(keyboard);
 		for (int i = 0; i < 32; ++i) {
 			for (int j = 0; j < 8; ++j) {
@@ -540,7 +540,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 				if (!old_pressed || is_pressed)
 					continue;
 				backend->keymap.keys[i] ^= 1 << j;
-				struct wlr_event_keyboard_key event = {
+				struct wlr_keyboard_key_event event = {
 					.time_msec = timestamp,
 					.keycode = i << 3 | j,
 					.update_state = true,
@@ -580,9 +580,9 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 		case QUBES_VIEW_MAGIC: {
 			struct tinywl_view *view = (struct tinywl_view *)output;
 			if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
-				wlr_xdg_toplevel_send_close(view->xdg_surface);
+				wlr_xdg_toplevel_send_close(view->xdg_surface->toplevel);
 			else if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP)
-				wlr_xdg_popup_destroy(view->xdg_surface);
+				wlr_xdg_popup_destroy(view->xdg_surface->popup);
 			break;
 		}
 		case QUBES_XWAYLAND_MAGIC: {

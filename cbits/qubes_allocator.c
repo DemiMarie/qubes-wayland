@@ -14,9 +14,12 @@
 #include <unistd.h>
 
 #include <wlr/util/log.h>
+#include <wlr/util/box.h>
 #include <wlr/render/drm_format_set.h>
 #include <wlr/render/allocator.h>
 #include <wlr/types/wlr_buffer.h>
+#include <wlr/interfaces/wlr_buffer.h>
+
 #include <xen/gntalloc.h>
 #include <qubes-gui-protocol.h>
 #include <drm/drm_fourcc.h>
