@@ -144,8 +144,8 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	struct qubes_output *output = &view->output;
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
-	wlr_scene_node_set_enabled(&output->scene_output->scene->tree.node, false);
-	wlr_scene_node_set_enabled(&output->scene_subsurface_tree->node, false);
+	wlr_scene_node_set_enabled(&output->scene_output->scene->node, false);
+	wlr_scene_node_set_enabled(output->scene_subsurface_tree, false);
 	qubes_output_unmap(&view->output);
 }
 

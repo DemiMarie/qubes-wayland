@@ -297,7 +297,7 @@ static void qubes_output_clear_surface(struct qubes_output *const output)
 {
 	wlr_log(WLR_DEBUG, "Surface clear for window %" PRIu32, output->window_id);
 	if (output->scene_subsurface_tree)
-		wlr_scene_node_destroy(&output->scene_subsurface_tree->node);
+		wlr_scene_node_destroy(output->scene_subsurface_tree);
 	output->scene_subsurface_tree = NULL;
 	output->surface = NULL;
 }
@@ -312,10 +312,10 @@ bool qubes_output_set_surface(struct qubes_output *const output, struct wlr_surf
 		return true;
 
 	if (!(output->scene_subsurface_tree =
-	      wlr_scene_subsurface_tree_create(&output->scene_output->scene->tree, surface)))
+	      wlr_scene_subsurface_tree_create(&output->scene_output->scene->node, surface)))
 		return false;
 	output->surface = surface;
-	wlr_scene_node_raise_to_top(&output->scene_subsurface_tree->node);
+	wlr_scene_node_raise_to_top(output->scene_subsurface_tree);
 	return true;
 }
 
@@ -432,7 +432,7 @@ void qubes_output_deinit(struct qubes_output *output) {
 	if (output->scene)
 		wlr_scene_output_destroy(output->scene_output);
 	if (output->scene_subsurface_tree)
-		wlr_scene_node_destroy(&output->scene_subsurface_tree->node);
+		wlr_scene_node_destroy(output->scene_subsurface_tree);
 	wl_list_remove(&output->link);
 	assert(output->magic == QUBES_VIEW_MAGIC || output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
@@ -488,7 +488,7 @@ void qubes_output_unmap(struct qubes_output *output) {
 void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window, bool override_redirect) {
 	if (!qubes_output_mapped(output)) {
 		output->flags |= QUBES_OUTPUT_MAPPED;
-		wlr_scene_node_set_enabled(&output->scene_subsurface_tree->node, true);
+		wlr_scene_node_set_enabled(output->scene_subsurface_tree, true);
 		wlr_output_enable(&output->output, true);
 	}
 

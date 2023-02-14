@@ -117,7 +117,7 @@ else
   wlroots_proj = subproject(
     'wlroots',
     default_options: wlroots_options,
-    version: ['>=0.16.1', '<0.17.0'],
+    version: ['>=0.16.0', '<0.17.0'],
   )
   wlroots = wlroots_proj.get_variable('wlroots')
 endif

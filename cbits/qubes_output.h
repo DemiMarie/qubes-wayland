@@ -20,7 +20,7 @@ struct qubes_output {
 	struct tinywl_server *server;
 	struct wlr_scene *scene;
 	struct wlr_scene_output *scene_output;
-	struct wlr_scene_tree *scene_subsurface_tree;
+	struct wlr_scene_node *scene_subsurface_tree;
 	char *name;
 
 	int x, y, left, top;

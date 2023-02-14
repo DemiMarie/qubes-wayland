@@ -130,7 +130,7 @@ static int qubes_send_frame_callbacks(void *data)
 		output->output.frame_pending = false;
 		wlr_output_send_frame(&output->output);
 		wlr_scene_node_for_each_buffer(
-			&output->scene_output->scene->tree.node,
+			&output->scene_output->scene->node,
 			qubes_send_frame_done, &now);
 	}
 	return 0;
@@ -217,7 +217,7 @@ static void server_new_input(struct wl_listener *listener, void *data) {
 	assert(QUBES_SERVER_MAGIC == server->magic);
 	switch (device->type) {
 	case WLR_INPUT_DEVICE_KEYBOARD:
-		server_new_keyboard(server, wlr_keyboard_from_input_device(device));
+		server_new_keyboard(server, device->keyboard);
 		break;
 	case WLR_INPUT_DEVICE_POINTER:
 		break;
