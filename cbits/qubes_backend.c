@@ -112,7 +112,7 @@ static const struct wlr_keyboard_impl qubes_keyboard_impl = {
 
 static const struct wlr_pointer_impl qubes_pointer_impl = {};
 
-static bool qubes_backend_output_commit(struct wlr_output *unused __attribute__((unused))) {
+static bool qubes_backend_output_commit(struct wlr_output *unused __attribute__((unused)), const struct wlr_output_state *state __attribute__((unused))) {
 	return true;
 }
 

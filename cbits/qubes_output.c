@@ -52,7 +52,7 @@ static void qubes_output_deinit_raw(struct wlr_output *raw_output) {
 	wlr_buffer_unlock(output->buffer);
 }
 
-static bool qubes_output_test(struct wlr_output *raw_output) {
+static bool qubes_output_test(struct wlr_output *raw_output, const struct wlr_output_state *state __attribute__((unused))) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
@@ -183,7 +183,7 @@ bool qubes_output_ensure_created(struct qubes_output *output, struct wlr_box box
 	return true;
 }
 
-static bool qubes_output_commit(struct wlr_output *raw_output) {
+static bool qubes_output_commit(struct wlr_output *raw_output, const struct wlr_output_state *state __attribute__((unused))) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	struct wlr_box box;
@@ -429,12 +429,10 @@ struct wlr_surface *qubes_output_surface(struct qubes_output *output) {
 }
 
 void qubes_output_deinit(struct qubes_output *output) {
+	if (output->scene)
+		wlr_scene_output_destroy(output->scene_output);
 	if (output->scene_subsurface_tree)
 		wlr_scene_node_destroy(output->scene_subsurface_tree);
-	if (output->scene_output)
-		wlr_scene_output_destroy(output->scene_output);
-	if (output->scene)
-		wlr_scene_node_destroy(&output->scene->node);
 	wl_list_remove(&output->link);
 	assert(output->magic == QUBES_VIEW_MAGIC || output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
@@ -490,7 +488,6 @@ void qubes_output_unmap(struct qubes_output *output) {
 void qubes_output_map(struct qubes_output *output, uint32_t transient_for_window, bool override_redirect) {
 	if (!qubes_output_mapped(output)) {
 		output->flags |= QUBES_OUTPUT_MAPPED;
-		wlr_scene_node_set_enabled(&output->scene_output->scene->node, true);
 		wlr_scene_node_set_enabled(output->scene_subsurface_tree, true);
 		wlr_output_enable(&output->output, true);
 	}
