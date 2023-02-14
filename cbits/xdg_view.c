@@ -256,7 +256,7 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data) {
 	} else if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
 		struct wlr_xdg_popup *const popup = xdg_surface->popup;
 		struct wlr_box geometry;
-		wlr_xdg_positioner_rules_get_geometry(&popup->positioner_rules, &geometry);
+		wlr_xdg_positioner_rules_get_geometry(&popup->scheduled.rules, &geometry);
 		struct tinywl_view *parent_view = wlr_xdg_surface_from_wlr_surface(popup->parent)->data;
 		assert(parent_view);
 		output->left = geometry.x + parent_view->output.left;

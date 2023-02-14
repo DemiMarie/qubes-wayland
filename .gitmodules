@@ -4,3 +4,4 @@
 [submodule "subprojects/wlroots"]
 	url = git+ssh://git@gitlab.freedesktop.org/DemiMarie/wlroots.git
 	branch = fix-assert
+	path = subprojects/wlroots

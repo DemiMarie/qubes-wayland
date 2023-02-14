@@ -90,11 +90,11 @@ struct tinywl_keyboard {
 	uint32_t magic;
 };
 
-static void qubes_send_frame_done(struct wlr_surface *surface,
+static void qubes_send_frame_done(struct wlr_scene_buffer *surface,
 	int sx __attribute__((unused)), int sy __attribute__((unused)),
 	void *data)
 {
-	wlr_surface_send_frame_done(surface, data);
+	wlr_scene_buffer_send_frame_done(surface, data);
 }
 
 static int qubes_accept_new_socket_connection(int fd, uint32_t mask, void *data)
@@ -129,7 +129,7 @@ static int qubes_send_frame_callbacks(void *data)
 	wl_list_for_each(output, &server->views, link) {
 		output->output.frame_pending = false;
 		wlr_output_send_frame(&output->output);
-		wlr_scene_node_for_each_surface(
+		wlr_scene_node_for_each_buffer(
 			&output->scene_output->scene->node,
 			qubes_send_frame_done, &now);
 	}
@@ -659,7 +659,7 @@ int main(int argc, char *argv[]) {
 	 * https://drewdevault.com/2018/07/29/Wayland-shells.html
 	 */
 	wl_list_init(&server->views);
-	if (!(server->xdg_shell = wlr_xdg_shell_create(server->wl_display))) {
+	if (!(server->xdg_shell = wlr_xdg_shell_create(server->wl_display, 3))) {
 		wlr_log(WLR_ERROR, "Cannot create xdg_shell");
 		return 1;
 	}

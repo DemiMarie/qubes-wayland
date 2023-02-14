@@ -150,9 +150,9 @@ qubes_backend_create(struct wl_display *display, uint16_t domid, struct wl_list 
 	backend->output = output;
 	backend->display = display;
 	wlr_backend_init(&backend->backend, &qubes_backend_impl);
-	strncpy(output->make, "Qubes OS Virtual Output", sizeof output->make - 1);
-	strncpy(output->model, "GUI Agent", sizeof output->model - 1);
-	strncpy(output->serial, "1.0", sizeof output->model - 1);
+	output->make = "Qubes OS Virtual Output";
+	output->model = "GUI Agent";
+	output->serial = "1.0";
 	output->phys_width = 344, output->phys_height = 194;
 	wlr_output_init(output, &backend->backend, &qubes_backend_output_impl, display);
 	wlr_output_set_description(output, "Qubes OS Virtual Output Device");
