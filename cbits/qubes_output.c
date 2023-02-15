@@ -434,8 +434,6 @@ struct wlr_surface *qubes_output_surface(struct qubes_output *output) {
 }
 
 void qubes_output_deinit(struct qubes_output *output) {
-	if (output->scene)
-		wlr_scene_output_destroy(output->scene_output);
 	if (output->scene_subsurface_tree)
 		wlr_scene_node_destroy(&output->scene_subsurface_tree->node);
 	wl_list_remove(&output->link);
@@ -448,6 +446,10 @@ void qubes_output_deinit(struct qubes_output *output) {
 	if (qubes_output_created(output)) {
 		wlr_log(WLR_DEBUG, "Sending MSG_DESTROY (0x%x) to window %" PRIu32, MSG_DESTROY, output->window_id);
 		qubes_rust_send_message(output->server->backend->rust_backend, &header);
+	}
+	if (output->scene) {
+		wlr_scene_output_destroy(output->scene_output);
+		wlr_scene_node_destroy(&output->scene->tree.node);
 	}
 	wlr_output_destroy(&output->output);
 	free(output->name);
