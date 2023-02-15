@@ -506,7 +506,8 @@ int main(int argc, char *argv[]) {
 		err(1, "Cannot set empty handler for SIGPIPE");
 
 	bool override_verbosity = false;
-	while ((c = getopt(argc, argv, "v:s:d:l:h")) != -1) {
+	bool handle_sigint = true;
+	while ((c = getopt(argc, argv, "v:s:d:l:hn")) != -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
@@ -524,6 +525,9 @@ int main(int argc, char *argv[]) {
 			if (listener_str)
 				errx(1, "Listening on multiple sockets not supported");
 			listener_str = optarg;
+			break;
+		case 'n':
+			handle_sigint = false;
 			break;
 		default:
 			usage(argv[0], 1);
@@ -770,13 +774,13 @@ int main(int argc, char *argv[]) {
 	/*
 	 * Add signal handlers for SIGTERM, SIGINT, and SIGHUP
 	 */
+	struct wl_event_source *sigint = handle_sigint ? wl_event_loop_add_signal(loop,
+		SIGINT, qubes_clean_exit, server) : NULL;
 	struct wl_event_source *sigterm = wl_event_loop_add_signal(loop,
 		SIGTERM, qubes_clean_exit, server);
-	struct wl_event_source *sigint = wl_event_loop_add_signal(loop,
-		SIGINT, qubes_clean_exit, server);
 	struct wl_event_source *sighup = wl_event_loop_add_signal(loop,
 		SIGHUP, qubes_clean_exit, server);
-	if (!sigterm || !sigint || !sighup) {
+	if (!sigterm || (handle_sigint && !sigint) || !sighup) {
 #ifdef QUBES_HAS_SYSTEMD
 		sd_notifyf(0, "ERRNO=%d", errno);
 #endif
