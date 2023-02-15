@@ -65,22 +65,21 @@ static bool qubes_output_test(struct wlr_output *raw_output, const struct wlr_ou
 static void qubes_output_damage(struct qubes_output *output, struct wlr_box box, const struct wlr_output_state *state) {
 	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32,
 	        (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
-	int n_rects = 1;
 	if (state && !(state->committed & WLR_OUTPUT_STATE_DAMAGE))
 		return;
 	pixman_box32_t fake_rect = { .x1 = 0, .y1 = 0, .x2 = box.width, .y2 = box.height};
-	pixman_box32_t *rects = &fake_rect;
+	pixman_box32_t *rects;
+	int n_rects;
 	if (state) {
 		n_rects = 0;
 		rects = pixman_region32_rectangles((pixman_region32_t *)&state->damage, &n_rects);
 		if (n_rects <= 0 || !rects) {
-			if (output->magic != QUBES_XWAYLAND_MAGIC) {
-				wlr_log(WLR_DEBUG, "No damage!");
-				return;
-			}
-			n_rects = 1;
-			rects = &fake_rect;
+			wlr_log(WLR_DEBUG, "No damage!");
+			return;
 		}
+	} else {
+		n_rects = 1;
+		rects = &fake_rect;
 	}
 	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32, MSG_SHMIMAGE, output->window_id);
 	for (int i = 0; i < n_rects; ++i) {
