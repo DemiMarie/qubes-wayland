@@ -55,9 +55,9 @@ static void qubes_output_deinit_raw(struct wlr_output *raw_output) {
 static bool qubes_output_test(struct wlr_output *raw_output, const struct wlr_output_state *state __attribute__((unused))) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
-	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
-	    (raw_output->pending.buffer != NULL) &&
-	    (raw_output->pending.buffer->impl != qubes_buffer_impl_addr))
+	if ((state->committed & WLR_OUTPUT_STATE_BUFFER) &&
+	    (state->buffer != NULL) &&
+	    (state->buffer->impl != qubes_buffer_impl_addr))
 		return false;
 	return true;
 }
@@ -66,12 +66,12 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box)
 	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32,
 	        (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
 	int n_rects = 0;
-	if (!(output->output.pending.committed & WLR_OUTPUT_STATE_DAMAGE))
+	if (!(output->output.pending.committed & WLR_OUTPUT_STATE_DAMAGE) && 0)
 		return;
 	pixman_box32_t fake_rect = { .x1 = 0, .y1 = 0, .x2 = box.width, .y2 = box.height};
 	pixman_box32_t *rects = pixman_region32_rectangles(&output->output.pending.damage, &n_rects);
 	if (n_rects <= 0 || !rects) {
-		if (output->magic != QUBES_XWAYLAND_MAGIC) {
+		if (output->magic != QUBES_XWAYLAND_MAGIC && 0) {
 			wlr_log(WLR_DEBUG, "No damage!");
 			return;
 		}
@@ -205,28 +205,28 @@ static bool qubes_output_commit(struct wlr_output *raw_output, const struct wlr_
 	if (!qubes_output_ensure_created(output, box))
 		return false;
 
-	if (raw_output->pending.committed & WLR_OUTPUT_STATE_MODE) {
-		assert(raw_output->pending.mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
+	if (state->committed & WLR_OUTPUT_STATE_MODE) {
+		assert(state->mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
 		wlr_output_update_custom_mode(raw_output,
-			raw_output->pending.custom_mode.width,
-			raw_output->pending.custom_mode.height,
-			raw_output->pending.custom_mode.refresh);
+			state->custom_mode.width,
+			state->custom_mode.height,
+			state->custom_mode.refresh);
 	}
 
-	if ((raw_output->pending.committed & WLR_OUTPUT_STATE_BUFFER) &&
-	    (output->buffer != raw_output->pending.buffer)) {
+	if ((state->committed & WLR_OUTPUT_STATE_BUFFER) &&
+	    (output->buffer != state->buffer)) {
 		if (output->buffer) {
 			wl_list_remove(&output->buffer_destroy.link);
 			wlr_buffer_unlock(output->buffer);
 		}
 
-		if ((output->buffer = raw_output->pending.buffer)) {
+		if ((output->buffer = state->buffer)) {
 			wlr_buffer_lock(output->buffer);
 			qubes_output_dump_buffer(output, box);
 		}
 	}
-	if (raw_output->pending.committed & WLR_OUTPUT_STATE_ENABLED)
-		wlr_output_update_enabled(raw_output, raw_output->pending.enabled);
+	if (state->committed & WLR_OUTPUT_STATE_ENABLED)
+		wlr_output_update_enabled(raw_output, state->enabled);
 	return true;
 }
 
