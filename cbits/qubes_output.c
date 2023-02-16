@@ -119,7 +119,6 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box,
 void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box, const struct wlr_output_state *state)
 {
 	assert(output->buffer->impl == qubes_buffer_impl_addr);
-	wl_signal_add(&output->buffer->events.destroy, &output->buffer_destroy);
 	wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32, MSG_WINDOW_DUMP, output->window_id);
 	struct qubes_buffer *buffer = wl_container_of(output->buffer, buffer, inner);
 	buffer->header.window = output->window_id;
@@ -226,6 +225,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output, const struct wlr_
 
 		if ((output->buffer = state->buffer)) {
 			wlr_buffer_lock(output->buffer);
+			wl_signal_add(&output->buffer->events.destroy, &output->buffer_destroy);
 			qubes_output_dump_buffer(output, box, state);
 		}
 	}
