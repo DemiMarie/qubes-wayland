@@ -48,8 +48,8 @@ static void qubes_output_deinit_raw(struct wlr_output *raw_output) {
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
 	wl_list_remove(&output->frame.link);
-	qubes_unlink_buffer(output);
 	wlr_buffer_unlock(output->buffer);
+	qubes_unlink_buffer(output);
 }
 
 static bool qubes_output_test(struct wlr_output *raw_output, const struct wlr_output_state *state) {
