@@ -52,13 +52,12 @@ static void xwayland_surface_destroy(struct wl_listener *listener, void *data __
 	memset(view, 0xFF, sizeof *view);
 	free(view);
 }
-static void xwayland_surface_map(struct wl_listener *listener, void *data) {
+
+void qubes_xwayland_surface_map(struct qubes_xwayland_view *view) {
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
-	struct qubes_xwayland_view *view = wl_container_of(listener, view, map);
 	wlr_log(WLR_DEBUG, "mapping surface at %p", view);
 	struct wlr_xwayland_surface *surface = view->xwayland_surface;
-	assert(surface == data);
 	assert(surface);
 	assert(surface->surface);
 	struct qubes_output *output = &view->output;
@@ -76,6 +75,12 @@ static void xwayland_surface_map(struct wl_listener *listener, void *data) {
 
 	qubes_output_set_surface(output, surface->surface);
 	qubes_output_map(output, 0, surface->override_redirect);
+}
+
+static void xwayland_surface_map(struct wl_listener *listener, void *data) {
+	struct qubes_xwayland_view *view = wl_container_of(listener, view, map);
+	assert(data == view->xwayland_surface);
+	qubes_xwayland_surface_map(view);
 }
 
 static void xwayland_surface_unmap(struct wl_listener *listener, void *data)

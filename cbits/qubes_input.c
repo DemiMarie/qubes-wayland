@@ -442,21 +442,51 @@ static void handle_clipboard_request(struct qubes_output *output)
 
 
 // Called when the GUI agent has reconnected to the daemon.
-static void qubes_recreate_window(struct tinywl_view *view)
+static void qubes_recreate_window(struct qubes_output *output)
 {
 	struct wlr_box box;
-	struct qubes_output *output = &view->output;
-
-	if (!qubes_view_ensure_created(view, &box)) {
-		return;
+	switch (output->magic) {
+	case QUBES_VIEW_MAGIC: {
+		struct tinywl_view *view = wl_container_of(output, view, output);
+		wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+		break;
 	}
+	case QUBES_XWAYLAND_MAGIC: {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		box.x = view->xwayland_surface->x;
+		box.y = view->xwayland_surface->y;
+		box.width = view->xwayland_surface->width;
+		box.height = view->xwayland_surface->height;
+		break;
+	}
+	default:
+		assert(!"Invalid output type");
+		abort();
+	}
+
 	output->last_width = box.width, output->last_height = box.height;
+	if (!qubes_output_ensure_created(output, box))
+		return;
 	qubes_send_configure(output, box.width, box.height);
 	if (output->buffer) {
 		qubes_output_dump_buffer(output, box, NULL);
 	}
-	if (qubes_output_mapped(output)) {
+	if (!qubes_output_mapped(output))
+		return;
+	switch (output->magic) {
+	case QUBES_VIEW_MAGIC: {
+		struct tinywl_view *view = wl_container_of(output, view, output);
 		qubes_view_map(view);
+		break;
+	}
+	case QUBES_XWAYLAND_MAGIC: {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		qubes_xwayland_surface_map(view);
+		break;
+	}
+	default:
+		assert(!"Invalid output type");
+		abort();
 	}
 }
 
@@ -467,25 +497,20 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 	switch (msg_type)  {
 	case 2:
 		wlr_log(WLR_INFO, "Reconnecting to GUI daemon");
-		struct tinywl_view *view;
 		struct qubes_output *output;
 		wl_list_for_each(output, backend->views, link) {
 			output->flags &= ~QUBES_OUTPUT_CREATED;
 		}
 		wl_list_for_each(output, backend->views, link) {
-			if (QUBES_VIEW_MAGIC != output->magic) {
-				wlr_log(WLR_ERROR, "NYI: recreating an Xwayland surface");
-				continue;
-			}
-			view = wl_container_of(output, view, output);
-			assert(!(view->output.flags & QUBES_OUTPUT_CREATED));
-			qubes_recreate_window(view);
+			assert(!(output->flags & QUBES_OUTPUT_CREATED));
+			qubes_recreate_window(output);
 		}
 		return;
 	case 1:
 		wlr_log(WLR_INFO, "Must reconnect to GUI daemon");
 		// GUI agent needs reconnection
-		wl_event_source_remove(backend->source);
+		if (backend->source)
+			wl_event_source_remove(backend->source);
 		backend->source = NULL;
 		if (!qubes_rust_reconnect(backend->rust_backend)) {
 			wlr_log(WLR_ERROR, "Fatal error: cannot reconnect to GUI daemon");

@@ -31,3 +31,4 @@ struct qubes_xwayland_view {
 	struct wl_listener commit;
 };
 void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *data);
+void qubes_xwayland_surface_map(struct qubes_xwayland_view *view);
