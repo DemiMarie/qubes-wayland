@@ -17,6 +17,8 @@
 #include <wlr/xwayland.h>
 #include <wlr/util/log.h>
 
+#include <xcb/xproto.h>
+
 #include <qubes-gui-protocol.h>
 
 #include "qubes_clipboard.h"
@@ -34,10 +36,10 @@ static void handle_keypress(struct qubes_output *output, uint32_t timestamp, con
 
 	memcpy(&keypress, ptr, sizeof(keypress));
 	switch (keypress.type) {
-	case 2: // KeyPress
+	case XCB_KEY_PRESS:
 		state = WL_KEYBOARD_KEY_STATE_PRESSED;
 		break;
-	case 3: // KeyRelease
+	case XCB_KEY_RELEASE:
 		state = WL_KEYBOARD_KEY_STATE_RELEASED;
 		break;
 	default:
@@ -76,10 +78,10 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 
 	memcpy(&button, ptr, sizeof(button));
 	switch (button.type) {
-	case 4: // ButtonPress
+	case XCB_BUTTON_PRESS:
 		state = WLR_BUTTON_PRESSED;
 		break;
-	case 5: // ButtonRelease
+	case XCB_BUTTON_RELEASE:
 		state = WLR_BUTTON_RELEASED;
 		break;
 	default:
@@ -88,33 +90,54 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 	}
 
 	switch (button.button) {
-	case 1:
+	case XCB_BUTTON_INDEX_1:
+		/* Left mouse button */
 		wlr_seat_pointer_notify_button(seat, timestamp, 0x110, state);
 		break;
-	case 2:
+	case XCB_BUTTON_INDEX_2:
+		/* Right mouse button */
 		wlr_seat_pointer_notify_button(seat, timestamp, 0x112, state);
 		break;
-	case 3:
+	case XCB_BUTTON_INDEX_3:
+		/* Middle mouse button */
 		wlr_seat_pointer_notify_button(seat, timestamp, 0x111, state);
 		break;
-	case 4:
+	case XCB_BUTTON_INDEX_4:
+		/* Scroll up */
 		wlr_seat_pointer_notify_axis(
-			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, -1.0, -1,
+			seat,
+			timestamp,
+			WLR_AXIS_ORIENTATION_VERTICAL,
+			-15.0,
+			-WLR_POINTER_AXIS_DISCRETE_STEP,
 			WLR_AXIS_SOURCE_WHEEL);
 		break;
-	case 5:
+	case XCB_BUTTON_INDEX_5:
+		/* Scroll down */
 		wlr_seat_pointer_notify_axis(
-			seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, 1.0, 1,
+			seat,
+			timestamp,
+			WLR_AXIS_ORIENTATION_VERTICAL,
+			15.0,
+			WLR_POINTER_AXIS_DISCRETE_STEP,
 			WLR_AXIS_SOURCE_WHEEL);
 		break;
-	case 6:
+	case 6: /* Scroll left */
 		wlr_seat_pointer_notify_axis(
-			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, -1.0, -1,
+			seat,
+			timestamp,
+			WLR_AXIS_ORIENTATION_HORIZONTAL,
+			-15.0,
+			-WLR_POINTER_AXIS_DISCRETE_STEP,
 			WLR_AXIS_SOURCE_WHEEL);
 		break;
-	case 7:
+	case 7: /* Scroll right */
 		wlr_seat_pointer_notify_axis(
-			seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, 1.0, 1,
+			seat,
+			timestamp,
+			WLR_AXIS_ORIENTATION_HORIZONTAL,
+			15.0,
+			WLR_POINTER_AXIS_DISCRETE_STEP,
 			WLR_AXIS_SOURCE_WHEEL);
 		break;
 	default:
@@ -166,10 +189,10 @@ static void handle_crossing(struct qubes_output *output, uint32_t timestamp, con
 	memcpy(&crossing, ptr, sizeof crossing);
 
 	switch (crossing.type) {
-	case 7: // EnterNotify
+	case XCB_ENTER_NOTIFY:
 		handle_pointer_movement(output, crossing.x, crossing.y, timestamp, seat);
 		return;
-	case 8: // LeaveNotify
+	case XCB_LEAVE_NOTIFY:
 		wlr_seat_pointer_notify_clear_focus(seat);
 		wlr_seat_pointer_notify_frame(seat);
 		return;
@@ -257,11 +280,11 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp, const 
 
 	memcpy(&focus, ptr, sizeof focus);
 	switch (focus.type) {
-	case 9: // FocusIn
+	case XCB_FOCUS_IN:
 		wlr_log(WLR_INFO, "Window %" PRIu32 " has gained keyboard focus", output->window_id);
 		qubes_give_view_keyboard_focus(output, qubes_output_surface(output));
 		break;
-	case 10: // FocusOut
+	case XCB_FOCUS_OUT:
 		wlr_log(WLR_INFO, "Window %" PRIu32 " has lost keyboard focus", output->window_id);
 		if (seat->keyboard_state.focused_surface) {
 			/*
