@@ -187,6 +187,7 @@ static void xwayland_surface_set_class(struct wl_listener *listener, void *data)
 	wlr_log(WLR_ERROR, "Set-class request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
+
 static void xwayland_surface_set_parent(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_parent);
 	struct wlr_xwayland_surface *surface = data;
@@ -195,6 +196,7 @@ static void xwayland_surface_set_parent(struct wl_listener *listener, void *data
 	wlr_log(WLR_ERROR, "Set-parent request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
+
 static void xwayland_surface_set_hints(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_hints);
 	struct wlr_xwayland_surface *surface = data;
@@ -203,6 +205,7 @@ static void xwayland_surface_set_hints(struct wl_listener *listener, void *data)
 	wlr_log(WLR_ERROR, "Set-hints request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
+
 static void xwayland_surface_set_override_redirect(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_override_redirect);
 	struct wlr_xwayland_surface *surface = data;
