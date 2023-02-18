@@ -624,7 +624,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 		assert(hdr.untrusted_len == 0);
 		switch (output->magic) {
 		case QUBES_VIEW_MAGIC: {
-			struct tinywl_view *view = (struct tinywl_view *)output;
+			struct tinywl_view *view = wl_container_of(output, view, output);
 			if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL)
 				wlr_xdg_toplevel_send_close(view->xdg_surface->toplevel);
 			else if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP)
@@ -632,7 +632,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 			break;
 		}
 		case QUBES_XWAYLAND_MAGIC: {
-			struct qubes_xwayland_view *view = (struct qubes_xwayland_view *)output;
+			struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 			wlr_xwayland_surface_close(view->xwayland_surface);
 			break;
 		default:
