@@ -109,11 +109,10 @@ wlroots_options = [
   'allocators=[]',
   'auto_features=disabled',
 ]
-if false
-  wlroots = dependency('wlroots',
+wlroots = dependency('wlroots',
                        version: ['>=0.16.0', '<0.17.0'],
                        default_options: wlroots_options)
-else
+if not wlroots.found()
   wlroots_proj = subproject(
     'wlroots',
     default_options: wlroots_options,
