@@ -13,8 +13,8 @@ crate-type = ["staticlib"]
 [dependencies]
 qubes-gui-agent-proto = { path = "gui-rust/qubes-gui-agent-proto" }
 
-[dependencies.qubes-gui-client]
-path = "gui-rust/qubes-gui-client"
+[dependencies.qubes-gui-connection]
+path = "gui-rust/qubes-gui-connection"
 
 [dependencies.qubes-gui]
 path = "gui-rust/qubes-gui"

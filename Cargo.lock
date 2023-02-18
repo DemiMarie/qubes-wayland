@@ -22,7 +22,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "qubes-gui-client"
+name = "qubes-gui-connection"
 version = "0.1.0"
 dependencies = [
  "qubes-castable",
@@ -37,7 +37,7 @@ dependencies = [
  "qubes-castable",
  "qubes-gui",
  "qubes-gui-agent-proto",
- "qubes-gui-client",
+ "qubes-gui-connection",
 ]
 
 [[package]]

@@ -30,7 +30,7 @@ pub const OUTPUT_NAME: &str = "qubes";
 
 pub struct QubesData {
     enabled: bool, // See NOTE: Enabling and disabling GUI messages
-    pub agent: qubes_gui_client::Client,
+    pub agent: qubes_gui_connection::Connection,
     wid: u32,
     pub map: BTreeMap<NonZeroU32, *mut c_void>,
     start: std::time::Instant,
@@ -77,7 +77,7 @@ impl QubesData {
             ref mut enabled,
             ..
         } = self;
-        let mut protocol_error = |agent: &qubes_gui_client::Client| {
+        let mut protocol_error = |agent: &qubes_gui_connection::Connection| {
             *enabled = false;
             let hdr = qubes_gui::UntrustedHeader {
                 ty: 0,
@@ -275,7 +275,7 @@ pub unsafe extern "C" fn qubes_rust_backend_free(backend: *mut c_void) {
 }
 
 fn setup_qubes_backend(domid: u16) -> RustBackend {
-    let agent = qubes_gui_client::Client::agent(domid).unwrap();
+    let agent = qubes_gui_connection::Connection::agent(domid).unwrap();
     // we now have a agent 🙂
     QubesData {
         agent,
