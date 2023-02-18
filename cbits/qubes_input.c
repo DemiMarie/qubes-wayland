@@ -596,7 +596,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 			}
 		}
 		assert(hdr.untrusted_len == sizeof(struct msg_keymap_notify));
-		_Static_assert(sizeof(backend->keymap) == sizeof(struct msg_keymap_notify), "wrong size");
+		static_assert(sizeof(backend->keymap) == sizeof(struct msg_keymap_notify), "wrong size");
 		memcpy(&backend->keymap, ptr, hdr.untrusted_len);
 		return;
 	}
