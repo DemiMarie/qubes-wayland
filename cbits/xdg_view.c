@@ -40,6 +40,7 @@ static void qubes_request_maximize(
 #else
 	wlr_log(WLR_ERROR, "window maximize: not implemented");
 #endif
+	wlr_xdg_surface_schedule_configure(view->xdg_surface);
 }
 
 static void qubes_request_minimize(
@@ -55,7 +56,57 @@ static void qubes_request_minimize(
 		// Mapped implies created
 		qubes_change_window_flags(&view->output, WINDOW_FLAG_MINIMIZE, 0);
 	}
+	wlr_xdg_surface_schedule_configure(view->xdg_surface);
 }
+
+/*
+ * This requests a user-driven interactive move of the surface.  There is no way
+ * to implement this in Qubes OS so this request is largely ignored.  It is
+ * still necessary to send a configure event.
+ */
+static void qubes_request_move(
+		struct wl_listener *listener, void *data)
+{
+	struct tinywl_view *view = wl_container_of(listener, view, request_move);
+	struct qubes_output *output = &view->output;
+	struct wlr_xdg_toplevel_move_event *event __attribute__((unused)) = data;
+
+	assert(QUBES_VIEW_MAGIC == output->magic);
+	wlr_xdg_surface_schedule_configure(view->xdg_surface);
+}
+
+/*
+ * This is used to request an interactive resize of the surface.  There is no way
+ * to implement this in Qubes OS so this request is largely ignored.  It is
+ * still necessary to send a configure event.
+ */
+static void qubes_request_resize(
+		struct wl_listener *listener, void *data)
+{
+	struct tinywl_view *view = wl_container_of(listener, view, request_resize);
+	struct qubes_output *output = &view->output;
+	struct wlr_xdg_toplevel_resize_event *event __attribute__((unused)) = data;
+
+	assert(QUBES_VIEW_MAGIC == output->magic);
+	wlr_xdg_surface_schedule_configure(view->xdg_surface);
+}
+
+/*
+ * This is used to request that the compositor show the window menu, if any.
+ * There is no way to implement this in Qubes OS so this request is largely
+ * ignored.  It is still necessary to send a configure event.
+ */
+static void qubes_request_show_window_menu(
+		struct wl_listener *listener, void *data)
+{
+	struct tinywl_view *view = wl_container_of(listener, view, request_show_window_menu);
+	struct qubes_output *output = &view->output;
+	struct wlr_xdg_toplevel_show_window_menu_event *event __attribute__((unused)) = data;
+
+	assert(QUBES_VIEW_MAGIC == output->magic);
+	wlr_xdg_surface_schedule_configure(view->xdg_surface);
+}
+
 
 static void qubes_request_fullscreen(
 		struct wl_listener *listener, void *data __attribute__((unused)))
@@ -70,6 +121,7 @@ static void qubes_request_fullscreen(
 		// Mapped implies created
 		qubes_change_window_flags(&view->output, WINDOW_FLAG_FULLSCREEN, 0);
 	}
+	wlr_xdg_surface_schedule_configure(view->xdg_surface);
 }
 
 static void qubes_set_title(
@@ -161,6 +213,9 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 		wl_list_remove(&view->request_maximize.link);
 		wl_list_remove(&view->request_fullscreen.link);
 		wl_list_remove(&view->request_minimize.link);
+		wl_list_remove(&view->request_move.link);
+		wl_list_remove(&view->request_resize.link);
+		wl_list_remove(&view->request_show_window_menu.link);
 		wl_list_remove(&view->set_title.link);
 		wl_list_remove(&view->set_app_id.link);
 		wl_list_remove(&view->ack_configure.link);
@@ -243,14 +298,28 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data) {
 		struct wlr_xdg_toplevel *const toplevel = xdg_surface->toplevel;
 		view->request_maximize.notify = qubes_request_maximize;
 		wl_signal_add(&toplevel->events.request_maximize, &view->request_maximize);
-		view->request_minimize.notify = qubes_request_minimize;
-		wl_signal_add(&toplevel->events.request_minimize, &view->request_minimize);
+
 		view->request_fullscreen.notify = qubes_request_fullscreen;
 		wl_signal_add(&toplevel->events.request_fullscreen, &view->request_fullscreen);
+
+		view->request_minimize.notify = qubes_request_minimize;
+		wl_signal_add(&toplevel->events.request_minimize, &view->request_minimize);
+
+		view->request_move.notify = qubes_request_move;
+		wl_signal_add(&toplevel->events.request_move, &view->request_move);
+
+		view->request_resize.notify = qubes_request_resize;
+		wl_signal_add(&toplevel->events.request_resize, &view->request_resize);
+
+		view->request_show_window_menu.notify = qubes_request_show_window_menu;
+		wl_signal_add(&toplevel->events.request_show_window_menu, &view->request_show_window_menu);
+
 		view->set_title.notify = qubes_set_title;
 		wl_signal_add(&toplevel->events.set_title, &view->set_title);
+
 		view->set_app_id.notify = qubes_set_app_id;
 		wl_signal_add(&toplevel->events.set_app_id, &view->set_app_id);
+
 		view->ack_configure.notify = qubes_toplevel_ack_configure;
 		wl_signal_add(&xdg_surface->events.ack_configure, &view->ack_configure);
 	} else if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
