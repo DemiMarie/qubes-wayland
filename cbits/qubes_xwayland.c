@@ -36,8 +36,6 @@ static void xwayland_surface_destroy(struct wl_listener *listener, void *data __
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
 	wl_list_remove(&view->request_configure.link);
-	wl_list_remove(&view->request_move.link);
-	wl_list_remove(&view->request_resize.link);
 	wl_list_remove(&view->request_minimize.link);
 	wl_list_remove(&view->request_maximize.link);
 	wl_list_remove(&view->request_fullscreen.link);
@@ -116,24 +114,6 @@ static void xwayland_surface_request_configure(struct wl_listener *listener, voi
 	struct wlr_xwayland_surface_configure_event *event = data;
 
 	wlr_xwayland_surface_configure(view->xwayland_surface, event->x, event->y, event->width, event->height);
-}
-
-static void xwayland_surface_request_move(struct wl_listener *listener, void *data) {
-	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_move);
-	struct wlr_xwayland_move_event *event = data;
-	(void)event, (void)view;
-	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Move request for Xwayland window %" PRIu32 " not yet implemented",
-	        view->output.window_id);
-}
-
-static void xwayland_surface_request_resize(struct wl_listener *listener, void *data) {
-	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_resize);
-	struct wlr_xwayland_resize_event *event = data;
-	(void)event, (void)view;
-	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Resize request for Xwayland window %" PRIu32 " not yet implemented",
-	        view->output.window_id);
 }
 
 static void xwayland_surface_request_minimize(struct wl_listener *listener, void *data) {
@@ -269,10 +249,6 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 	wl_signal_add(&surface->events.unmap, &view->unmap);
 	view->request_configure.notify = xwayland_surface_request_configure;
 	wl_signal_add(&surface->events.request_configure, &view->request_configure);
-	view->request_move.notify = xwayland_surface_request_move;
-	wl_signal_add(&surface->events.request_move, &view->request_move);
-	view->request_resize.notify = xwayland_surface_request_resize;
-	wl_signal_add(&surface->events.request_resize, &view->request_resize);
 	view->request_minimize.notify = xwayland_surface_request_minimize;
 	wl_signal_add(&surface->events.request_minimize, &view->request_minimize);
 	view->request_maximize.notify = xwayland_surface_request_maximize;
