@@ -174,10 +174,13 @@ static void xwayland_surface_set_geometry(struct wl_listener *listener, void *da
 static void xwayland_surface_set_class(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_class);
 	struct wlr_xwayland_surface *surface = data;
-	(void)view, (void)surface;
+
+	assert(view->output.magic == QUBES_XWAYLAND_MAGIC);
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Set-class request for Xwayland window %" PRIu32 " not yet implemented",
-	        view->output.window_id);
+
+	if (qubes_output_mapped(&view->output)) {
+		qubes_output_set_class(&view->output, surface->class);
+	}
 }
 
 static void xwayland_surface_set_hints(struct wl_listener *listener, void *data) {
