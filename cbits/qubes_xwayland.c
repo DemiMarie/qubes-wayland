@@ -150,10 +150,22 @@ static void xwayland_surface_request_minimize(struct wl_listener *listener, void
 static void xwayland_surface_request_maximize(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_maximize);
 	struct wlr_xwayland_surface *surface = data;
-	(void)view, (void)surface;
+
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Maximize request for Xwayland window %" PRIu32 " not yet implemented",
-	        view->output.window_id);
+#if WINDOW_FLAG_MAXIMIZE
+	bool maximized = surface->maximized_vert && surface->maximized_horz;
+	if (qubes_output_mapped(output)) {
+		wlr_log(WLR_DEBUG, "Maximizing window " PRIu32, output->window_id);
+		// Mapped implies created
+		qubes_change_window_flags(&view->output,
+				          maximized ? WINDOW_FLAG_MAXIMIZE : 0,
+					  maximized ? WINDOW_FLAG_FULLSCREEN | WINDOW_FLAG_MINIMIZE : WINDOW_FLAG_MAXIMIZE);
+	}
+#else
+	(void)surface;
+	wlr_log(WLR_ERROR, "window %" PRIu32 ": maximize: not implemented",
+		view->output.window_id);
+#endif
 }
 static void xwayland_surface_request_fullscreen(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_fullscreen);
