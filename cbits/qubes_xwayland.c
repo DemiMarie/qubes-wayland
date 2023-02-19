@@ -8,6 +8,10 @@
 #include "qubes_xwayland.h"
 #include "main.h"
 
+#ifndef WINDOW_FLAG_MAXIMIZE
+#define WINDOW_FLAG_MAXIMIZE 0
+#endif
+
 static bool xwayland_get_box(struct wlr_xwayland_surface *surface, struct wlr_box *box)
 {
 	if (surface->width <= 0 ||
@@ -131,10 +135,17 @@ static void xwayland_surface_request_configure(struct wl_listener *listener, voi
 static void xwayland_surface_request_minimize(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_minimize);
 	struct wlr_xwayland_minimize_event *event = data;
-	(void)event, (void)view;
+
+	assert(view->output.magic == QUBES_XWAYLAND_MAGIC);
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Minimize request for Xwayland window %" PRIu32 " not yet implemented",
-	        view->output.window_id);
+	if (qubes_output_mapped(&view->output)) {
+		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " %sminimized",
+			view->output.window_id, event->minimize ? "" : "not ");
+		// Mapped implies created
+		qubes_change_window_flags(&view->output,
+					  event->minimize ? WINDOW_FLAG_MINIMIZE : 0,
+					  event->minimize ? WINDOW_FLAG_MAXIMIZE | WINDOW_FLAG_FULLSCREEN : WINDOW_FLAG_MINIMIZE);
+	}
 }
 static void xwayland_surface_request_maximize(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_maximize);
