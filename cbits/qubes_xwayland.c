@@ -112,6 +112,7 @@ static void xwayland_surface_set_size(struct qubes_xwayland_view *view,
                                       int32_t x, int32_t y,
                                       uint32_t width, uint32_t height) {
 	struct qubes_output *output = &view->output;
+
 	wlr_log(WLR_DEBUG, "configuring surface at %p", view);
 	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 	if (width <= 0 || height <= 0 ||
@@ -147,6 +148,7 @@ static void xwayland_surface_request_minimize(struct wl_listener *listener, void
 					  event->minimize ? WINDOW_FLAG_MAXIMIZE | WINDOW_FLAG_FULLSCREEN : WINDOW_FLAG_MINIMIZE);
 	}
 }
+
 static void xwayland_surface_request_maximize(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_maximize);
 	struct wlr_xwayland_surface *surface = data;
