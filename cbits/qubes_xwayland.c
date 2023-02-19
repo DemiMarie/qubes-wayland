@@ -167,14 +167,23 @@ static void xwayland_surface_request_maximize(struct wl_listener *listener, void
 		view->output.window_id);
 #endif
 }
+
 static void xwayland_surface_request_fullscreen(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, request_fullscreen);
 	struct wlr_xwayland_surface *surface = data;
-	(void)view, (void)surface;
+	struct qubes_output *output = &view->output;
+
 	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Fullscreen request for Xwayland window %" PRIu32 " not yet implemented",
-	        view->output.window_id);
+	assert(QUBES_XWAYLAND_MAGIC == output->magic);
+	if (qubes_output_mapped(output)) {
+		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " fullscreen", output->window_id);
+		// Mapped implies created
+		qubes_change_window_flags(&view->output,
+					  surface->fullscreen ? WINDOW_FLAG_FULLSCREEN : 0,
+					  surface->fullscreen ? WINDOW_FLAG_MINIMIZE : WINDOW_FLAG_FULLSCREEN);
+	}
 }
+
 static void xwayland_surface_set_title(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_title);
 	(void)data;
