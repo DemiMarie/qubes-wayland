@@ -41,7 +41,6 @@ static void xwayland_surface_destroy(struct wl_listener *listener, void *data __
 	wl_list_remove(&view->request_fullscreen.link);
 	wl_list_remove(&view->set_title.link);
 	wl_list_remove(&view->set_class.link);
-	wl_list_remove(&view->set_parent.link);
 	wl_list_remove(&view->set_hints.link);
 	wl_list_remove(&view->set_override_redirect.link);
 	if (view->commit.link.next)
@@ -60,6 +59,7 @@ void qubes_xwayland_surface_map(struct qubes_xwayland_view *view) {
 	assert(surface->surface);
 	struct qubes_output *output = &view->output;
 	struct wlr_box box;
+	uint32_t parent_window_id;
 
 	assert(QUBES_XWAYLAND_MAGIC == output->magic);
 	if (!xwayland_get_box(surface, &box))
@@ -72,7 +72,19 @@ void qubes_xwayland_surface_map(struct qubes_xwayland_view *view) {
 	wl_signal_add(&surface->surface->events.commit, &view->commit);
 
 	qubes_output_set_surface(output, surface->surface);
-	qubes_output_map(output, 0, surface->override_redirect);
+
+	if (surface->parent) {
+		struct qubes_xwayland_view *parent_view = surface->parent->data;
+
+		assert(parent_view);
+		assert(parent_view->output.magic == QUBES_XWAYLAND_MAGIC);
+		parent_window_id = parent_view->output.window_id;
+		assert(parent_window_id != 0);
+	} else {
+		parent_window_id = 0;
+	}
+
+	qubes_output_map(output, parent_window_id, surface->override_redirect);
 }
 
 static void xwayland_surface_map(struct wl_listener *listener, void *data) {
@@ -168,15 +180,6 @@ static void xwayland_surface_set_class(struct wl_listener *listener, void *data)
 	        view->output.window_id);
 }
 
-static void xwayland_surface_set_parent(struct wl_listener *listener, void *data) {
-	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_parent);
-	struct wlr_xwayland_surface *surface = data;
-	(void)view, (void)surface;
-	assert(view->destroy.link.next);
-	wlr_log(WLR_ERROR, "Set-parent request for Xwayland window %" PRIu32 " not yet implemented",
-	        view->output.window_id);
-}
-
 static void xwayland_surface_set_hints(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_hints);
 	struct wlr_xwayland_surface *surface = data;
@@ -259,8 +262,6 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 	wl_signal_add(&surface->events.set_title, &view->set_title);
 	view->set_class.notify = xwayland_surface_set_class;
 	wl_signal_add(&surface->events.set_class, &view->set_class);
-	view->set_parent.notify = xwayland_surface_set_parent;
-	wl_signal_add(&surface->events.set_parent, &view->set_parent);
 	view->set_hints.notify = xwayland_surface_set_hints;
 	wl_signal_add(&surface->events.set_hints, &view->set_hints);
 	view->set_override_redirect.notify = xwayland_surface_set_override_redirect;
@@ -271,6 +272,7 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener, void *dat
 	if (surface->surface)
 		wl_signal_add(&surface->surface->events.commit, &view->commit);
 	wlr_log(WLR_DEBUG, "created surface at %p", view);
+	surface->data = view;
 	return;
 
 cleanup:
