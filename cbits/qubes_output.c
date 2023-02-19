@@ -540,4 +540,29 @@ void qubes_output_configure(struct qubes_output *output, struct wlr_box box) {
 	wlr_output_send_frame(&output->output);
 }
 
+void qubes_output_set_class(struct qubes_output *output, const char *class)
+{
+	assert(qubes_output_created(output));
+	assert(output->window_id);
+	wlr_log(WLR_DEBUG, "Sending MSG_WMCLASS (0x%x) to window %" PRIu32, MSG_WMCLASS, output->window_id);
+	struct {
+		struct msg_hdr header;
+		struct msg_wmclass class;
+	} msg = {
+		.header = {
+			.type = MSG_WMCLASS,
+			.window = output->window_id,
+			.untrusted_len = sizeof(struct msg_wmclass),
+		},
+		.class = {
+			.res_class = { 0 },
+			.res_name = { 0 },
+		},
+	};
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.class);
+	strncpy(msg.class.res_class, class, sizeof(msg.class.res_class) - 1);
+	// Asserted above, checked at call sites
+	qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr *)&msg);
+}
+
 /* vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8: */
