@@ -205,12 +205,44 @@ static void qubes_surface_commit(
 	struct tinywl_view *view = wl_container_of(listener, view, commit);
 	struct qubes_output *output = &view->output;
 	struct wlr_box box;
+	struct wlr_xdg_surface *surface = view->xdg_surface;
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
 	assert(output->scene_output);
 	assert(output->scene_output->output == &output->output);
 	if (!qubes_view_ensure_created(view, &box))
 		return;
+	if (surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		uint32_t flags = ( (surface->toplevel->current.min_width ? XCB_ICCCM_SIZE_HINT_P_MIN_SIZE : 0)
+				 | (surface->toplevel->current.min_height ? XCB_ICCCM_SIZE_HINT_P_MIN_SIZE : 0)
+				 | (surface->toplevel->current.max_width ? XCB_ICCCM_SIZE_HINT_P_MAX_SIZE : 0)
+				 | (surface->toplevel->current.max_height ? XCB_ICCCM_SIZE_HINT_P_MAX_SIZE : 0)
+				 );
+		struct {
+			struct msg_hdr header;
+			struct msg_window_hints hints;
+		} msg = {
+			.header = {
+				.type = MSG_MAP,
+				.window = output->window_id,
+				.untrusted_len = sizeof(struct msg_map_info),
+			},
+			.hints = {
+				.flags = flags,
+				.min_width = surface->toplevel->current.min_width,
+				.min_height = surface->toplevel->current.min_height,
+				.max_width = surface->toplevel->current.max_width,
+				.max_height = surface->toplevel->current.max_height,
+				.width_inc = 0,
+				.height_inc = 0,
+				.base_width = 0,
+				.base_height = 0,
+			},
+		};
+		QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.hints);
+		qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
+	}
+
 	qubes_output_configure(output, box);
 }
 

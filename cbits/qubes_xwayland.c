@@ -220,8 +220,14 @@ static void xwayland_surface_set_class(struct wl_listener *listener, void *data)
 static void xwayland_surface_set_hints(struct wl_listener *listener, void *data) {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, set_hints);
 	struct wlr_xwayland_surface *surface = data;
-	(void)view, (void)surface;
+
+	assert(view == surface->data);
 	assert(view->destroy.link.next);
+
+	if (surface->hints == NULL) {
+		return;
+	}
+
 	wlr_log(WLR_ERROR, "Set-hints request for Xwayland window %" PRIu32 " not yet implemented",
 	        view->output.window_id);
 }
@@ -244,13 +250,49 @@ static void qubes_xwayland_surface_commit(
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, commit);
 	struct qubes_output *output = &view->output;
 	struct wlr_box box;
+	struct wlr_xwayland_surface *surface;
+	xcb_size_hints_t *hints;
 
 	assert(QUBES_XWAYLAND_MAGIC == output->magic);
 	assert(output->scene_output);
 	assert(output->scene_output->output == &output->output);
-	if (!xwayland_get_box(view->xwayland_surface, &box)) {
+	surface = view->xwayland_surface;
+	if (!xwayland_get_box(surface, &box)) {
 		wlr_log(WLR_ERROR, "NO BOX");
 		return;
+	}
+	hints = surface->size_hints;
+	if (hints != NULL) {
+		const uint32_t allowed_flags = (
+				XCB_ICCCM_SIZE_HINT_US_POSITION |
+				XCB_ICCCM_SIZE_HINT_P_POSITION |
+				XCB_ICCCM_SIZE_HINT_P_MIN_SIZE |
+				XCB_ICCCM_SIZE_HINT_P_MAX_SIZE |
+				XCB_ICCCM_SIZE_HINT_P_RESIZE_INC |
+				XCB_ICCCM_SIZE_HINT_BASE_SIZE);
+		struct {
+			struct msg_hdr header;
+			struct msg_window_hints hints;
+		} msg = {
+			.header = {
+				.type = MSG_MAP,
+				.window = output->window_id,
+				.untrusted_len = sizeof(struct msg_map_info),
+			},
+			.hints = {
+				.flags = hints->flags & allowed_flags,
+				.min_width = hints->min_width,
+				.min_height = hints->min_height,
+				.max_width = hints->max_width,
+				.max_height = hints->max_height,
+				.width_inc = hints->width_inc,
+				.height_inc = hints->height_inc,
+				.base_width = hints->base_width,
+				.base_height = hints->base_height,
+			},
+		};
+		QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.hints);
+		qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
 	}
 	qubes_output_configure(output, box);
 }
