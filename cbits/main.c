@@ -97,28 +97,6 @@ static void qubes_send_frame_done(struct wlr_scene_buffer *surface,
 	wlr_scene_buffer_send_frame_done(surface, data);
 }
 
-static int qubes_accept_new_socket_connection(int fd, uint32_t mask, void *data)
-{
-	struct tinywl_server *server = data;
-	struct sockaddr_un addr;
-	socklen_t len = sizeof addr;
-	int new_fd = accept4(fd, &addr, &len, SOCK_NONBLOCK | SOCK_CLOEXEC);
-
-	(void)server;
-	if (new_fd == -1) {
-		wlr_log(WLR_ERROR, "accept4() failed: %m");
-		return 0;
-	}
-
-	assert(addr.sun_family == AF_UNIX);
-	assert(len >= offsetof(struct sockaddr_un, sun_path));
-	wlr_log(WLR_INFO, "accept4() succeeded :)");
-	ssize_t res = write(new_fd, "Hello, world!\n", sizeof "Hello, world!");
-	(void)res;
-	close(new_fd);
-	return 0;
-}
-
 static int qubes_send_frame_callbacks(void *data)
 {
 	struct tinywl_server *server = data;
@@ -490,7 +468,7 @@ parse_verbosity(const char *optarg)
 }
 
 int main(int argc, char *argv[]) {
-	const char *startup_cmd = NULL, *listener_str = NULL;
+	const char *startup_cmd = NULL;
 	char *domid_str = NULL;
 	int c, loglevel = WLR_ERROR;
 	if (argc < 1) {
@@ -521,11 +499,6 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'h':
 			usage(argv[0], 0);
-		case 'l':
-			if (listener_str)
-				errx(1, "Listening on multiple sockets not supported");
-			listener_str = optarg;
-			break;
 		case 'n':
 			handle_sigint = false;
 			break;
@@ -715,47 +688,6 @@ int main(int argc, char *argv[]) {
 
 	struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
 	assert(loop);
-
-	if (listener_str) {
-		struct sockaddr_un sockaddr = { .sun_family = AF_UNIX };
-		int one = 1;
-		socklen_t sock_len = 0;
-		if (*socket_path == '/' && !*listener_str)
-			listener_str = socket_path;
-		if (*listener_str) {
-			size_t _sock_len = strlen(listener_str);
-
-			if (_sock_len >= sizeof sockaddr.sun_path)
-				errx(1, "Name %s too long for AF_UNIX socket", listener_str);
-			memcpy(sockaddr.sun_path, listener_str, _sock_len + 1);
-			sock_len = (socklen_t)sock_len;
-		} else {
-			_Static_assert(sizeof(uid_t) == 4, "uid_t is 32 bits");
-			int res = snprintf(sockaddr.sun_path, sizeof sockaddr.sun_path,
-					   "/run/user/%" PRIu32 "/qubes-proxy-%s", (uint32_t)getuid(), socket_path);
-			if (res < 0)
-				err(1, "snprintf");
-			if (res >= (int)sizeof sockaddr.sun_path)
-				errx(1, "Cannot fit socket path into %zu bytes", sizeof sockaddr.sun_path);
-			sock_len = (socklen_t)res;
-		}
-
-		if ((server->listening_socket = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0)) < 0)
-			err(1, "socket(%s)", listener_str);
-		if (setsockopt(server->listening_socket, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one))
-			err(1, "setsockopt(SO_REUSEADDR, 1)");
-		while (bind(server->listening_socket,
-			 (struct sockaddr *)&sockaddr,
-			 sock_len + offsetof(struct sockaddr_un, sun_path) + 1)) {
-			if (errno != EADDRINUSE)
-				err(1, "bind(%s)", listener_str);
-			(void)unlink(sockaddr.sun_path);
-		}
-		if (listen(server->listening_socket, 64))
-			err(1, "listen(%d, 64)", server->listening_socket);
-		if (!(server->listener = wl_event_loop_add_fd(loop, server->listening_socket, EPOLLIN, qubes_accept_new_socket_connection, server)))
-			err(1, "Cannot setup socket listener!");
-	}
 
 	if (!(server->timer = wl_event_loop_add_timer(loop, qubes_send_frame_callbacks, server))) {
 		wlr_log(WLR_ERROR, "Cannot create timer");
