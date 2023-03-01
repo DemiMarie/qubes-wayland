@@ -222,6 +222,7 @@ static void xwayland_surface_set_hints(struct wl_listener *listener, void *data)
 	struct wlr_xwayland_surface *surface = data;
 
 	assert(view == surface->data);
+	assert(view->output.magic == QUBES_XWAYLAND_MAGIC);
 	assert(view->destroy.link.next);
 
 	if (surface->hints == NULL) {
@@ -275,7 +276,7 @@ static void qubes_xwayland_surface_commit(
 			struct msg_window_hints hints;
 		} msg = {
 			.header = {
-				.type = MSG_MAP,
+				.type = MSG_WINDOW_HINTS,
 				.window = output->window_id,
 				.untrusted_len = sizeof(struct msg_map_info),
 			},
