@@ -19,6 +19,13 @@
 
 #include <xcb/xproto.h>
 
+#ifdef QUBES_HAS_SYSTEMD
+#include <systemd/sd-daemon.h>
+#else
+#define sd_notify(...) do {} while (0)
+#define sd_notifyf(...) do {} while (0)
+#endif
+
 #include <qubes-gui-protocol.h>
 
 #include "qubes_clipboard.h"
@@ -528,14 +535,22 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 			assert(!(output->flags & QUBES_OUTPUT_CREATED));
 			qubes_recreate_window(output);
 		}
+		if (!backend->connected) {
+			sd_notify(0, "READY=1\nSTATUS=GUI daemon connected\n");
+			backend->connected = true;
+		} else {
+			sd_notify(0, "STATUS=GUI daemon connected\n");
+		}
 		return;
 	case 1:
+		sd_notify(0, "STATUS=GUI daemon disconnected, trying to reconnect\n");
 		wlr_log(WLR_INFO, "Must reconnect to GUI daemon");
 		// GUI agent needs reconnection
 		if (backend->source)
 			wl_event_source_remove(backend->source);
 		backend->source = NULL;
 		if (!qubes_rust_reconnect(backend->rust_backend)) {
+			sd_notify(0, "STATUS=Cound not reconnect to GUI daemon, exiting!\n");
 			wlr_log(WLR_ERROR, "Fatal error: cannot reconnect to GUI daemon");
 			wl_display_terminate(backend->display);
 			return;
@@ -547,11 +562,16 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 				qubes_backend_on_fd,
 				backend);
 		if (!backend->source) {
+			sd_notifyf(0, "STATUS=Cannot re-register vchan file descriptor: %s\nERRNO=%d",
+				      strerror(errno), errno);
 			wlr_log(WLR_ERROR, "Fatal error: Cannot re-register vchan file descriptor");
 			wl_display_terminate(backend->display);
 		}
 		return;
 	case 3:
+		sd_notify(0,
+			  "STATUS=Protocol error occurred, but no need to reconnect (fatal)\nERRNO=%d",
+			  EPROTO);
 		wl_display_terminate(backend->display);
 		return;
 	default:
