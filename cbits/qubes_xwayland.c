@@ -278,7 +278,7 @@ static void qubes_xwayland_surface_commit(
 			.header = {
 				.type = MSG_WINDOW_HINTS,
 				.window = output->window_id,
-				.untrusted_len = sizeof(struct msg_map_info),
+				.untrusted_len = sizeof(msg.hints),
 			},
 			.hints = {
 				.flags = hints->flags & allowed_flags,

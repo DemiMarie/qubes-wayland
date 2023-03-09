@@ -223,9 +223,9 @@ static void qubes_surface_commit(
 			struct msg_window_hints hints;
 		} msg = {
 			.header = {
-				.type = MSG_MAP,
+				.type = MSG_WINDOW_HINTS,
 				.window = output->window_id,
-				.untrusted_len = sizeof(struct msg_map_info),
+				.untrusted_len = sizeof(msg.hints),
 			},
 			.hints = {
 				.flags = flags,
