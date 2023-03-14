@@ -747,7 +747,8 @@ int main(int argc, char *argv[]) {
 	/* Once wl_display_run returns, we shut down the server */
 	wl_display_destroy_clients(server->wl_display);
 	wl_event_source_remove(sighup);
-	wl_event_source_remove(sigint);
+	if (sigint)
+		wl_event_source_remove(sigint);
 	wl_event_source_remove(sigterm);
 	wl_event_source_remove(server->timer);
 
