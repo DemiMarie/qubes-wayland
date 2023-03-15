@@ -1,16 +1,16 @@
 #define _POSIX_C_SOURCE 200809L
 #include "common.h"
-#include <stdlib.h>
-#include <stdio.h>
-#include <inttypes.h>
 #include <err.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "config.h"
 
-#include <time.h>
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <wayland-server-core.h>
 
@@ -18,13 +18,13 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 
-#include "qubes_output.h"
-#include "qubes_backend.h"
-#include "qubes_xwayland.h"
 #include "main.h"
+#include "qubes_backend.h"
+#include "qubes_output.h"
+#include "qubes_xwayland.h"
 
-static void qubes_request_maximize(
-	struct wl_listener *listener, void *data __attribute__((unused)))
+static void qubes_request_maximize(struct wl_listener *listener,
+                                   void *data __attribute__((unused)))
 {
 	/* QUBES HOOK: MSG_WINDOW_FLAGS: ask GUI daemon to maximize window */
 	struct tinywl_view *view = wl_container_of(listener, view, request_maximize);
@@ -43,8 +43,8 @@ static void qubes_request_maximize(
 	wlr_xdg_surface_schedule_configure(view->xdg_surface);
 }
 
-static void qubes_request_minimize(
-		struct wl_listener *listener, void *data __attribute__((unused)))
+static void qubes_request_minimize(struct wl_listener *listener,
+                                   void *data __attribute__((unused)))
 {
 	/* QUBES HOOK: MSG_WINDOW_FLAGS: ask GUI daemon to minimize window */
 	struct tinywl_view *view = wl_container_of(listener, view, request_minimize);
@@ -52,7 +52,8 @@ static void qubes_request_minimize(
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
 	if (qubes_output_mapped(output)) {
-		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " minimized", output->window_id);
+		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " minimized",
+		        output->window_id);
 		// Mapped implies created
 		qubes_change_window_flags(&view->output, WINDOW_FLAG_MINIMIZE, 0);
 	}
@@ -64,8 +65,7 @@ static void qubes_request_minimize(
  * to implement this in Qubes OS so this request is largely ignored.  It is
  * still necessary to send a configure event.
  */
-static void qubes_request_move(
-		struct wl_listener *listener, void *data)
+static void qubes_request_move(struct wl_listener *listener, void *data)
 {
 	struct tinywl_view *view = wl_container_of(listener, view, request_move);
 	struct qubes_output *output = &view->output;
@@ -76,12 +76,11 @@ static void qubes_request_move(
 }
 
 /*
- * This is used to request an interactive resize of the surface.  There is no way
- * to implement this in Qubes OS so this request is largely ignored.  It is
+ * This is used to request an interactive resize of the surface.  There is no
+ * way to implement this in Qubes OS so this request is largely ignored.  It is
  * still necessary to send a configure event.
  */
-static void qubes_request_resize(
-		struct wl_listener *listener, void *data)
+static void qubes_request_resize(struct wl_listener *listener, void *data)
 {
 	struct tinywl_view *view = wl_container_of(listener, view, request_resize);
 	struct qubes_output *output = &view->output;
@@ -96,36 +95,39 @@ static void qubes_request_resize(
  * There is no way to implement this in Qubes OS so this request is largely
  * ignored.  It is still necessary to send a configure event.
  */
-static void qubes_request_show_window_menu(
-		struct wl_listener *listener, void *data)
+static void qubes_request_show_window_menu(struct wl_listener *listener,
+                                           void *data)
 {
-	struct tinywl_view *view = wl_container_of(listener, view, request_show_window_menu);
+	struct tinywl_view *view =
+	   wl_container_of(listener, view, request_show_window_menu);
 	struct qubes_output *output = &view->output;
-	struct wlr_xdg_toplevel_show_window_menu_event *event __attribute__((unused)) = data;
+	struct wlr_xdg_toplevel_show_window_menu_event *event
+	   __attribute__((unused)) = data;
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
 	wlr_xdg_surface_schedule_configure(view->xdg_surface);
 }
 
-
-static void qubes_request_fullscreen(
-		struct wl_listener *listener, void *data __attribute__((unused)))
+static void qubes_request_fullscreen(struct wl_listener *listener,
+                                     void *data __attribute__((unused)))
 {
 	/* QUBES HOOK: MSG_WINDOW_FLAGS: ask GUI daemon to fullscreen window */
-	struct tinywl_view *view = wl_container_of(listener, view, request_fullscreen);
+	struct tinywl_view *view =
+	   wl_container_of(listener, view, request_fullscreen);
 	struct qubes_output *output = &view->output;
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
 	if (qubes_output_mapped(output)) {
-		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " fullscreen", output->window_id);
+		wlr_log(WLR_DEBUG, "Marking window %" PRIu32 " fullscreen",
+		        output->window_id);
 		// Mapped implies created
 		qubes_change_window_flags(&view->output, WINDOW_FLAG_FULLSCREEN, 0);
 	}
 	wlr_xdg_surface_schedule_configure(view->xdg_surface);
 }
 
-static void qubes_set_title(
-		struct wl_listener *listener, void *data __attribute__((unused)))
+static void qubes_set_title(struct wl_listener *listener,
+                            void *data __attribute__((unused)))
 {
 	/* QUBES HOOK: MSG_WMNAME: ask GUI daemon to set window title */
 	struct tinywl_view *view = wl_container_of(listener, view, set_title);
@@ -139,8 +141,8 @@ static void qubes_set_title(
 	}
 }
 
-static void qubes_set_app_id(
-		struct wl_listener *listener, void *data __attribute__((unused)))
+static void qubes_set_app_id(struct wl_listener *listener,
+                             void *data __attribute__((unused)))
 {
 	/* QUBES HOOK: MSG_WMNAME: ask GUI daemon to set window app id */
 	struct tinywl_view *view = wl_container_of(listener, view, set_app_id);
@@ -155,7 +157,9 @@ static void qubes_set_app_id(
 	}
 }
 
-static void xdg_surface_map(struct wl_listener *listener, void *data __attribute__((unused))) {
+static void xdg_surface_map(struct wl_listener *listener,
+                            void *data __attribute__((unused)))
+{
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
 	struct tinywl_view *view = wl_container_of(listener, view, map);
@@ -163,7 +167,9 @@ static void xdg_surface_map(struct wl_listener *listener, void *data __attribute
 	qubes_view_map(view);
 }
 
-static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribute__((unused))) {
+static void xdg_surface_unmap(struct wl_listener *listener,
+                              void *data __attribute__((unused)))
+{
 	/* Called when the surface is unmapped, and should no longer be shown. */
 	/* QUBES HOOK: MSG_UNMAP: unmap the corresponding window */
 	struct tinywl_view *view = wl_container_of(listener, view, unmap);
@@ -175,7 +181,9 @@ static void xdg_surface_unmap(struct wl_listener *listener, void *data __attribu
 	qubes_output_unmap(&view->output);
 }
 
-static void xdg_surface_destroy(struct wl_listener *listener, void *data __attribute__((unused))) {
+static void xdg_surface_destroy(struct wl_listener *listener,
+                                void *data __attribute__((unused)))
+{
 	/* Called when the surface is destroyed and should never be shown again. */
 	struct tinywl_view *view = wl_container_of(listener, view, destroy);
 
@@ -198,10 +206,11 @@ static void xdg_surface_destroy(struct wl_listener *listener, void *data __attri
 	free(view);
 }
 
-static void qubes_surface_commit(
-		struct wl_listener *listener, void *data __attribute__((unused)))
+static void qubes_surface_commit(struct wl_listener *listener,
+                                 void *data __attribute__((unused)))
 {
-	/* QUBES HOOK: MSG_WINDOW_HINTS, plus do a bunch of actual rendering stuff :) */
+	/* QUBES HOOK: MSG_WINDOW_HINTS, plus do a bunch of actual rendering stuff :)
+	 */
 	struct tinywl_view *view = wl_container_of(listener, view, commit);
 	struct qubes_output *output = &view->output;
 	struct wlr_box box;
@@ -213,16 +222,23 @@ static void qubes_surface_commit(
 	if (!qubes_view_ensure_created(view, &box))
 		return;
 	if (surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-		uint32_t flags = ( (surface->toplevel->current.min_width ? XCB_ICCCM_SIZE_HINT_P_MIN_SIZE : 0)
-				 | (surface->toplevel->current.min_height ? XCB_ICCCM_SIZE_HINT_P_MIN_SIZE : 0)
-				 | (surface->toplevel->current.max_width ? XCB_ICCCM_SIZE_HINT_P_MAX_SIZE : 0)
-				 | (surface->toplevel->current.max_height ? XCB_ICCCM_SIZE_HINT_P_MAX_SIZE : 0)
-				 );
+		uint32_t flags =
+		   ((surface->toplevel->current.min_width ? XCB_ICCCM_SIZE_HINT_P_MIN_SIZE
+		                                          : 0) |
+		    (surface->toplevel->current.min_height
+		        ? XCB_ICCCM_SIZE_HINT_P_MIN_SIZE
+		        : 0) |
+		    (surface->toplevel->current.max_width ? XCB_ICCCM_SIZE_HINT_P_MAX_SIZE
+		                                          : 0) |
+		    (surface->toplevel->current.max_height
+		        ? XCB_ICCCM_SIZE_HINT_P_MAX_SIZE
+		        : 0));
+		// clang-format off
 		struct {
 			struct msg_hdr header;
 			struct msg_window_hints hints;
 		} msg = {
-			.header = {
+		   .header = {
 				.type = MSG_WINDOW_HINTS,
 				.window = output->window_id,
 				.untrusted_len = sizeof(msg.hints),
@@ -239,14 +255,17 @@ static void qubes_surface_commit(
 				.base_height = 0,
 			},
 		};
+		// clang-format on
 		QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.hints);
-		qubes_rust_send_message(output->server->backend->rust_backend, (struct msg_hdr*)&msg);
+		qubes_rust_send_message(output->server->backend->rust_backend,
+		                        (struct msg_hdr *)&msg);
 	}
 
 	qubes_output_configure(output, box);
 }
 
-static void qubes_toplevel_ack_configure(struct wl_listener *listener, void *data)
+static void qubes_toplevel_ack_configure(struct wl_listener *listener,
+                                         void *data)
 {
 	struct wlr_xdg_surface_configure *configure = data;
 	struct tinywl_view *view = wl_container_of(listener, view, ack_configure);
@@ -261,11 +280,12 @@ static void qubes_toplevel_ack_configure(struct wl_listener *listener, void *dat
 	}
 }
 
-void qubes_new_xdg_surface(struct wl_listener *listener, void *data) {
+void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
+{
 	/* This event is raised when wlr_xdg_shell receives a new xdg surface from a
 	 * client, either a toplevel (application window) or popup. */
 	struct tinywl_server *server =
-		wl_container_of(listener, server, new_xdg_surface);
+	   wl_container_of(listener, server, new_xdg_surface);
 	struct wlr_xdg_surface *xdg_surface = data;
 
 	assert(QUBES_SERVER_MAGIC == server->magic);
@@ -283,9 +303,8 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data) {
 		goto cleanup;
 
 	struct qubes_output *output = &view->output;
-	if (!qubes_output_init(output, server,
-	                       is_override_redirect, xdg_surface->surface,
-	                       QUBES_VIEW_MAGIC))
+	if (!qubes_output_init(output, server, is_override_redirect,
+	                       xdg_surface->surface, QUBES_VIEW_MAGIC))
 		goto cleanup;
 
 	view->xdg_surface = xdg_surface;
@@ -303,13 +322,16 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data) {
 	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		struct wlr_xdg_toplevel *const toplevel = xdg_surface->toplevel;
 		view->request_maximize.notify = qubes_request_maximize;
-		wl_signal_add(&toplevel->events.request_maximize, &view->request_maximize);
+		wl_signal_add(&toplevel->events.request_maximize,
+		              &view->request_maximize);
 
 		view->request_fullscreen.notify = qubes_request_fullscreen;
-		wl_signal_add(&toplevel->events.request_fullscreen, &view->request_fullscreen);
+		wl_signal_add(&toplevel->events.request_fullscreen,
+		              &view->request_fullscreen);
 
 		view->request_minimize.notify = qubes_request_minimize;
-		wl_signal_add(&toplevel->events.request_minimize, &view->request_minimize);
+		wl_signal_add(&toplevel->events.request_minimize,
+		              &view->request_minimize);
 
 		view->request_move.notify = qubes_request_move;
 		wl_signal_add(&toplevel->events.request_move, &view->request_move);
@@ -318,7 +340,8 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data) {
 		wl_signal_add(&toplevel->events.request_resize, &view->request_resize);
 
 		view->request_show_window_menu.notify = qubes_request_show_window_menu;
-		wl_signal_add(&toplevel->events.request_show_window_menu, &view->request_show_window_menu);
+		wl_signal_add(&toplevel->events.request_show_window_menu,
+		              &view->request_show_window_menu);
 
 		view->set_title.notify = qubes_set_title;
 		wl_signal_add(&toplevel->events.set_title, &view->set_title);
@@ -332,11 +355,13 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data) {
 		struct wlr_xdg_popup *const popup = xdg_surface->popup;
 		struct wlr_box geometry;
 		wlr_xdg_positioner_rules_get_geometry(&popup->scheduled.rules, &geometry);
-		struct tinywl_view *parent_view = wlr_xdg_surface_from_wlr_surface(popup->parent)->data;
+		struct tinywl_view *parent_view =
+		   wlr_xdg_surface_from_wlr_surface(popup->parent)->data;
 		assert(parent_view);
 		output->left = geometry.x + parent_view->output.left;
 		output->top = geometry.y + parent_view->output.top;
-		output->last_width = geometry.width, output->last_height = geometry.height;
+		output->last_width = geometry.width,
+		output->last_height = geometry.height;
 	} else {
 		abort();
 	}
@@ -397,17 +422,22 @@ void qubes_view_map(struct tinywl_view *view)
 			qubes_output_set_class(output, xdg_surface->toplevel->app_id);
 		}
 		if (xdg_surface->toplevel->parent) {
-			const struct qubes_output *parent_output = xdg_surface->toplevel->parent->base->data;
+			const struct qubes_output *parent_output =
+			   xdg_surface->toplevel->parent->base->data;
 			transient_for_window = parent_output->window_id;
 		}
 	} else if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
 		struct wlr_xdg_popup *popup = xdg_surface->popup;
 		if (popup->parent) {
-			const struct wlr_xdg_surface *parent_surface = wlr_xdg_surface_from_wlr_surface(popup->parent);
-			transient_for_window = ((struct qubes_output *)parent_surface->data)->window_id;
+			const struct wlr_xdg_surface *parent_surface =
+			   wlr_xdg_surface_from_wlr_surface(popup->parent);
+			transient_for_window =
+			   ((struct qubes_output *)parent_surface->data)->window_id;
 		}
 	} else {
 		return;
 	}
-	qubes_output_map(output, transient_for_window, view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1 : 0);
+	qubes_output_map(output, transient_for_window,
+	                 view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP ? 1
+	                                                                       : 0);
 }

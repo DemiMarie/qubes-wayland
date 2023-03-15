@@ -1,8 +1,9 @@
 #ifndef QUBES_WAYLAND_COMPOSITOR_MAIN_H
-#define QUBES_WAYLAND_COMPOSITOR_MAIN_H _Pragma("GCC error \"double-include guard referenced\"")
+#define QUBES_WAYLAND_COMPOSITOR_MAIN_H                                        \
+	_Pragma("GCC error \"double-include guard referenced\"")
 #include "common.h"
-#include <wlr/util/box.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/util/box.h>
 
 #include <qubes-gui-protocol.h>
 void qubes_rust_send_message(void *backend, struct msg_hdr *header);

@@ -1,40 +1,45 @@
 // vchan message dispatch and input event handling
 
 #include "common.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 
 #include <fcntl.h>
-#include <unistd.h>
 #include <sys/ioctl.h>
+#include <unistd.h>
 
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/xwayland.h>
 #include <wlr/util/log.h>
+#include <wlr/xwayland.h>
 
 #include <xcb/xproto.h>
 
 #ifdef QUBES_HAS_SYSTEMD
 #include <systemd/sd-daemon.h>
 #else
-#define sd_notify(...) do {} while (0)
-#define sd_notifyf(...) do {} while (0)
+#define sd_notify(...)                                                         \
+	do {                                                                        \
+	} while (0)
+#define sd_notifyf(...)                                                        \
+	do {                                                                        \
+	} while (0)
 #endif
 
 #include <qubes-gui-protocol.h>
 
-#include "qubes_clipboard.h"
-#include "qubes_output.h"
 #include "qubes_backend.h"
+#include "qubes_clipboard.h"
 #include "qubes_data_source.h"
+#include "qubes_output.h"
 #include "qubes_xwayland.h"
 
-static void handle_keypress(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
+static void handle_keypress(struct qubes_output *output, uint32_t timestamp,
+                            const uint8_t *ptr)
 {
 	struct msg_keypress keypress;
 	enum wl_keyboard_key_state state;
@@ -65,7 +70,8 @@ static void handle_keypress(struct qubes_output *output, uint32_t timestamp, con
 	uint8_t const i = keycode >> 3;
 	uint8_t const j = keycode & 0x7;
 	bool was_pressed = (backend->keymap.keys[i] >> j & 1) ^ (3 - keypress.type);
-	backend->keymap.keys[i] = (backend->keymap.keys[i] & ~(1 << j)) | (3 - keypress.type) << j;
+	backend->keymap.keys[i] =
+	   (backend->keymap.keys[i] & ~(1 << j)) | (3 - keypress.type) << j;
 
 	if (was_pressed) {
 		struct wlr_keyboard_key_event event = {
@@ -78,7 +84,8 @@ static void handle_keypress(struct qubes_output *output, uint32_t timestamp, con
 	}
 }
 
-static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8_t *ptr)
+static void handle_button(struct wlr_seat *seat, uint32_t timestamp,
+                          const uint8_t *ptr)
 {
 	struct msg_button button;
 	enum wlr_button_state state;
@@ -112,40 +119,24 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 	case XCB_BUTTON_INDEX_4:
 		/* Scroll up */
 		wlr_seat_pointer_notify_axis(
-			seat,
-			timestamp,
-			WLR_AXIS_ORIENTATION_VERTICAL,
-			-15.0,
-			-WLR_POINTER_AXIS_DISCRETE_STEP,
-			WLR_AXIS_SOURCE_WHEEL);
+		   seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, -15.0,
+		   -WLR_POINTER_AXIS_DISCRETE_STEP, WLR_AXIS_SOURCE_WHEEL);
 		break;
 	case XCB_BUTTON_INDEX_5:
 		/* Scroll down */
 		wlr_seat_pointer_notify_axis(
-			seat,
-			timestamp,
-			WLR_AXIS_ORIENTATION_VERTICAL,
-			15.0,
-			WLR_POINTER_AXIS_DISCRETE_STEP,
-			WLR_AXIS_SOURCE_WHEEL);
+		   seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, 15.0,
+		   WLR_POINTER_AXIS_DISCRETE_STEP, WLR_AXIS_SOURCE_WHEEL);
 		break;
 	case 6: /* Scroll left */
 		wlr_seat_pointer_notify_axis(
-			seat,
-			timestamp,
-			WLR_AXIS_ORIENTATION_HORIZONTAL,
-			-15.0,
-			-WLR_POINTER_AXIS_DISCRETE_STEP,
-			WLR_AXIS_SOURCE_WHEEL);
+		   seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, -15.0,
+		   -WLR_POINTER_AXIS_DISCRETE_STEP, WLR_AXIS_SOURCE_WHEEL);
 		break;
 	case 7: /* Scroll right */
 		wlr_seat_pointer_notify_axis(
-			seat,
-			timestamp,
-			WLR_AXIS_ORIENTATION_HORIZONTAL,
-			15.0,
-			WLR_POINTER_AXIS_DISCRETE_STEP,
-			WLR_AXIS_SOURCE_WHEEL);
+		   seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, 15.0,
+		   WLR_POINTER_AXIS_DISCRETE_STEP, WLR_AXIS_SOURCE_WHEEL);
 		break;
 	default:
 		wlr_log(WLR_DEBUG, "Unknown button event type %" PRIu32, button.button);
@@ -154,9 +145,9 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp, const uint8
 	wlr_seat_pointer_send_frame(seat);
 }
 
-static void
-handle_pointer_movement(struct qubes_output *output, int32_t x, int32_t y,
-                        uint32_t timestamp, struct wlr_seat *seat)
+static void handle_pointer_movement(struct qubes_output *output, int32_t x,
+                                    int32_t y, uint32_t timestamp,
+                                    struct wlr_seat *seat)
 {
 	const double seat_relative_x = x + (double)output->x,
 	             seat_relative_y = y + (double)output->y;
@@ -164,7 +155,8 @@ handle_pointer_movement(struct qubes_output *output, int32_t x, int32_t y,
 	struct wlr_surface *surface = NULL;
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
-		surface = wlr_xdg_surface_surface_at(view->xdg_surface, seat_relative_x, seat_relative_y, &sx, &sy);
+		surface = wlr_xdg_surface_surface_at(view->xdg_surface, seat_relative_x,
+		                                     seat_relative_y, &sx, &sy);
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		surface = view->xwayland_surface->surface;
@@ -180,7 +172,8 @@ handle_pointer_movement(struct qubes_output *output, int32_t x, int32_t y,
 	wlr_seat_pointer_notify_frame(seat);
 }
 
-static void handle_motion(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
+static void handle_motion(struct qubes_output *output, uint32_t timestamp,
+                          const uint8_t *ptr)
 {
 	struct wlr_seat *seat = output->server->seat;
 	struct msg_motion motion;
@@ -188,7 +181,8 @@ static void handle_motion(struct qubes_output *output, uint32_t timestamp, const
 	handle_pointer_movement(output, motion.x, motion.y, timestamp, seat);
 }
 
-static void handle_crossing(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
+static void handle_crossing(struct qubes_output *output, uint32_t timestamp,
+                            const uint8_t *ptr)
 {
 	struct msg_crossing crossing;
 	struct wlr_seat *seat = output->server->seat;
@@ -209,7 +203,8 @@ static void handle_crossing(struct qubes_output *output, uint32_t timestamp, con
 	}
 }
 
-static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct wlr_surface *surface)
+static void qubes_give_view_keyboard_focus(struct qubes_output *output,
+                                           struct wlr_surface *surface)
 {
 	/* Note: this function only deals with keyboard focus. */
 	struct tinywl_server *server = output->server;
@@ -224,7 +219,8 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct w
 			    !view->xdg_surface->toplevel->pending.activated)
 				wlr_xdg_toplevel_set_activated(view->xdg_surface->toplevel, true);
 		} else if (output->magic == QUBES_XWAYLAND_MAGIC) {
-			struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+			struct qubes_xwayland_view *view =
+			   wl_container_of(output, view, output);
 			wlr_xwayland_surface_activate(view->xwayland_surface, true);
 		} else {
 			abort();
@@ -237,14 +233,16 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct w
 		 * Deactivate the previously focused surface. This lets the client know
 		 * it no longer has focus and the client will repaint accordingly, e.g.
 		 * stop displaying a caret.
-		*/
+		 */
 		if (wlr_surface_is_xdg_surface(prev_surface)) {
-			struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(prev_surface);
+			struct wlr_xdg_surface *previous =
+			   wlr_xdg_surface_from_wlr_surface(prev_surface);
 			if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 				wlr_xdg_toplevel_set_activated(previous->toplevel, false);
 			}
 		} else {
-			struct wlr_xwayland_surface *previous = wlr_xwayland_surface_from_wlr_surface(prev_surface);
+			struct wlr_xwayland_surface *previous =
+			   wlr_xwayland_surface_from_wlr_surface(prev_surface);
 			if (previous)
 				wlr_xwayland_surface_activate(previous, false);
 		}
@@ -259,7 +257,8 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct w
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		struct wlr_xdg_surface *view_surface = view->xdg_surface;
 		while (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
-			view_surface = wlr_xdg_surface_from_wlr_surface(view_surface->popup->parent);
+			view_surface =
+			   wlr_xdg_surface_from_wlr_surface(view_surface->popup->parent);
 		}
 		if (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 			wlr_xdg_toplevel_set_activated(view_surface->toplevel, true);
@@ -274,12 +273,13 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output, struct w
 	 * clients without additional work on your part.
 	 */
 	if (surface)
-		wlr_seat_keyboard_notify_enter(seat, surface,
-			keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+		wlr_seat_keyboard_notify_enter(seat, surface, keyboard->keycodes,
+		                               keyboard->num_keycodes,
+		                               &keyboard->modifiers);
 }
 
-
-static void handle_focus(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
+static void handle_focus(struct qubes_output *output, uint32_t timestamp,
+                         const uint8_t *ptr)
 {
 	/* This is specifically *keyboard* focus */
 	struct msg_focus focus;
@@ -288,11 +288,13 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp, const 
 	memcpy(&focus, ptr, sizeof focus);
 	switch (focus.type) {
 	case XCB_FOCUS_IN:
-		wlr_log(WLR_INFO, "Window %" PRIu32 " has gained keyboard focus", output->window_id);
+		wlr_log(WLR_INFO, "Window %" PRIu32 " has gained keyboard focus",
+		        output->window_id);
 		qubes_give_view_keyboard_focus(output, qubes_output_surface(output));
 		break;
 	case XCB_FOCUS_OUT:
-		wlr_log(WLR_INFO, "Window %" PRIu32 " has lost keyboard focus", output->window_id);
+		wlr_log(WLR_INFO, "Window %" PRIu32 " has lost keyboard focus",
+		        output->window_id);
 		if (seat->keyboard_state.focused_surface) {
 			/*
 			 * Deactivate the previously focused surface. This lets the client know
@@ -301,7 +303,7 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp, const 
 			 */
 			if (wlr_surface_is_xdg_surface(seat->keyboard_state.focused_surface)) {
 				struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(
-							seat->keyboard_state.focused_surface);
+				   seat->keyboard_state.focused_surface);
 				if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 					wlr_xdg_toplevel_set_activated(previous->toplevel, false);
 				} else if (previous->role == WLR_XDG_SURFACE_ROLE_POPUP) {
@@ -309,8 +311,9 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp, const 
 					assert(seat->keyboard_state.focused_surface == NULL);
 				}
 			} else {
-				struct wlr_xwayland_surface *previous = wlr_xwayland_surface_from_wlr_surface(
-						seat->keyboard_state.focused_surface);
+				struct wlr_xwayland_surface *previous =
+				   wlr_xwayland_surface_from_wlr_surface(
+				      seat->keyboard_state.focused_surface);
 				if (previous)
 					wlr_xwayland_surface_activate(previous, false);
 			}
@@ -318,7 +321,8 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp, const 
 		wlr_seat_keyboard_notify_clear_focus(seat);
 		break;
 	default:
-		wlr_log(WLR_ERROR, "Window %" PRIu32 ": Bad Focus event type %" PRIu32, output->window_id, focus.type);
+		wlr_log(WLR_ERROR, "Window %" PRIu32 ": Bad Focus event type %" PRIu32,
+		        output->window_id, focus.type);
 		return;
 	}
 }
@@ -330,41 +334,47 @@ static void handle_window_flags(struct qubes_output *output, const uint8_t *ptr)
 	memcpy(&flags, ptr, sizeof flags);
 
 	if (flags.flags_set & flags.flags_unset) {
-		wlr_log(WLR_ERROR,
-		        "GUI daemon tried to set and unset the same flag on window %" PRIu32
-		        "(flags_set: 0x%" PRIx32 ", flags_unset: 0x%" PRIx32 ")",
-		        output->window_id, flags.flags_set, flags.flags_unset);
+		wlr_log(
+		   WLR_ERROR,
+		   "GUI daemon tried to set and unset the same flag on window %" PRIu32
+		   "(flags_set: 0x%" PRIx32 ", flags_unset: 0x%" PRIx32 ")",
+		   output->window_id, flags.flags_set, flags.flags_unset);
 		return;
 	}
 
 	if (QUBES_VIEW_MAGIC != output->magic) {
 		assert(QUBES_XWAYLAND_MAGIC == output->magic);
-		wlr_log(WLR_ERROR, "not yet implemented: setting flags for Xwayland surfaces");
+		wlr_log(WLR_ERROR,
+		        "not yet implemented: setting flags for Xwayland surfaces");
 		return;
 	}
 
 	struct tinywl_view *view = wl_container_of(output, view, output);
 
 	if (view->xdg_surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-		wlr_log(WLR_INFO,
-		        "GUI daemon tried to change flags for non-toplevel window %" PRIu32
-		        "(flags_set: 0x%" PRIx32 ", flags_unset: 0x%" PRIx32 ")",
-		        output->window_id, flags.flags_set, flags.flags_unset);
+		wlr_log(
+		   WLR_INFO,
+		   "GUI daemon tried to change flags for non-toplevel window %" PRIu32
+		   "(flags_set: 0x%" PRIx32 ", flags_unset: 0x%" PRIx32 ")",
+		   output->window_id, flags.flags_set, flags.flags_unset);
 		return;
 	}
 
 	if ((flags.flags_set | flags.flags_unset) & WINDOW_FLAG_FULLSCREEN)
-		wlr_xdg_toplevel_set_fullscreen(view->xdg_surface->toplevel, flags.flags_set & WINDOW_FLAG_FULLSCREEN);
+		wlr_xdg_toplevel_set_fullscreen(view->xdg_surface->toplevel,
+		                                flags.flags_set & WINDOW_FLAG_FULLSCREEN);
 
-	// Setting the "minimized" flag directly would be better, but xdg-shell doesn't support that
+	// Setting the "minimized" flag directly would be better, but xdg-shell
+	// doesn't support that
 	if ((flags.flags_set | flags.flags_unset) & WINDOW_FLAG_MINIMIZE)
-		wlr_xdg_toplevel_set_activated(view->xdg_surface->toplevel, !(flags.flags_set & WINDOW_FLAG_MINIMIZE));
+		wlr_xdg_toplevel_set_activated(view->xdg_surface->toplevel,
+		                               !(flags.flags_set & WINDOW_FLAG_MINIMIZE));
 
 	// DEMANDS_ATTENTION has no Wayland analog
 }
 
-static void
-handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t *ptr)
+static void handle_configure(struct qubes_output *output, uint32_t timestamp,
+                             const uint8_t *ptr)
 {
 	struct msg_configure configure;
 
@@ -373,7 +383,8 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 	output->top = configure.y;
 	// Just ACK the configure
 	wlr_log(WLR_DEBUG, "handle_configure: old size %u %u, new size %u %u",
-	        output->last_width, output->last_height, configure.width, configure.height);
+	        output->last_width, output->last_height, configure.width,
+	        configure.height);
 	if (configure.width == (uint32_t)output->last_width &&
 	    configure.height == (uint32_t)output->last_height) {
 		// Just ACK without doing anything
@@ -381,15 +392,13 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 		return;
 	}
 
-	if (configure.width <= 0 ||
-	    configure.height <= 0 ||
+	if (configure.width <= 0 || configure.height <= 0 ||
 	    configure.width > MAX_WINDOW_WIDTH ||
 	    configure.height > MAX_WINDOW_HEIGHT) {
 		wlr_log(WLR_ERROR,
-		        "Bad configure from GUI daemon: width %" PRIu32 " height %" PRIu32 " window %" PRIu32,
-		        configure.x,
-		        configure.y,
-		        output->window_id);
+		        "Bad configure from GUI daemon: width %" PRIu32 " height %" PRIu32
+		        " window %" PRIu32,
+		        configure.x, configure.y, output->window_id);
 		// this should never happen, but better to ACK the configure
 		// than to crash; return to avoid giving clients an invalid state
 		qubes_send_configure(output, configure.width, configure.height);
@@ -397,14 +406,15 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 	}
 
 	output->last_width = configure.width, output->last_height = configure.height;
-	wlr_output_set_custom_mode(&output->output, configure.width, configure.height, 60000);
+	wlr_output_set_custom_mode(&output->output, configure.width,
+	                           configure.height, 60000);
 
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-			view->configure_serial =
-				wlr_xdg_toplevel_set_size(view->xdg_surface->toplevel, configure.width, configure.height);
+			view->configure_serial = wlr_xdg_toplevel_set_size(
+			   view->xdg_surface->toplevel, configure.width, configure.height);
 			wlr_log(WLR_DEBUG,
 			        "Will ACK configure from GUI daemon (width %u, height %u)"
 			        " when client ACKS configure with serial %u",
@@ -413,14 +423,16 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 			// There won’t be a configure event ACKd by the client, so
 			// ACK early
 			wlr_log(WLR_DEBUG,
-			        "Got a configure event for non-toplevel window %" PRIu32 "; returning early",
+			        "Got a configure event for non-toplevel window %" PRIu32
+			        "; returning early",
 			        output->window_id);
 			qubes_send_configure(output, configure.width, configure.height);
 		}
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
-		wlr_xwayland_surface_configure(view->xwayland_surface,
-				configure.x, configure.y, configure.width, configure.height);
+		wlr_xwayland_surface_configure(view->xwayland_surface, configure.x,
+		                               configure.y, configure.width,
+		                               configure.height);
 		// There won’t be a configure event ACKd by the client, so
 		// ACK early.  Neglecting this for Xwayland cost two weeks of debugging.
 		qubes_send_configure(output, configure.width, configure.height);
@@ -429,14 +441,17 @@ handle_configure(struct qubes_output *output, uint32_t timestamp, const uint8_t 
 	}
 }
 
-static void handle_clipboard_data(struct qubes_output *output, uint32_t len, const uint8_t *ptr)
+static void handle_clipboard_data(struct qubes_output *output, uint32_t len,
+                                  const uint8_t *ptr)
 {
 	struct tinywl_server *server = output->server;
 	assert(server);
 	struct wlr_seat *seat = server->seat;
 	assert(seat);
-	struct qubes_data_source *source = qubes_data_source_create(server->wl_display, len, ptr);
-	wlr_seat_set_selection(server->seat, (struct wlr_data_source *)source, wl_display_get_serial(server->wl_display));
+	struct qubes_data_source *source =
+	   qubes_data_source_create(server->wl_display, len, ptr);
+	wlr_seat_set_selection(server->seat, (struct wlr_data_source *)source,
+	                       wl_display_get_serial(server->wl_display));
 }
 
 static void handle_clipboard_request(struct qubes_output *output)
@@ -449,16 +464,17 @@ static void handle_clipboard_request(struct qubes_output *output)
 		return; /* Nothing to do */
 	struct wlr_data_source *const source = seat->selection_source;
 	char **mime_type;
-	wl_array_for_each(mime_type, &source->mime_types) {
+	wl_array_for_each (mime_type, &source->mime_types) {
 		// MIME types are already sanitized against injection attacks
 		wlr_log(WLR_DEBUG, "Received event of MIME type %s", *mime_type);
 		if (strcmp(*mime_type, "text/plain"))
 			continue;
-		int pipefds[2], res = pipe2(pipefds, O_CLOEXEC|O_NONBLOCK), ctrl = 0;
+		int pipefds[2], res = pipe2(pipefds, O_CLOEXEC | O_NONBLOCK), ctrl = 0;
 		if (res == -1)
 			return;
 		assert(res == 0);
-		struct qubes_clipboard_handler *handler = qubes_clipboard_handler_create(server, pipefds[0]);
+		struct qubes_clipboard_handler *handler =
+		   qubes_clipboard_handler_create(server, pipefds[0]);
 		if (handler) {
 			res = ioctl(pipefds[1], FIONBIO, &ctrl);
 			assert(res == 0);
@@ -469,7 +485,6 @@ static void handle_clipboard_request(struct qubes_output *output)
 		return;
 	}
 }
-
 
 // Called when the GUI agent has reconnected to the daemon.
 static void qubes_recreate_window(struct qubes_output *output)
@@ -520,18 +535,18 @@ static void qubes_recreate_window(struct qubes_output *output)
 	}
 }
 
-static void
-qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
+static void qubes_reconnect(struct qubes_backend *const backend,
+                            uint32_t const msg_type)
 {
-	extern bool qubes_rust_reconnect(struct qubes_rust_backend *backend);
-	switch (msg_type)  {
+	extern bool qubes_rust_reconnect(struct qubes_rust_backend * backend);
+	switch (msg_type) {
 	case 2:
 		wlr_log(WLR_INFO, "Reconnecting to GUI daemon");
 		struct qubes_output *output;
-		wl_list_for_each(output, backend->views, link) {
+		wl_list_for_each (output, backend->views, link) {
 			output->flags &= ~QUBES_OUTPUT_CREATED;
 		}
-		wl_list_for_each(output, backend->views, link) {
+		wl_list_for_each (output, backend->views, link) {
 			assert(!(output->flags & QUBES_OUTPUT_CREATED));
 			qubes_recreate_window(output);
 		}
@@ -557,21 +572,23 @@ qubes_reconnect(struct qubes_backend *const backend, uint32_t const msg_type)
 		}
 		int fd = qubes_rust_backend_fd(backend->rust_backend);
 		struct wl_event_loop *loop = wl_display_get_event_loop(backend->display);
-		backend->source = wl_event_loop_add_fd(loop, fd,
-				WL_EVENT_READABLE | WL_EVENT_HANGUP | WL_EVENT_ERROR,
-				qubes_backend_on_fd,
-				backend);
+		backend->source = wl_event_loop_add_fd(
+		   loop, fd, WL_EVENT_READABLE | WL_EVENT_HANGUP | WL_EVENT_ERROR,
+		   qubes_backend_on_fd, backend);
 		if (!backend->source) {
-			sd_notifyf(0, "STATUS=Cannot re-register vchan file descriptor: %s\nERRNO=%d",
-				      strerror(errno), errno);
-			wlr_log(WLR_ERROR, "Fatal error: Cannot re-register vchan file descriptor");
+			sd_notifyf(
+			   0, "STATUS=Cannot re-register vchan file descriptor: %s\nERRNO=%d",
+			   strerror(errno), errno);
+			wlr_log(WLR_ERROR,
+			        "Fatal error: Cannot re-register vchan file descriptor");
 			wl_display_terminate(backend->display);
 		}
 		return;
 	case 3:
 		sd_notify(0,
-			  "STATUS=Protocol error occurred, but no need to reconnect (fatal)\nERRNO=%d",
-			  EPROTO);
+		          "STATUS=Protocol error occurred, but no need to reconnect "
+		          "(fatal)\nERRNO=%d",
+		          EPROTO);
 		wl_display_terminate(backend->display);
 		return;
 	default:
@@ -610,13 +627,15 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 					.time_msec = timestamp,
 					.keycode = i << 3 | j,
 					.update_state = true,
-					.state = is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED,
+					.state = is_pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
+					                    : WL_KEYBOARD_KEY_STATE_RELEASED,
 				};
 				wlr_keyboard_notify_key(keyboard, &event);
 			}
 		}
 		assert(hdr.untrusted_len == sizeof(struct msg_keymap_notify));
-		static_assert(sizeof(backend->keymap) == sizeof(struct msg_keymap_notify), "wrong size");
+		static_assert(sizeof(backend->keymap) == sizeof(struct msg_keymap_notify),
+		              "wrong size");
 		memcpy(&backend->keymap, ptr, hdr.untrusted_len);
 		return;
 	}
@@ -652,7 +671,8 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 			break;
 		}
 		case QUBES_XWAYLAND_MAGIC: {
-			struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+			struct qubes_xwayland_view *view =
+			   wl_container_of(output, view, output);
 			wlr_xwayland_surface_close(view->xwayland_surface);
 			break;
 		default:
