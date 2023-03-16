@@ -70,7 +70,6 @@ void qubes_xwayland_surface_map(struct qubes_xwayland_view *view)
 	if (!xwayland_get_box(surface, &box))
 		return;
 	qubes_output_configure(output, box);
-	output->flags |= QUBES_OUTPUT_MAPPED;
 	assert(surface->surface);
 	if (view->commit.link.next)
 		wl_list_remove(&view->commit.link);
