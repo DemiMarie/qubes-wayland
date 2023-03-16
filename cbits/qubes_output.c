@@ -329,13 +329,15 @@ static void qubes_output_frame(struct wl_listener *listener,
 		                              output->last_height, 60000);
 	assert(QUBES_VIEW_MAGIC == output->magic ||
 	       QUBES_XWAYLAND_MAGIC == output->magic);
-	if (wlr_scene_output_commit(output->scene_output)) {
-		output->output.frame_pending = true;
-		if (!output->server->frame_pending) {
-			// Schedule another timer callback
-			wl_event_source_timer_update(output->server->timer, 16);
-			output->server->frame_pending = true;
-		}
+	if (qubes_output_mapped(output) &&
+	    !wlr_scene_output_commit(output->scene_output)) {
+		return;
+	}
+	output->output.frame_pending = true;
+	if (!output->server->frame_pending) {
+		// Schedule another timer callback
+		wl_event_source_timer_update(output->server->timer, 16);
+		output->server->frame_pending = true;
 	}
 }
 
