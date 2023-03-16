@@ -31,13 +31,13 @@ struct qubes_buffer {
 		uint64_t dummy[2];
 	};
 	union {
-		struct ioctl_gntalloc_alloc_gref
-		   xen; /* only used during initialization */
+		/* only used during initialization */
+		struct ioctl_gntalloc_alloc_gref xen;
 		struct msg_window_dump_hdr qubes;
 	};
 };
-_Static_assert(offsetof(struct qubes_buffer, xen) -
-                     offsetof(struct qubes_buffer, header) ==
+_Static_assert((offsetof(struct qubes_buffer, xen) -
+                offsetof(struct qubes_buffer, header)) ==
                   sizeof(struct msg_hdr),
                "Struct not contiguous?");
 
