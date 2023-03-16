@@ -187,6 +187,7 @@ qubes_buffer_create(struct wlr_allocator *alloc, const int width,
 		goto fail;
 	}
 	buffer->index = buffer->xen.index;
+	buffer->refcount = 1;
 	buffer->size = (size_t)bytes;
 	buffer->qubes.type = 0; /* WINDOW_DUMP_TYPE_GRANT_REFS */
 	buffer->qubes.width = (uint32_t)width;
@@ -235,6 +236,12 @@ static void qubes_buffer_destroy(struct wlr_buffer *raw_buffer)
 {
 	assert(raw_buffer->impl == &qubes_buffer_impl);
 	struct qubes_buffer *buffer = wl_container_of(raw_buffer, buffer, inner);
+	if (buffer->refcount > 1) {
+		assert(buffer->refcount < INT32_MAX && "refcount overflow");
+		buffer->refcount--;
+		return;
+	}
+	assert(buffer->refcount == 1);
 	struct ioctl_gntalloc_dealloc_gref dealloc = {
 		.index = buffer->index,
 		.count = NUM_PAGES(buffer->size),

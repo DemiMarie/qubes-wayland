@@ -17,6 +17,7 @@ extern const struct wlr_buffer_impl *qubes_buffer_impl_addr;
  * Qubes OS buffer.  Owned by wlroots.
  */
 struct qubes_buffer {
+	uint64_t refcount;
 	struct wlr_buffer inner;
 	void *ptr;
 	struct qubes_allocator *alloc;
