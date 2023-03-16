@@ -110,8 +110,9 @@ wlroots_options = [
   'auto_features=disabled',
 ]
 wlroots = dependency('wlroots',
-                       version: ['>=0.16.0', '<0.17.0'],
-                       default_options: wlroots_options)
+                     version: ['>=0.16.0', '<0.17.0'],
+                     default_options: wlroots_options,
+                     required: get_option('use-system-wlroots'))
 if not wlroots.found()
   wlroots_proj = subproject(
     'wlroots',

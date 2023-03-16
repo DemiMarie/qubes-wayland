@@ -238,7 +238,7 @@ static void qubes_surface_commit(struct wl_listener *listener,
 			struct msg_hdr header;
 			struct msg_window_hints hints;
 		} msg = {
-		   .header = {
+			.header = {
 				.type = MSG_WINDOW_HINTS,
 				.window = output->window_id,
 				.untrusted_len = sizeof(msg.hints),
