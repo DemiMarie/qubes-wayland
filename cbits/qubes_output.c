@@ -72,8 +72,10 @@ static bool qubes_output_test(struct wlr_output *raw_output,
 static void qubes_output_damage(struct qubes_output *output, struct wlr_box box,
                                 const struct wlr_output_state *state)
 {
-	wlr_log(WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32,
-	        (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
+	if (0)
+		wlr_log(
+		   WLR_DEBUG, "X is %d Y is %d Width is %" PRIu32 " height is %" PRIu32,
+		   (int)box.x, (int)box.y, (uint32_t)box.width, (uint32_t)box.height);
 	if (state && !(state->committed & WLR_OUTPUT_STATE_DAMAGE))
 		return;
 	pixman_box32_t fake_rect = {
@@ -93,8 +95,9 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box,
 		n_rects = 1;
 		rects = &fake_rect;
 	}
-	wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32,
-	        MSG_SHMIMAGE, output->window_id);
+	if (0)
+		wlr_log(WLR_DEBUG, "Sending MSG_SHMIMAGE (0x%x) to window %" PRIu32,
+		        MSG_SHMIMAGE, output->window_id);
 	for (int i = 0; i < n_rects; ++i) {
 		int32_t width, height;
 		if (__builtin_sub_overflow(rects[i].x2, rects[i].x1, &width) ||
@@ -106,10 +109,12 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box,
 			wlr_log(WLR_ERROR, "Negative width or height - skipping");
 			continue;
 		}
-		wlr_log(WLR_DEBUG,
-		        "Submitting damage to GUI daemon: window %" PRIu32 " x %" PRIi32
-		        " y %" PRIi32 " width %" PRIu32 " height %" PRIu32,
-		        output->window_id, rects[i].x1, rects[i].y1, width, height);
+		if (0)
+			wlr_log(WLR_DEBUG,
+			        "Submitting damage to GUI daemon: window %" PRIu32
+			        " x %" PRIi32 " y %" PRIi32 " width %" PRIu32
+			        " height %" PRIu32,
+			        output->window_id, rects[i].x1, rects[i].y1, width, height);
 		// clang-format off
 		struct {
 			struct msg_hdr header;
@@ -140,8 +145,9 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
                               const struct wlr_output_state *state)
 {
 	assert(output->buffer->impl == qubes_buffer_impl_addr);
-	wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32,
-	        MSG_WINDOW_DUMP, output->window_id);
+	if (0)
+		wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32,
+		        MSG_WINDOW_DUMP, output->window_id);
 	struct qubes_buffer *buffer = wl_container_of(output->buffer, buffer, inner);
 	buffer->header.window = output->window_id;
 	buffer->header.type = MSG_WINDOW_DUMP;
