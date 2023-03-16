@@ -127,7 +127,13 @@ static void xwayland_surface_set_size(struct qubes_xwayland_view *view,
 		        width, height);
 		return; /* cannot handle this */
 	}
-	qubes_send_configure(output, width, height);
+	struct wlr_box box = {
+		.width = width,
+		.height = height,
+		.x = x,
+		.y = y,
+	};
+	qubes_output_configure(output, box);
 }
 
 static void xwayland_surface_request_configure(struct wl_listener *listener,
@@ -136,9 +142,34 @@ static void xwayland_surface_request_configure(struct wl_listener *listener,
 	struct qubes_xwayland_view *view =
 	   wl_container_of(listener, view, request_configure);
 	struct wlr_xwayland_surface_configure_event *event = data;
+	struct qubes_output *output = &view->output;
+	int32_t x = event->x, y = event->y, width = event->width,
+	        height = event->height;
+	assert(output->magic == QUBES_XWAYLAND_MAGIC);
 
-	wlr_xwayland_surface_configure(view->xwayland_surface, event->x, event->y,
-	                               event->width, event->height);
+	if (width <= 0 || height <= 0 || width > MAX_WINDOW_WIDTH ||
+	    height > MAX_WINDOW_HEIGHT || x < -MAX_WINDOW_WIDTH ||
+	    x > 2 * MAX_WINDOW_WIDTH || y < -MAX_WINDOW_HEIGHT ||
+	    y > 2 * MAX_WINDOW_HEIGHT) {
+		wlr_log(WLR_ERROR,
+		        "Bad message from client: width %" PRIu16 " height %" PRIu16,
+		        width, height);
+		return; /* cannot handle this */
+	}
+
+	wlr_log(WLR_DEBUG, "%p: Got %dx%d w %d h %d, new %dx%d w %u h %u%s", view,
+	        output->left, output->top, output->last_width, output->last_height,
+	        x, y, width, height,
+	        view->xwayland_surface->override_redirect ? " (override-redirect)"
+	                                                  : "");
+
+	struct wlr_box box = {
+		.width = width,
+		.height = height,
+		.x = x,
+		.y = y,
+	};
+	qubes_output_configure(output, box);
 }
 
 static void xwayland_surface_request_minimize(struct wl_listener *listener,
