@@ -423,6 +423,20 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width,
 		return;
 	if (width <= 0 || height <= 0)
 		return;
+	// Refuse excessive sizes
+	if (width > MAX_WINDOW_WIDTH)
+		width = MAX_WINDOW_WIDTH;
+	if (height > MAX_WINDOW_HEIGHT)
+		height = MAX_WINDOW_HEIGHT;
+	if (output->left < -MAX_WINDOW_WIDTH)
+		output->left = -MAX_WINDOW_WIDTH;
+	if (output->top < -MAX_WINDOW_HEIGHT)
+		output->top = -MAX_WINDOW_HEIGHT;
+	if (output->left > MAX_WINDOW_WIDTH)
+		output->left = MAX_WINDOW_WIDTH;
+	if (output->top > MAX_WINDOW_HEIGHT)
+		output->top = MAX_WINDOW_HEIGHT;
+
 	// clang-format off
 	struct {
 		struct msg_hdr header;
