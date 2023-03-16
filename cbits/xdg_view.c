@@ -362,6 +362,14 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 		output->top = geometry.y + parent_view->output.top;
 		output->last_width = geometry.width,
 		output->last_height = geometry.height;
+		wl_list_init(&view->request_maximize.link);
+		wl_list_init(&view->request_fullscreen.link);
+		wl_list_init(&view->request_minimize.link);
+		wl_list_init(&view->request_move.link);
+		wl_list_init(&view->request_resize.link);
+		wl_list_init(&view->request_show_window_menu.link);
+		wl_list_init(&view->set_title.link);
+		wl_list_init(&view->ack_configure.link);
 	} else {
 		abort();
 	}
