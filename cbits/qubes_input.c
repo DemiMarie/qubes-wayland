@@ -379,12 +379,14 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	struct msg_configure configure;
 
 	memcpy(&configure, ptr, sizeof(configure));
+	// Just ACK the configure
+	wlr_log(WLR_DEBUG,
+	        "handle_configure: old rect x=%d y=%d w=%u h=%u, new rect x=%d y=%d "
+	        "x=%u y=%u",
+	        output->left, output->top, output->last_width, output->last_height,
+	        configure.x, configure.y, configure.width, configure.height);
 	output->left = configure.x;
 	output->top = configure.y;
-	// Just ACK the configure
-	wlr_log(WLR_DEBUG, "handle_configure: old size %u %u, new size %u %u",
-	        output->last_width, output->last_height, configure.width,
-	        configure.height);
 	if (configure.width == (uint32_t)output->last_width &&
 	    configure.height == (uint32_t)output->last_height) {
 		// Just ACK without doing anything

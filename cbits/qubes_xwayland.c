@@ -116,7 +116,11 @@ static void xwayland_surface_set_size(struct qubes_xwayland_view *view,
 {
 	struct qubes_output *output = &view->output;
 
-	wlr_log(WLR_DEBUG, "configuring surface at %p", view);
+	wlr_log(WLR_DEBUG, "%p: Got %dx%d w %d h %d, new %dx%d w %u h %u%s", view,
+	        output->left, output->top, output->last_width, output->last_height,
+	        x, y, width, height,
+	        view->xwayland_surface->override_redirect ? " (override-redirect)"
+	                                                  : "");
 	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 	if (width <= 0 || height <= 0 || width > MAX_WINDOW_WIDTH ||
 	    height > MAX_WINDOW_HEIGHT || x < -MAX_WINDOW_WIDTH ||
@@ -286,11 +290,6 @@ static void xwayland_surface_set_hints(struct wl_listener *listener, void *data)
 	if (surface->hints == NULL) {
 		return;
 	}
-
-	wlr_log(WLR_ERROR,
-	        "Set-hints request for Xwayland window %" PRIu32
-	        " not yet implemented",
-	        view->output.window_id);
 }
 
 static void xwayland_surface_set_override_redirect(struct wl_listener *listener,
@@ -368,13 +367,20 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
 	struct tinywl_server *server =
 	   wl_container_of(listener, server, new_xwayland_surface);
 	struct wlr_xwayland_surface *surface = data;
-	assert(surface);
 
+	assert(surface);
 	assert(QUBES_SERVER_MAGIC == server->magic);
 
 	struct qubes_xwayland_view *view = calloc(1, sizeof(*view));
-	if (!view)
+	if (!view) {
+		wlr_log(WLR_ERROR, "Could not allocate view for Xwayland surface");
 		return;
+	}
+
+	wlr_log(WLR_DEBUG,
+	        "New Xwayland surface: coordinates %dx%d w %d h %d%s pointer %p",
+	        surface->x, surface->y, surface->width, surface->height,
+	        surface->override_redirect ? " (override-redirect)" : "", view);
 
 	struct qubes_output *output = &view->output;
 
