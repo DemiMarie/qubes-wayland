@@ -25,6 +25,7 @@ struct qubes_xwayland_view {
 	struct wl_listener set_role;
 	struct wl_listener set_hints;
 	struct wl_listener set_override_redirect;
+	struct wl_listener set_parent;
 	struct wl_listener commit;
 };
 void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,

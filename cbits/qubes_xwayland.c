@@ -361,6 +361,47 @@ static void qubes_xwayland_surface_commit(struct wl_listener *listener,
 	qubes_output_configure(output, box);
 }
 
+static void qubes_xwayland_surface_set_parent(struct wl_listener *listener,
+                                              void *data)
+{
+	struct qubes_xwayland_view *view =
+	   wl_container_of(listener, view, set_parent);
+	struct qubes_xwayland_view *parent_view;
+	struct wlr_xwayland_surface *surface = data;
+	struct wlr_xwayland_surface *parent;
+	struct qubes_output *output = &view->output;
+	struct qubes_output *parent_output;
+
+	assert(QUBES_XWAYLAND_MAGIC == output->magic);
+	assert(surface);
+	assert(surface == view->xwayland_surface);
+	parent = surface->parent;
+	parent_view = parent->data;
+	parent_output = &parent_view->output;
+
+	if (parent) {
+		wlr_log(WLR_DEBUG,
+		        "Setting parent of surface %p (%dx%d) to %p (coordinates %dx%d)",
+		        view, surface->x, surface->y, parent_view, parent->x, parent->y);
+		wlr_log(WLR_DEBUG, "Actual coordinates of surface %p %dx%d w %d h %d",
+		        view, output->left, output->top, output->last_width,
+		        output->last_height);
+		wlr_log(WLR_DEBUG, "Actual coordinates of parent %p %dx%d w %d h %d",
+		        parent_view, parent_output->left, parent_output->top,
+		        parent_output->last_width, parent_output->last_height);
+		struct wlr_box box = {
+			.x = parent->x,
+			.y = parent->y,
+			.width = surface->width,
+			.height = surface->height,
+		};
+		qubes_output_configure(output, box);
+	} else {
+		wlr_log(WLR_DEBUG, "Unsetting parent of surface %p (coordinates %dx%d)",
+		        view, surface->x, surface->y);
+	}
+}
+
 void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
                                          void *data)
 {
@@ -421,6 +462,8 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
 	              &view->set_override_redirect);
 	view->set_geometry.notify = xwayland_surface_set_geometry;
 	wl_signal_add(&surface->events.set_geometry, &view->set_geometry);
+	view->set_parent.notify = qubes_xwayland_surface_set_parent;
+	wl_signal_add(&surface->events.set_parent, &view->set_parent);
 	view->commit.notify = qubes_xwayland_surface_commit;
 	if (surface->surface)
 		wl_signal_add(&surface->surface->events.commit, &view->commit);
