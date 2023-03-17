@@ -762,10 +762,6 @@ int main(int argc, char *argv[])
 	sd_notifyf(0, "Running Wayland compositor on WAYLAND_DISPLAY=%s",
 	           socket_path);
 	/* Create XWayland */
-#ifdef QUBES_HAS_SYSTEMD
-	if (sd_notify(0, "READY=1") < 0)
-		return 1;
-#endif
 	wl_display_run(server->wl_display);
 
 	/* Once wl_display_run returns, we shut down the server */
