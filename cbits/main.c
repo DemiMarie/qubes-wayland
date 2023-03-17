@@ -691,7 +691,6 @@ int main(int argc, char *argv[])
 	}
 
 	wlr_log(WLR_INFO, "Socket path: %s", socket_path);
-	sd_notify(0, "STATUS=About to start Xwayland");
 	/* Create XWayland */
 	if (!(server->xwayland = wlr_xwayland_create(server->wl_display,
 	                                             server->compositor, true))) {
