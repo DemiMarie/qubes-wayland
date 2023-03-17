@@ -149,6 +149,7 @@ static void xwayland_surface_request_configure(struct wl_listener *listener,
 	int32_t x = event->x, y = event->y, width = event->width,
 	        height = event->height;
 	assert(output->magic == QUBES_XWAYLAND_MAGIC);
+	assert(view->xwayland_surface == event->surface);
 
 	if (width <= 0 || height <= 0 || width > MAX_WINDOW_WIDTH ||
 	    height > MAX_WINDOW_HEIGHT || x < -MAX_WINDOW_WIDTH ||

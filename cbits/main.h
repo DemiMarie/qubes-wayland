@@ -25,6 +25,8 @@ enum tinywl_cursor_mode {
 struct tinywl_server {
 	struct wl_display *wl_display;
 	struct qubes_backend *backend;
+	struct qubes_link *queue_head;
+	struct qubes_link *queue_tail;
 	struct wlr_renderer *renderer;
 	struct wlr_allocator *allocator;
 
@@ -54,10 +56,11 @@ struct tinywl_server {
 	struct wlr_data_device_manager *data_device;
 	struct wlr_xwayland *xwayland;
 	uint32_t magic;
+	uint32_t protocol_version;
 	uint16_t domid;
 	bool frame_pending, vchan_error;
-	int listening_socket;
 	uint64_t output_counter;
+	int listening_socket;
 };
 
 bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box);

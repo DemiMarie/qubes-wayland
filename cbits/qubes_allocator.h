@@ -12,6 +12,7 @@
  */
 struct wlr_allocator *qubes_allocator_create(uint16_t domid);
 extern const struct wlr_buffer_impl *qubes_buffer_impl_addr;
+void qubes_buffer_destroy(struct wlr_buffer *buffer);
 
 /**
  * Qubes OS buffer.  Owned by wlroots.
@@ -40,6 +41,7 @@ _Static_assert((offsetof(struct qubes_buffer, xen) -
                 offsetof(struct qubes_buffer, header)) ==
                   sizeof(struct msg_hdr),
                "Struct not contiguous?");
+void qubes_buffer_destroy(struct wlr_buffer *raw_buffer);
 
 #endif
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:

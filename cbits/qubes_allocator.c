@@ -31,7 +31,6 @@ static struct wlr_buffer *
 qubes_buffer_create(struct wlr_allocator *alloc, const int width,
                     const int height, const struct wlr_drm_format *format);
 static void qubes_allocator_destroy(struct wlr_allocator *allocator);
-static void qubes_buffer_destroy(struct wlr_buffer *buffer);
 static bool qubes_buffer_begin_data_ptr_access(struct wlr_buffer *buffer,
                                                uint32_t flags, void **data,
                                                uint32_t *format,
@@ -232,7 +231,7 @@ static bool qubes_buffer_begin_data_ptr_access(struct wlr_buffer *raw_buffer,
 	return true;
 }
 
-static void qubes_buffer_destroy(struct wlr_buffer *raw_buffer)
+void qubes_buffer_destroy(struct wlr_buffer *raw_buffer)
 {
 	assert(raw_buffer->impl == &qubes_buffer_impl);
 	struct qubes_buffer *buffer = wl_container_of(raw_buffer, buffer, inner);

@@ -26,6 +26,7 @@ struct qubes_backend {
 	struct wl_listener display_destroy;
 	struct wlr_keyboard *keyboard;
 	struct wlr_pointer *pointer;
+	uint32_t protocol_version;
 	bool connected;
 };
 extern int qubes_rust_backend_fd(struct qubes_rust_backend *backend);

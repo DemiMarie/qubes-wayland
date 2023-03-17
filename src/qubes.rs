@@ -137,7 +137,9 @@ impl QubesData {
                         *enabled = true;
                         let hdr = qubes_gui::UntrustedHeader {
                             ty: 0,
-                            window: qubes_gui::WindowID { window: None },
+                            window: qubes_gui::WindowID {
+                                window: qubes_castable::cast!(agent.xconf().version),
+                            },
                             untrusted_len: 2,
                         };
                         let delta = (std::time::Instant::now() - self.start).as_millis() as u32;

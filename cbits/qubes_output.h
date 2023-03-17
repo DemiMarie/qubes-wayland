@@ -31,6 +31,11 @@ struct qubes_output {
 	uint32_t flags;
 };
 
+struct qubes_link {
+	struct qubes_link *next;
+	struct qubes_buffer *buffer;
+};
+
 struct tinywl_server;
 struct wlr_xdg_surface;
 struct tinywl_view {

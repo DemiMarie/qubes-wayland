@@ -32,6 +32,7 @@
 
 #include <qubes-gui-protocol.h>
 
+#include "qubes_allocator.h"
 #include "qubes_backend.h"
 #include "qubes_clipboard.h"
 #include "qubes_data_source.h"
@@ -607,6 +608,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 
 	assert(raw_backend);
 	if (!ptr) {
+		backend->protocol_version = hdr.window;
 		qubes_reconnect(backend, hdr.untrusted_len);
 		return;
 	}
@@ -707,6 +709,33 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 	case MSG_DESTROY:
 		assert(0 && "handled by Rust code");
 		break;
+#define MSG_WINDOW_DUMP_ACK 149
+	case MSG_WINDOW_DUMP_ACK: {
+		if (output->server->protocol_version < 0x10007) {
+			wlr_log(
+			   WLR_ERROR,
+			   "Daemon sent MSG_WINDOW_DUMP_ACK but protocol version is %" PRIu32
+			   "(less than 0x10007)",
+			   output->server->protocol_version);
+			break;
+		}
+		struct qubes_link *link = output->server->queue_head;
+		if (link == NULL) {
+			wlr_log(WLR_ERROR,
+			        "Daemon sent too many MSG_WINDOW_DUMP_ACK messages");
+			break;
+		}
+		assert(output->server->queue_tail != NULL);
+		if ((output->server->queue_head = link->next) == NULL) {
+			assert(link == output->server->queue_tail);
+			output->server->queue_tail = NULL;
+		} else {
+			assert(link != output->server->queue_tail);
+		}
+		qubes_buffer_destroy(&link->buffer->inner);
+		free(link);
+		break;
+	}
 	case MSG_RESIZE:
 	case MSG_CREATE:
 	case MSG_UNMAP:
