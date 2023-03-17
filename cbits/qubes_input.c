@@ -547,8 +547,9 @@ static void qubes_reconnect(struct qubes_backend *const backend,
 	case 2: {
 		unsigned int const major_version = protocol_version >> 16;
 		unsigned int const minor_version = protocol_version & 0xFFFF;
-		sd_notifyf(0, "STATUS=GUI daemon reconnected, protocol version %u.%u\n",
-		           major_version, minor_version);
+		sd_notifyf(
+		   0, "READY=1\nSTATUS=GUI daemon reconnected, protocol version %u.%u\n",
+		   major_version, minor_version);
 		wlr_log(WLR_INFO, "GUI daemon reconnected, protocol version %u.%u\n",
 		        major_version, minor_version);
 		struct qubes_output *output;
@@ -558,14 +559,6 @@ static void qubes_reconnect(struct qubes_backend *const backend,
 		wl_list_for_each (output, backend->views, link) {
 			assert(!(output->flags & QUBES_OUTPUT_CREATED));
 			qubes_recreate_window(output);
-		}
-		if (!backend->connected) {
-			sd_notify(
-			   0,
-			   "READY=1\nSTATUS=GUI daemon connected, protocol version %u.%u\n");
-			backend->connected = true;
-		} else {
-			sd_notify(0, "STATUS=GUI daemon connected, protocol version %u.%u\n");
 		}
 		return;
 	}
