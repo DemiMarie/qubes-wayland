@@ -1,6 +1,6 @@
 #!/bin/sh --
 set -eu
-unset outdir target_dir mode
+unset depfile outdir target_dir path mode
 depfile=$1 outdir=$2 target_dir=$3 path=$4 mode=$5
 shift 5
 case $mode in
