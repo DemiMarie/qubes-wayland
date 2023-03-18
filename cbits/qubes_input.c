@@ -660,6 +660,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 		memcpy(&backend->keymap, ptr, hdr.untrusted_len);
 		return;
 	}
+	struct tinywl_server *server = output->server;
 	assert(hdr.window == output->window_id);
 	switch (hdr.type) {
 	case MSG_KEYPRESS:
@@ -674,7 +675,7 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 		break;
 	case MSG_BUTTON:
 		assert(hdr.untrusted_len == sizeof(struct msg_button));
-		handle_button(output->server->seat, timestamp, ptr);
+		handle_button(server->seat, timestamp, ptr);
 		break;
 	case MSG_MOTION:
 		assert(hdr.untrusted_len == sizeof(struct msg_motion));
@@ -739,18 +740,19 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 			   protocol_version_major, protocol_version_minor);
 			break;
 		}
-		struct qubes_link *link = output->server->queue_head;
+		struct qubes_link *link = server->queue_head;
 		if (link == NULL) {
+			assert(server->queue_tail == NULL);
 			wlr_log(WLR_ERROR,
 			        "Daemon sent too many MSG_WINDOW_DUMP_ACK messages");
 			break;
 		}
-		assert(output->server->queue_tail != NULL);
-		if ((output->server->queue_head = link->next) == NULL) {
-			assert(link == output->server->queue_tail);
-			output->server->queue_tail = NULL;
+		assert(server->queue_tail != NULL);
+		if ((server->queue_head = link->next) == NULL) {
+			assert(link == server->queue_tail);
+			server->queue_tail = NULL;
 		} else {
-			assert(link != output->server->queue_tail);
+			assert(link != server->queue_tail);
 		}
 		qubes_buffer_destroy(&link->buffer->inner);
 		free(link);

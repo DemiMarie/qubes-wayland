@@ -145,6 +145,7 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
                               const struct wlr_output_state *state)
 {
 	assert(output->buffer->impl == qubes_buffer_impl_addr);
+	struct tinywl_server *server = output->server;
 	if (0)
 		wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32,
 		        MSG_WINDOW_DUMP, output->window_id);
@@ -154,14 +155,19 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
 		abort(); /* FIXME */
 	}
 	struct qubes_buffer *buffer = wl_container_of(output->buffer, buffer, inner);
-	if (output->server->backend->protocol_version >= 0x10007) {
+	if (server->backend->protocol_version >= 0x10007) {
 		assert(buffer->refcount != 0);
 		assert(buffer->refcount < INT32_MAX);
 		buffer->refcount++;
 		link->next = NULL;
 		link->buffer = buffer;
-		if (output->server->queue_tail)
-			output->server->queue_tail->next = link;
+		if (server->queue_tail) {
+			assert(server->queue_head != NULL);
+			server->queue_tail->next = link;
+		} else {
+			assert(server->queue_head == NULL);
+			server->queue_head = link;
+		}
 		output->server->queue_tail = link;
 	}
 	buffer->header.window = output->window_id;
