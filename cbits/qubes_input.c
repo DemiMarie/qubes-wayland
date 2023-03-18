@@ -555,6 +555,8 @@ static void qubes_reconnect(struct qubes_backend *const backend,
 	case 2: {
 		unsigned int const major_version = protocol_version >> 16;
 		unsigned int const minor_version = protocol_version & 0xFFFF;
+		backend->protocol_version = protocol_version;
+		assert(major_version == 1);
 		sd_notifyf(
 		   0, "READY=1\nSTATUS=GUI daemon reconnected, protocol version %u.%u\n",
 		   major_version, minor_version);
@@ -726,12 +728,15 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 		break;
 #define MSG_WINDOW_DUMP_ACK 149
 	case MSG_WINDOW_DUMP_ACK: {
-		if (output->server->protocol_version < 0x10007) {
+		uint32_t const protocol_version = backend->protocol_version;
+		unsigned int const protocol_version_major = protocol_version >> 16;
+		unsigned int const protocol_version_minor = protocol_version & 0xFFFF;
+		if (protocol_version < 0x10007) {
 			wlr_log(
 			   WLR_ERROR,
-			   "Daemon sent MSG_WINDOW_DUMP_ACK but protocol version is %" PRIu32
-			   "(less than 0x10007)",
-			   output->server->protocol_version);
+			   "Daemon sent MSG_WINDOW_DUMP_ACK but protocol version is %u.%u"
+			   "(less than 1.7)",
+			   protocol_version_major, protocol_version_minor);
 			break;
 		}
 		struct qubes_link *link = output->server->queue_head;

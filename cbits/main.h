@@ -56,7 +56,6 @@ struct tinywl_server {
 	struct wlr_data_device_manager *data_device;
 	struct wlr_xwayland *xwayland;
 	uint32_t magic;
-	uint32_t protocol_version;
 	uint16_t domid;
 	bool frame_pending, vchan_error;
 	uint64_t output_counter;
