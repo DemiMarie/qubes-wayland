@@ -47,6 +47,8 @@ static void xwayland_surface_destroy(struct wl_listener *listener,
 	wl_list_remove(&view->set_class.link);
 	wl_list_remove(&view->set_hints.link);
 	wl_list_remove(&view->set_override_redirect.link);
+	wl_list_remove(&view->set_geometry.link);
+	wl_list_remove(&view->set_parent.link);
 	if (view->commit.link.next)
 		wl_list_remove(&view->commit.link);
 	qubes_output_deinit(&view->output);
@@ -468,6 +470,8 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
 	view->commit.notify = qubes_xwayland_surface_commit;
 	if (surface->surface)
 		wl_signal_add(&surface->surface->events.commit, &view->commit);
+	else
+		wl_list_init(&view->commit.link);
 	wlr_log(WLR_DEBUG, "created surface at %p", view);
 	surface->data = view;
 	return;
