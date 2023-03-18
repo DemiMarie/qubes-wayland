@@ -250,10 +250,10 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		struct wlr_xwayland_surface *surface = view->xwayland_surface;
 		assert(surface);
-		box.x = output->left;
-		box.y = output->top;
-		box.width = output->last_width;
-		box.height = output->last_height;
+		box.x = surface->x;
+		box.y = surface->y;
+		box.width = surface->width;
+		box.height = surface->height;
 	} else {
 		assert(!"Bad magic in qubes_output_commit");
 		abort();
