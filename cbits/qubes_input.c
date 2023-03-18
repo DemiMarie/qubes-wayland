@@ -386,14 +386,18 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	        "x=%u y=%u",
 	        output->left, output->top, output->last_width, output->last_height,
 	        configure.x, configure.y, configure.width, configure.height);
-	output->left = configure.x;
-	output->top = configure.y;
-	if (configure.width == (uint32_t)output->last_width &&
-	    configure.height == (uint32_t)output->last_height) {
+	if ((configure.width == (uint32_t)output->last_width) &&
+	    (configure.height == (uint32_t)output->last_height) &&
+	    ((output->magic == QUBES_VIEW_MAGIC) ||
+	     ((output->x == (int32_t)configure.x) && (output->y == (int32_t)configure.y)))) {
 		// Just ACK without doing anything
 		qubes_send_configure(output, configure.width, configure.height);
+		output->left = configure.x;
+		output->top = configure.y;
 		return;
 	}
+	output->left = configure.x;
+	output->top = configure.y;
 
 	if (configure.width <= 0 || configure.height <= 0 ||
 	    configure.width > MAX_WINDOW_WIDTH ||
