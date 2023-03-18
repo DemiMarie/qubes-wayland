@@ -393,8 +393,8 @@ static void qubes_xwayland_surface_set_parent(struct wl_listener *listener,
 		        parent_view, parent_output->left, parent_output->top,
 		        parent_output->last_width, parent_output->last_height);
 		struct wlr_box box = {
-			.x = parent->x,
-			.y = parent->y,
+			.x = output->left = output->x = surface->x,
+			.y = output->top = output->y = surface->y,
 			.width = surface->width,
 			.height = surface->height,
 		};
@@ -432,8 +432,8 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
 	                       surface->surface, QUBES_XWAYLAND_MAGIC))
 		goto cleanup;
 
-	output->left = surface->x;
-	output->top = surface->y;
+	output->left = output->x = surface->x;
+	output->top = output->y = surface->y;
 	output->last_width = surface->width;
 	output->last_height = surface->height;
 

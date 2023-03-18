@@ -388,8 +388,7 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	        configure.x, configure.y, configure.width, configure.height);
 	if ((configure.width == (uint32_t)output->last_width) &&
 	    (configure.height == (uint32_t)output->last_height) &&
-	    ((output->magic == QUBES_VIEW_MAGIC) ||
-	     ((output->x == (int32_t)configure.x) && (output->y == (int32_t)configure.y)))) {
+	    ((output->magic == QUBES_VIEW_MAGIC))) {
 		// Just ACK without doing anything
 		qubes_send_configure(output, configure.width, configure.height);
 		output->left = configure.x;
@@ -398,6 +397,10 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	}
 	output->left = configure.x;
 	output->top = configure.y;
+	if (output->magic == QUBES_XWAYLAND_MAGIC) {
+		output->x = configure.x;
+		output->y = configure.y;
+	}
 
 	if (configure.width <= 0 || configure.height <= 0 ||
 	    configure.width > MAX_WINDOW_WIDTH ||
@@ -437,9 +440,10 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 		}
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
-		wlr_xwayland_surface_configure(view->xwayland_surface, configure.x,
-		                               configure.y, configure.width,
-		                               configure.height);
+		if (!view->xwayland_surface->override_redirect)
+			wlr_xwayland_surface_configure(view->xwayland_surface, configure.x,
+			                               configure.y, configure.width,
+			                               configure.height);
 		// There won’t be a configure event ACKd by the client, so
 		// ACK early.  Neglecting this for Xwayland cost two weeks of debugging.
 		qubes_send_configure(output, configure.width, configure.height);

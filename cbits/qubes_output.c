@@ -250,10 +250,10 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		struct wlr_xwayland_surface *surface = view->xwayland_surface;
 		assert(surface);
-		box.x = surface->x;
-		box.y = surface->y;
-		box.width = surface->width;
-		box.height = surface->height;
+		box.x = output->left;
+		box.y = output->top;
+		box.width = output->last_width;
+		box.height = output->last_height;
 	} else {
 		assert(!"Bad magic in qubes_output_commit");
 		abort();
@@ -627,16 +627,22 @@ void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 {
 	if (!box.width || !box.height)
 		return;
+	bool need_configure = output->magic == QUBES_XWAYLAND_MAGIC;
 	qubes_output_ensure_created(output, box);
 	if ((output->last_width != box.width || output->last_height != box.height) &&
-	    !(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE)) {
-		qubes_send_configure(output, box.width, box.height);
+	    (!(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE))) {
 		wlr_log(WLR_DEBUG, "Resized window %u: old size %u %u, new size %u %u",
 		        (unsigned)output->window_id, output->last_width,
 		        output->last_height, box.width, box.height);
 		wlr_output_set_custom_mode(&output->output, box.width, box.height, 60000);
+		need_configure = true;
+	}
+	if (need_configure) {
+		qubes_send_configure(output, box.width, box.height);
 		output->last_width = box.width;
 		output->last_height = box.height;
+		output->x = box.x;
+		output->y = box.y;
 	}
 	wlr_output_send_frame(&output->output);
 }
