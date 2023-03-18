@@ -2,6 +2,6 @@
 	path = gui-rust
 	url = https://github.com/QubesOS/gui-rust.git
 [submodule "subprojects/wlroots"]
-	url = git+ssh://git@gitlab.freedesktop.org/DemiMarie/wlroots.git
-	branch = fix-assert
+	url = git+ssh://git@gitlab.freedesktop.org/wlroots/wlroots.git
+	branch = 0.16
 	path = subprojects/wlroots
