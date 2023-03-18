@@ -85,7 +85,6 @@ void qubes_xwayland_surface_map(struct qubes_xwayland_view *view)
 		assert(parent_view);
 		assert(parent_view->output.magic == QUBES_XWAYLAND_MAGIC);
 		parent_window_id = parent_view->output.window_id;
-		assert(parent_window_id != 0);
 	} else {
 		parent_window_id = 0;
 	}
