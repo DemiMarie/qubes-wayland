@@ -570,7 +570,9 @@ static void qubes_reconnect(struct qubes_backend *const backend,
 			wl_event_source_remove(backend->source);
 		backend->source = NULL;
 		if (!qubes_rust_reconnect(backend->rust_backend)) {
-			sd_notify(0, "STATUS=Cound not reconnect to GUI daemon, exiting!\n");
+			sd_notify(
+			   0,
+			   "STATUS=Cound not reconnect to GUI daemon, exiting!\nSTOPPING=1\n");
 			wlr_log(WLR_ERROR, "Fatal error: cannot reconnect to GUI daemon");
 			wl_display_terminate(backend->display);
 			return;
@@ -590,10 +592,10 @@ static void qubes_reconnect(struct qubes_backend *const backend,
 		}
 		return;
 	case 3:
-		sd_notify(0,
-		          "STATUS=Protocol error occurred, but no need to reconnect "
-		          "(fatal)\nERRNO=%d",
-		          EPROTO);
+		sd_notifyf(0,
+		           "STATUS=Protocol error occurred, but no need to reconnect "
+		           "(fatal)\nERRNO=%d",
+		           EPROTO);
 		wl_display_terminate(backend->display);
 		return;
 	default:

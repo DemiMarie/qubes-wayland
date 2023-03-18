@@ -1,5 +1,6 @@
 #ifndef QUBES_WAYLAND_COMPOSITOR_COMMON_H
 #define QUBES_WAYLAND_COMPOSITOR_COMMON_H QUBES_WAYLAND_COMPOSITOR_COMMON_H
+#include "config.h"
 #ifdef NDEBUG
 #error                                                                         \
    "Compositor relies on assertions being enabled as it uses assert(something_with_important_side_effects()) a lot"

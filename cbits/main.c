@@ -10,7 +10,6 @@
 
 #include <qubesdb-client.h>
 
-#include "config.h"
 #ifdef QUBES_HAS_SYSTEMD
 #include <systemd/sd-daemon.h>
 #endif
