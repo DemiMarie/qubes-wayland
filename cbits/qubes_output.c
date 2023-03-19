@@ -675,12 +675,12 @@ void qubes_output_set_class(struct qubes_output *output, const char *class)
 		struct msg_hdr header;
 		struct msg_wmclass class;
 	} msg = {
-	   .header = {
+		.header = {
 			.type = MSG_WMCLASS,
 			.window = output->window_id,
 			.untrusted_len = sizeof(struct msg_wmclass),
 		},
-	   .class = {
+		.class = {
 			.res_class = {0},
 			.res_name = {0},
 		},
