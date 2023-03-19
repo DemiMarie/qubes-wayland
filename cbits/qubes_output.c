@@ -181,13 +181,13 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
 
 bool qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
 {
-	if ((output->left == x) && (output->top == y)) {
+	if ((output->x == x) && (output->y == y)) {
 		return false;
 	}
 
 	/* Output position has changed.  Update accordingly. */
-	output->left = x;
-	output->top = y;
+	output->x = x;
+	output->y = y;
 
 	/*
 	 * The Qubes GUI protocol uses coordinates relative to the top left of the
@@ -221,7 +221,8 @@ bool qubes_output_ensure_created(struct qubes_output *output,
 	    box.height > MAX_WINDOW_HEIGHT) {
 		return false;
 	}
-	qubes_output_move(output, box.x, box.y);
+	if (!(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE))
+		qubes_output_move(output, box.x, box.y);
 	if (qubes_output_created(output))
 		return true;
 	if (!output->window_id)
@@ -238,8 +239,8 @@ bool qubes_output_ensure_created(struct qubes_output *output,
 			.untrusted_len = sizeof(struct msg_create),
 		},
 		.create = {
-			.x = output->left,
-			.y = output->top,
+			.x = box.x,
+			.y = box.y,
 			.width = box.width,
 			.height = box.height,
 			.parent = 0,
@@ -464,14 +465,14 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width,
 		width = MAX_WINDOW_WIDTH;
 	if (height > MAX_WINDOW_HEIGHT)
 		height = MAX_WINDOW_HEIGHT;
-	if (output->left < -MAX_WINDOW_WIDTH)
-		output->left = -MAX_WINDOW_WIDTH;
-	if (output->top < -MAX_WINDOW_HEIGHT)
-		output->top = -MAX_WINDOW_HEIGHT;
-	if (output->left > MAX_WINDOW_WIDTH)
-		output->left = MAX_WINDOW_WIDTH;
-	if (output->top > MAX_WINDOW_HEIGHT)
-		output->top = MAX_WINDOW_HEIGHT;
+	if (output->x < -MAX_WINDOW_WIDTH)
+		output->x = -MAX_WINDOW_WIDTH;
+	if (output->y < -MAX_WINDOW_HEIGHT)
+		output->y = -MAX_WINDOW_HEIGHT;
+	if (output->x > MAX_WINDOW_WIDTH)
+		output->x = MAX_WINDOW_WIDTH;
+	if (output->y > MAX_WINDOW_HEIGHT)
+		output->y = MAX_WINDOW_HEIGHT;
 
 	// clang-format off
 	struct {
@@ -484,8 +485,8 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width,
 			.untrusted_len = sizeof(struct msg_configure),
 		},
 		.configure = {
-			.x = output->left,
-			.y = output->top,
+			.x = output->x,
+			.y = output->y,
 			.width = width,
 			.height = height,
 			.override_redirect = output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT ? 1 : 0,
@@ -668,8 +669,6 @@ void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 		qubes_send_configure(output, box.width, box.height);
 		output->last_width = box.width;
 		output->last_height = box.height;
-		output->x = box.x;
-		output->y = box.y;
 	}
 	wlr_output_send_frame(&output->output);
 }

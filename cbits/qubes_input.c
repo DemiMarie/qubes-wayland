@@ -385,7 +385,7 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	wlr_log(WLR_DEBUG,
 	        "handle_configure: old rect x=%d y=%d w=%u h=%u, new rect x=%d y=%d "
 	        "x=%u y=%u",
-	        output->left, output->top, output->last_width, output->last_height,
+	        output->x, output->y, output->last_width, output->last_height,
 	        configure.x, configure.y, configure.width, configure.height);
 	uint32_t const width = configure.width;
 	uint32_t const height = configure.height;

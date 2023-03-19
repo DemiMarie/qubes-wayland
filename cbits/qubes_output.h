@@ -24,7 +24,7 @@ struct qubes_output {
 	struct wlr_scene_tree *scene_subsurface_tree;
 	char *name;
 
-	int x, y, left, top;
+	int x, y;
 	uint32_t last_width, last_height;
 	uint32_t window_id;
 	uint32_t magic;
