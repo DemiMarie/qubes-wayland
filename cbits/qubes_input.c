@@ -420,6 +420,8 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	                           configure.height, 60000);
 
 	if (QUBES_VIEW_MAGIC == output->magic) {
+		// Ignore client-initiated resizes until this configure is ACKd, to
+		// avoid racing against the GUI daemon.
 		output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
