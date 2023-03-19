@@ -735,11 +735,10 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 		unsigned int const protocol_version_major = protocol_version >> 16;
 		unsigned int const protocol_version_minor = protocol_version & 0xFFFF;
 		if (protocol_version < 0x10007) {
-			wlr_log(
-			   WLR_ERROR,
-			   "Daemon sent MSG_WINDOW_DUMP_ACK but protocol version is %u.%u"
-			   "(less than 1.7)",
-			   protocol_version_major, protocol_version_minor);
+			wlr_log(WLR_ERROR,
+			        "Daemon sent MSG_WINDOW_DUMP_ACK but protocol version is %u.%u"
+			        "(less than 1.7)",
+			        protocol_version_major, protocol_version_minor);
 			break;
 		}
 		struct qubes_link *link = server->queue_head;
