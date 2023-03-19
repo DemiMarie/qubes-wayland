@@ -179,6 +179,34 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
 	qubes_output_damage(output, box, state);
 }
 
+void qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
+{
+	if ((output->x == x) && (output->y == y)) {
+		return;
+	}
+
+	/* Output position has changed.  Update accordingly. */
+	output->x = x;
+	output->y = y;
+
+	/*
+	 * The Qubes GUI protocol uses coordinates relative to the top left of the
+	 * screen, since those are the coordinates X11 uses.  Native Wayland
+	 * windows, however, use output-relative coordinates.  Therefore,
+	 * wlr_scene needs to be told of its position so that it can translate
+	 * coordinates appropriately.  XWayland windows, however, are already in
+	 * the coordinates used by the Qubes GUI protocol, so they must not be
+	 * translated.  The symptom of getting this wrong is black bars near the
+	 * edge of a maximized window, or non-maximized windows not displaying
+	 * anything if its position on screen is wrong.
+	 */
+	if (output->magic == QUBES_VIEW_MAGIC) {
+		wlr_scene_output_set_position(output->scene_output, x, y);
+	} else {
+		assert(output->magic == QUBES_XWAYLAND_MAGIC);
+	}
+}
+
 bool qubes_output_ensure_created(struct qubes_output *output,
                                  struct wlr_box box)
 {
@@ -189,24 +217,7 @@ bool qubes_output_ensure_created(struct qubes_output *output,
 	    box.height > MAX_WINDOW_HEIGHT) {
 		return false;
 	}
-	if (output->x != box.x || output->y != box.y) {
-		output->x = box.x;
-		output->y = box.y;
-		/*
-		 * The Qubes GUI protocol uses coordinates relative to the top left of the
-		 * screen, since those are the coordinates X11 uses.  Native Wayland
-		 * windows, however, use output-relative coordinates.  Therefore,
-		 * wlr_scene needs to be told of its position so that it can translate
-		 * coordinates appropriately.  XWayland windows, however, are already in
-		 * the coordinates used by the Qubes GUI protocol, so they must not be
-		 * translated.  The symptom of getting this wrong is black bars near the
-		 * edge of a maximized window, or non-maximized windows not displaying
-		 * anything if its position on screen is wrong.
-		 */
-		if (output->magic == QUBES_VIEW_MAGIC)
-			wlr_scene_output_set_position(output->scene_output, output->x,
-			                              output->y);
-	}
+	qubes_output_move(output, box.x, box.y);
 	if (qubes_output_created(output))
 		return true;
 	if (!output->window_id)
