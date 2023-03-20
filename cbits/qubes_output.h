@@ -38,28 +38,6 @@ struct qubes_link {
 
 struct tinywl_server;
 struct wlr_xdg_surface;
-struct tinywl_view {
-	struct qubes_output output;
-	struct wlr_xdg_surface *xdg_surface;
-	struct wl_listener map;
-	struct wl_listener unmap;
-	struct wl_listener destroy;
-	struct wl_listener commit;
-
-	/* only initialized for toplevels */
-	struct wl_listener request_maximize;
-	struct wl_listener request_fullscreen;
-	struct wl_listener request_minimize;
-	struct wl_listener request_move;
-	struct wl_listener request_resize;
-	struct wl_listener request_show_window_menu;
-	struct wl_listener set_title;
-	struct wl_listener set_app_id;
-	struct wl_listener ack_configure;
-
-	uint32_t configure_serial;
-};
-
 enum {
 	QUBES_OUTPUT_CREATED = 1 << 0,
 	QUBES_OUTPUT_MAPPED = 1 << 1,

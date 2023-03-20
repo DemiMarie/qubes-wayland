@@ -13,22 +13,24 @@
 #define QUBES_UNUSED __attribute__((unused))
 
 #define QUBES_MAGIC(a, b, c, d)                                                \
-	((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 |           \
+	((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 |      \
 	 (uint32_t)(d))
 
 #define QUBES_MIN(a, b)                                                        \
-	__extension__({                                                             \
-		__typeof__(a) _x = (a);                                                  \
-		__typeof__(b) _y = (b);                                                  \
-		_x > _y ? _y : _x;                                                       \
+	__extension__({                                                        \
+		__typeof__(a) _x = (a);                                        \
+		__typeof__(b) _y = (b);                                        \
+		_x > _y ? _y : _x;                                             \
 	})
 
 #define QUBES_MAX(a, b)                                                        \
-	__extension__({                                                             \
-		__typeof__(a) _x = (a);                                                  \
-		__typeof__(b) _y = (b);                                                  \
-		_x < _y ? _y : _x;                                                       \
+	__extension__({                                                        \
+		__typeof__(a) _x = (a);                                        \
+		__typeof__(b) _y = (b);                                        \
+		_x < _y ? _y : _x;                                             \
 	})
+
+#pragma GCC poison _x _y
 
 #define QUBES_STATIC_ASSERT(a) _Static_assert(a, #a)
 
