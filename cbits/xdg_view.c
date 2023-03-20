@@ -22,6 +22,7 @@
 #include "qubes_backend.h"
 #include "qubes_output.h"
 #include "qubes_xwayland.h"
+#include "xdg_view.h"
 
 static void qubes_request_maximize(struct wl_listener *listener,
                                    void *data __attribute__((unused)))
@@ -204,6 +205,13 @@ static void xdg_surface_destroy(struct wl_listener *listener,
 	}
 	qubes_output_deinit(&view->output);
 	free(view);
+}
+
+bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box)
+{
+	assert(box);
+	wlr_xdg_surface_get_geometry(view->xdg_surface, box);
+	return qubes_output_ensure_created(&view->output, *box);
 }
 
 static void qubes_surface_commit(struct wl_listener *listener,

@@ -275,13 +275,6 @@ static void server_new_output(struct wl_listener *listener, void *data)
 	wlr_output_layout_add_auto(server->output_layout, wlr_output);
 }
 
-bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box)
-{
-	assert(box);
-	wlr_xdg_surface_get_geometry(view->xdg_surface, box);
-	return qubes_output_ensure_created(&view->output, *box);
-}
-
 static void qubes_new_decoration(struct wl_listener *listener, void *data)
 {
 	struct tinywl_server *server =

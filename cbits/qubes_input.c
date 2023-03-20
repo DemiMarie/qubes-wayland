@@ -38,6 +38,7 @@
 #include "qubes_data_source.h"
 #include "qubes_output.h"
 #include "qubes_xwayland.h"
+#include "xdg_view.h"
 
 static void handle_keypress(struct qubes_output *output, uint32_t timestamp,
                             const uint8_t *ptr)

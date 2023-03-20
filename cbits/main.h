@@ -62,8 +62,5 @@ struct tinywl_server {
 	int listening_socket;
 };
 
-bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box);
-void qubes_view_map(struct tinywl_view *view);
-
 #endif
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:
