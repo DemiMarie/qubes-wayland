@@ -22,6 +22,7 @@
 #include "qubes_backend.h"
 #include "qubes_output.h"
 #include "qubes_xwayland.h"
+#include "xdg_view.h"
 #include <drm/drm_fourcc.h>
 
 /* Qubes OS doesn’t support gamma LUTs */
@@ -189,6 +190,9 @@ bool qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
 	output->x = x;
 	output->y = y;
 
+	/* Cause a new frame to be drawn */
+	wlr_output_send_frame(&output->output);
+
 	/*
 	 * The Qubes GUI protocol uses coordinates relative to the top left of the
 	 * screen, since those are the coordinates X11 uses.  Native Wayland
@@ -202,7 +206,6 @@ bool qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
 	 */
 	if (output->magic == QUBES_VIEW_MAGIC) {
 		// Moving a plain Wayland window does not require any changes
-		wlr_scene_output_set_position(output->scene_output, x, y);
 		return false;
 	} else {
 		// Moving an Xwayland window *does* require changes
@@ -268,6 +271,8 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+		box.x = output->x;
+		box.y = output->y;
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		struct wlr_xwayland_surface *surface = view->xwayland_surface;
@@ -361,7 +366,7 @@ static void qubes_output_frame(struct wl_listener *listener,
 	// wlr_output to lose sync with the qubes_output, causing parts of the
 	// window to *never* be displayed until the next window resize.  This bug
 	// took more than three days to fix.
-	if (output->last_width && output->last_height)
+	if ((output->last_width > 0) && (output->last_height > 0))
 		wlr_output_update_custom_mode(&output->output, output->last_width,
 		                              output->last_height, 60000);
 	assert(QUBES_VIEW_MAGIC == output->magic ||

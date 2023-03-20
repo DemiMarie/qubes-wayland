@@ -151,8 +151,8 @@ static void handle_pointer_movement(struct qubes_output *output, int32_t x,
                                     int32_t y, uint32_t timestamp,
                                     struct wlr_seat *seat)
 {
-	const double seat_relative_x = x + (double)output->x,
-	             seat_relative_y = y + (double)output->y;
+	const double seat_relative_x = (double)x,
+	             seat_relative_y = (double)y;
 	double sx, sy;
 	struct wlr_surface *surface = NULL;
 	if (QUBES_VIEW_MAGIC == output->magic) {
@@ -422,10 +422,10 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 		return;
 	}
 
+	// Ignore client-initiated resizes until this configure is ACKd, to
+	// avoid racing against the GUI daemon.
+	output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 	if (QUBES_VIEW_MAGIC == output->magic) {
-		// Ignore client-initiated resizes until this configure is ACKd, to
-		// avoid racing against the GUI daemon.
-		output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 			view->configure_serial = wlr_xdg_toplevel_set_size(
@@ -509,7 +509,8 @@ static void qubes_recreate_window(struct qubes_output *output)
 	switch (output->magic) {
 	case QUBES_VIEW_MAGIC: {
 		struct tinywl_view *view = wl_container_of(output, view, output);
-		wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+		if (!qubes_xdg_surface_ensure_created(view, &box))
+			return;
 		break;
 	}
 	case QUBES_XWAYLAND_MAGIC: {
@@ -519,6 +520,8 @@ static void qubes_recreate_window(struct qubes_output *output)
 		box.width = view->xwayland_surface->width;
 		box.height = view->xwayland_surface->height;
 		break;
+		if (!qubes_output_ensure_created(output, box))
+			return;
 	}
 	default:
 		assert(!"Invalid output type");
@@ -526,8 +529,6 @@ static void qubes_recreate_window(struct qubes_output *output)
 	}
 
 	output->last_width = box.width, output->last_height = box.height;
-	if (!qubes_output_ensure_created(output, box))
-		return;
 	qubes_send_configure(output, box.width, box.height);
 	if (output->buffer) {
 		qubes_output_dump_buffer(output, box, NULL);

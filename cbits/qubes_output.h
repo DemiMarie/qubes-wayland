@@ -84,6 +84,16 @@ static inline bool qubes_output_override_redirect(struct qubes_output *output)
 	return output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT;
 }
 
+static inline bool qubes_output_is_native_wayland(struct qubes_output *output)
+{
+	return output->magic == QUBES_VIEW_MAGIC;
+}
+
+static inline bool qubes_output_is_xwayland(struct qubes_output *output)
+{
+	return output->magic == QUBES_XWAYLAND_MAGIC;
+}
+
 /* Initialize a qubes_output */
 bool qubes_output_init(struct qubes_output *output,
                        struct tinywl_server *server, bool override_redirect,
