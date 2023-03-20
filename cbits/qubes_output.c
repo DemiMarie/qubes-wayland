@@ -21,8 +21,8 @@
 #include "qubes_allocator.h"
 #include "qubes_backend.h"
 #include "qubes_output.h"
+#include "qubes_wayland.h"
 #include "qubes_xwayland.h"
-#include "xdg_view.h"
 #include <drm/drm_fourcc.h>
 
 /* Qubes OS doesn’t support gamma LUTs */
