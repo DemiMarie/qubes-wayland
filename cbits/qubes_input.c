@@ -387,38 +387,40 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	        "x=%u y=%u",
 	        output->left, output->top, output->last_width, output->last_height,
 	        configure.x, configure.y, configure.width, configure.height);
-	if ((configure.width == (uint32_t)output->last_width) &&
-	    (configure.height == (uint32_t)output->last_height) &&
-	    ((output->magic == QUBES_VIEW_MAGIC))) {
-		// Just ACK without doing anything
-		qubes_send_configure(output, configure.width, configure.height);
-		output->left = configure.x;
-		output->top = configure.y;
-		return;
-	}
-	output->left = configure.x;
-	output->top = configure.y;
-	if (output->magic == QUBES_XWAYLAND_MAGIC) {
-		output->x = configure.x;
-		output->y = configure.y;
-	}
+	uint32_t const width = configure.width;
+	uint32_t const height = configure.height;
+	// Old GUI protocol versions incorrectly used uint32_t for x and y, so cast.
+	int32_t const x = (int32_t)configure.x;
+	int32_t const y = (int32_t)configure.y;
 
-	if (configure.width <= 0 || configure.height <= 0 ||
-	    configure.width > MAX_WINDOW_WIDTH ||
-	    configure.height > MAX_WINDOW_HEIGHT) {
+	// Validate that the coordinates are reasonable
+	if (((width < 1) || (width > MAX_WINDOW_WIDTH)) ||
+	    ((height < 1) || (height > MAX_WINDOW_HEIGHT)) ||
+	    ((x < -MAX_WINDOW_WIDTH) || (x > MAX_WINDOW_WIDTH)) ||
+	    ((y < -MAX_WINDOW_HEIGHT) || (y > MAX_WINDOW_HEIGHT))) {
 		wlr_log(WLR_ERROR,
-		        "Bad configure from GUI daemon: width %" PRIu32 " height %" PRIu32
-		        " window %" PRIu32,
-		        configure.x, configure.y, output->window_id);
+		        "Bad configure from GUI daemon: x %" PRIi32 " y %" PRIi32
+		        " width %" PRIu32 " height %" PRIu32 " window %" PRIu32,
+		        x, y, width, height, output->window_id);
 		// this should never happen, but better to ACK the configure
 		// than to crash; return to avoid giving clients an invalid state
-		qubes_send_configure(output, configure.width, configure.height);
+		qubes_send_configure(output, width, height);
 		return;
 	}
 
-	output->last_width = configure.width, output->last_height = configure.height;
-	wlr_output_update_custom_mode(&output->output, configure.width,
-	                              configure.height, 60000);
+	bool anything_changed = qubes_output_move(output, x, y);
+	if ((width != output->last_width) || (height != output->last_height)) {
+		wlr_output_update_custom_mode(&output->output, width, height, 60000);
+		output->last_width = width;
+		output->last_height = height;
+		anything_changed = true;
+	}
+
+	if (!anything_changed) {
+		// Nothing changed, just ACK without doing anything
+		qubes_send_configure(output, width, height);
+		return;
+	}
 
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		// Ignore client-initiated resizes until this configure is ACKd, to

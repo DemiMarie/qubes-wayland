@@ -179,15 +179,15 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
 	qubes_output_damage(output, box, state);
 }
 
-void qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
+bool qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
 {
-	if ((output->x == x) && (output->y == y)) {
-		return;
+	if ((output->left == x) && (output->top == y)) {
+		return false;
 	}
 
 	/* Output position has changed.  Update accordingly. */
-	output->x = x;
-	output->y = y;
+	output->left = x;
+	output->top = y;
 
 	/*
 	 * The Qubes GUI protocol uses coordinates relative to the top left of the
@@ -201,9 +201,13 @@ void qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
 	 * anything if its position on screen is wrong.
 	 */
 	if (output->magic == QUBES_VIEW_MAGIC) {
+		// Moving a plain Wayland window does not require any changes
 		wlr_scene_output_set_position(output->scene_output, x, y);
+		return false;
 	} else {
+		// Moving an Xwayland window *does* require changes
 		assert(output->magic == QUBES_XWAYLAND_MAGIC);
+		return true;
 	}
 }
 
@@ -650,8 +654,8 @@ void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 		need_configure = true;
 	}
 	qubes_output_ensure_created(output, box);
-	if (((output->last_width != box.width) ||
-	     (output->last_height != box.height)) &&
+	if (((output->last_width != (uint32_t)box.width) ||
+	     (output->last_height != (uint32_t)box.height)) &&
 	    (!(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE))) {
 		wlr_log(WLR_DEBUG, "Resized window %u: old size %u %u, new size %u %u",
 		        (unsigned)output->window_id, output->last_width,

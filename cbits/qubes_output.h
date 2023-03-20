@@ -25,7 +25,7 @@ struct qubes_output {
 	char *name;
 
 	int x, y, left, top;
-	int last_width, last_height;
+	uint32_t last_width, last_height;
 	uint32_t window_id;
 	uint32_t magic;
 	uint32_t flags;
@@ -110,7 +110,7 @@ void qubes_output_map(struct qubes_output *output,
 struct wlr_surface *qubes_output_surface(struct qubes_output *output);
 void qubes_set_view_title(struct qubes_output *output, const char *const title);
 void qubes_output_set_class(struct qubes_output *output, const char *class);
-void qubes_output_move(struct qubes_output *output, int32_t x, int32_t y);
+bool qubes_output_move(struct qubes_output *output, int32_t x, int32_t y);
 
 #endif /* !defined QUBES_WAYLAND_COMPOSITOR_OUTPUT_H */
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:
