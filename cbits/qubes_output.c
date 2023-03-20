@@ -642,11 +642,16 @@ void qubes_output_map(struct qubes_output *output,
 
 void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 {
-	if (!box.width || !box.height)
+	bool need_configure = false;
+	if ((box.width < 1) || (box.height < 1))
 		return;
-	bool need_configure = output->magic == QUBES_XWAYLAND_MAGIC;
+	if ((output->magic == QUBES_XWAYLAND_MAGIC) &&
+	    ((output->x != box.width) || (output->y != box.height))) {
+		need_configure = true;
+	}
 	qubes_output_ensure_created(output, box);
-	if ((output->last_width != box.width || output->last_height != box.height) &&
+	if (((output->last_width != box.width) ||
+	     (output->last_height != box.height)) &&
 	    (!(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE))) {
 		wlr_log(WLR_DEBUG, "Resized window %u: old size %u %u, new size %u %u",
 		        (unsigned)output->window_id, output->last_width,
