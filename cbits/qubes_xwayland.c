@@ -435,6 +435,8 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
 	output->top = output->y = surface->y;
 	output->last_width = surface->width;
 	output->last_height = surface->height;
+	wlr_output_set_custom_mode(&output->output, surface->width, surface->height,
+	                           60000);
 
 	view->xwayland_surface = surface;
 

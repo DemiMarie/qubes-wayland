@@ -417,8 +417,8 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	}
 
 	output->last_width = configure.width, output->last_height = configure.height;
-	wlr_output_set_custom_mode(&output->output, configure.width,
-	                           configure.height, 60000);
+	wlr_output_update_custom_mode(&output->output, configure.width,
+	                              configure.height, 60000);
 
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		// Ignore client-initiated resizes until this configure is ACKd, to

@@ -656,7 +656,8 @@ void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 		wlr_log(WLR_DEBUG, "Resized window %u: old size %u %u, new size %u %u",
 		        (unsigned)output->window_id, output->last_width,
 		        output->last_height, box.width, box.height);
-		wlr_output_set_custom_mode(&output->output, box.width, box.height, 60000);
+		wlr_output_update_custom_mode(&output->output, box.width, box.height,
+		                              60000);
 		need_configure = true;
 	}
 	if (need_configure) {
