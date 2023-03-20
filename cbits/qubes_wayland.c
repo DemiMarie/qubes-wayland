@@ -22,7 +22,7 @@
 #include "qubes_backend.h"
 #include "qubes_output.h"
 #include "qubes_xwayland.h"
-#include "xdg_view.h"
+#include "qubes_wayland.h"
 
 static void qubes_request_maximize(struct wl_listener *listener,
                                    void *data __attribute__((unused)))
