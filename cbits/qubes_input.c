@@ -583,9 +583,8 @@ static void qubes_reconnect(struct qubes_backend *const backend,
 			wl_event_source_remove(backend->source);
 		backend->source = NULL;
 		if (!qubes_rust_reconnect(backend->rust_backend)) {
-			sd_notify(
-			   0,
-			   "STATUS=Cound not reconnect to GUI daemon, exiting!\nSTOPPING=1\n");
+			sd_notify(0, "STATUS=Cound not reconnect to GUI daemon (fatal)\n"
+			             "STOPPING=1\n");
 			wlr_log(WLR_ERROR, "Fatal error: cannot reconnect to GUI daemon");
 			wl_display_terminate(backend->display);
 			return;
@@ -596,11 +595,12 @@ static void qubes_reconnect(struct qubes_backend *const backend,
 		   loop, fd, WL_EVENT_READABLE | WL_EVENT_HANGUP | WL_EVENT_ERROR,
 		   qubes_backend_on_fd, backend);
 		if (!backend->source) {
-			sd_notifyf(
-			   0, "STATUS=Cannot re-register vchan file descriptor: %s\nERRNO=%d",
-			   strerror(errno), errno);
+			sd_notifyf(0,
+			           "STATUS=Cannot re-register vchan file descriptor: %m\n"
+			           "ERRNO=%d",
+			           errno);
 			wlr_log(WLR_ERROR,
-			        "Fatal error: Cannot re-register vchan file descriptor");
+			        "Fatal error: Cannot re-register vchan file descriptor: %m");
 			wl_display_terminate(backend->display);
 		}
 		return;
