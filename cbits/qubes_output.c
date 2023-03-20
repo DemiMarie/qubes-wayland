@@ -149,13 +149,13 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
 	if (0)
 		wlr_log(WLR_DEBUG, "Sending MSG_WINDOW_DUMP (0x%x) to window %" PRIu32,
 		        MSG_WINDOW_DUMP, output->window_id);
-	struct qubes_link *link = malloc(sizeof(*link));
-	if (link == NULL) {
-		wlr_log(WLR_ERROR, "Cannot allocate %zu bytes?", sizeof(*link));
-		abort(); /* FIXME */
-	}
 	struct qubes_buffer *buffer = wl_container_of(output->buffer, buffer, inner);
 	if (server->backend->protocol_version >= 0x10007) {
+		struct qubes_link *link = malloc(sizeof(*link));
+		if (link == NULL) {
+			wlr_log(WLR_ERROR, "Cannot allocate %zu bytes?", sizeof(*link));
+			abort(); /* FIXME */
+		}
 		assert(buffer->refcount != 0);
 		assert(buffer->refcount < INT32_MAX);
 		buffer->refcount++;
