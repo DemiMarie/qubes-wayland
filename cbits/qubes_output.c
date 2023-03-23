@@ -341,7 +341,7 @@ static void qubes_output_frame(struct wl_listener *listener,
 	// wlr_output to lose sync with the qubes_output, causing parts of the
 	// window to *never* be displayed until the next window resize.  This bug
 	// took more than three days to fix.
-	if (output->last_width && output->last_height)
+	if ((output->last_width > 0) && (output->last_height > 0))
 		wlr_output_update_custom_mode(&output->output, output->last_width,
 		                              output->last_height, 60000);
 	assert(QUBES_VIEW_MAGIC == output->magic ||

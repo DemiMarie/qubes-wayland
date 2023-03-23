@@ -381,44 +381,48 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	struct msg_configure configure;
 
 	memcpy(&configure, ptr, sizeof(configure));
+	uint32_t const width = configure.width;
+	uint32_t const height = configure.height;
+	// Old GUI protocol headers incorrectly used uint32_t for x and y, so cast.
+	int32_t const x = (int32_t)configure.x;
+	int32_t const y = (int32_t)configure.y;
+
 	// Just ACK the configure
 	wlr_log(WLR_DEBUG,
 	        "handle_configure: old rect x=%d y=%d w=%u h=%u, new rect x=%d y=%d "
 	        "x=%u y=%u",
 	        output->left, output->top, output->last_width, output->last_height,
-	        configure.x, configure.y, configure.width, configure.height);
-	if ((configure.width == (uint32_t)output->last_width) &&
-	    (configure.height == (uint32_t)output->last_height) &&
+	        x, y, width, height);
+	if ((width == (uint32_t)output->last_width) &&
+	    (height == (uint32_t)output->last_height) &&
 	    ((output->magic == QUBES_VIEW_MAGIC))) {
 		// Just ACK without doing anything
-		qubes_send_configure(output, configure.width, configure.height);
-		output->left = configure.x;
-		output->top = configure.y;
+		qubes_send_configure(output, width, height);
+		output->left = x;
+		output->top = y;
 		return;
 	}
-	output->left = configure.x;
-	output->top = configure.y;
+	output->left = x;
+	output->top = y;
 	if (output->magic == QUBES_XWAYLAND_MAGIC) {
-		output->x = configure.x;
-		output->y = configure.y;
+		output->x = x;
+		output->y = y;
 	}
 
-	if (configure.width <= 0 || configure.height <= 0 ||
-	    configure.width > MAX_WINDOW_WIDTH ||
-	    configure.height > MAX_WINDOW_HEIGHT) {
+	if (width <= 0 || height <= 0 || width > MAX_WINDOW_WIDTH ||
+	    height > MAX_WINDOW_HEIGHT) {
 		wlr_log(WLR_ERROR,
 		        "Bad configure from GUI daemon: width %" PRIu32 " height %" PRIu32
 		        " window %" PRIu32,
-		        configure.x, configure.y, output->window_id);
+		        x, y, output->window_id);
 		// this should never happen, but better to ACK the configure
 		// than to crash; return to avoid giving clients an invalid state
-		qubes_send_configure(output, configure.width, configure.height);
+		qubes_send_configure(output, width, height);
 		return;
 	}
 
-	output->last_width = configure.width, output->last_height = configure.height;
-	wlr_output_update_custom_mode(&output->output, configure.width,
-	                              configure.height, 60000);
+	output->last_width = width, output->last_height = height;
+	wlr_output_update_custom_mode(&output->output, width, height, 60000);
 
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		// Ignore client-initiated resizes until this configure is ACKd, to
@@ -427,11 +431,11 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 			view->configure_serial = wlr_xdg_toplevel_set_size(
-			   view->xdg_surface->toplevel, configure.width, configure.height);
+			   view->xdg_surface->toplevel, width, height);
 			wlr_log(WLR_DEBUG,
 			        "Will ACK configure from GUI daemon (width %u, height %u)"
 			        " when client ACKS configure with serial %u",
-			        configure.width, configure.height, view->configure_serial);
+			        width, height, view->configure_serial);
 		} else {
 			// There won’t be a configure event ACKd by the client, so
 			// ACK early
@@ -439,17 +443,16 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 			        "Got a configure event for non-toplevel window %" PRIu32
 			        "; returning early",
 			        output->window_id);
-			qubes_send_configure(output, configure.width, configure.height);
+			qubes_send_configure(output, width, height);
 		}
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		if (!view->xwayland_surface->override_redirect)
-			wlr_xwayland_surface_configure(view->xwayland_surface, configure.x,
-			                               configure.y, configure.width,
-			                               configure.height);
+			wlr_xwayland_surface_configure(view->xwayland_surface, x, y, width,
+			                               height);
 		// There won’t be a configure event ACKd by the client, so
 		// ACK early.  Neglecting this for Xwayland cost two weeks of debugging.
-		qubes_send_configure(output, configure.width, configure.height);
+		qubes_send_configure(output, width, height);
 	} else {
 		abort();
 	}
