@@ -207,7 +207,8 @@ static void xdg_surface_destroy(struct wl_listener *listener,
 	free(view);
 }
 
-bool qubes_view_ensure_created(struct tinywl_view *view, struct wlr_box *box)
+bool qubes_xdg_surface_ensure_created(struct tinywl_view *view,
+                                      struct wlr_box *box)
 {
 	assert(box);
 	wlr_xdg_surface_get_geometry(view->xdg_surface, box);
@@ -227,7 +228,7 @@ static void qubes_surface_commit(struct wl_listener *listener,
 	assert(QUBES_VIEW_MAGIC == output->magic);
 	assert(output->scene_output);
 	assert(output->scene_output->output == &output->output);
-	if (!qubes_view_ensure_created(view, &box))
+	if (!qubes_xdg_surface_ensure_created(view, &box))
 		return;
 	if (surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		uint32_t flags =
@@ -413,7 +414,7 @@ void qubes_view_map(struct tinywl_view *view)
 	struct qubes_output *output = &view->output;
 
 	struct wlr_xdg_surface *xdg_surface = view->xdg_surface;
-	if (!qubes_view_ensure_created(view, &box))
+	if (!qubes_xdg_surface_ensure_created(view, &box))
 		return;
 	uint32_t transient_for_window = 0;
 	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
