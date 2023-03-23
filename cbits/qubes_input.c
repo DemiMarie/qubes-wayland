@@ -387,6 +387,21 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	int32_t const x = (int32_t)configure.x;
 	int32_t const y = (int32_t)configure.y;
 
+	// Validate that the coordinates are reasonable
+	if (((width < 1) || (width > MAX_WINDOW_WIDTH)) ||
+	    ((height < 1) || (height > MAX_WINDOW_HEIGHT)) ||
+	    ((x < -MAX_WINDOW_WIDTH) || (x > MAX_WINDOW_WIDTH)) ||
+	    ((y < -MAX_WINDOW_HEIGHT) || (y > MAX_WINDOW_HEIGHT))) {
+		wlr_log(WLR_ERROR,
+		        "Bad configure from GUI daemon: x %" PRIi32 " y %" PRIi32
+		        " width %" PRIu32 " height %" PRIu32 " window %" PRIu32,
+		        x, y, width, height, output->window_id);
+		// this should never happen, but better to ACK the configure
+		// than to crash; return to avoid giving clients an invalid state
+		qubes_send_configure(output, width, height);
+		return;
+	}
+
 	// Just ACK the configure
 	wlr_log(WLR_DEBUG,
 	        "handle_configure: old rect x=%d y=%d w=%u h=%u, new rect x=%d y=%d "
@@ -407,18 +422,6 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	if (output->magic == QUBES_XWAYLAND_MAGIC) {
 		output->x = x;
 		output->y = y;
-	}
-
-	if (width <= 0 || height <= 0 || width > MAX_WINDOW_WIDTH ||
-	    height > MAX_WINDOW_HEIGHT) {
-		wlr_log(WLR_ERROR,
-		        "Bad configure from GUI daemon: width %" PRIu32 " height %" PRIu32
-		        " window %" PRIu32,
-		        x, y, output->window_id);
-		// this should never happen, but better to ACK the configure
-		// than to crash; return to avoid giving clients an invalid state
-		qubes_send_configure(output, width, height);
-		return;
 	}
 
 	output->last_width = width, output->last_height = height;
