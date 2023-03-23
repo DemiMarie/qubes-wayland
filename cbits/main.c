@@ -58,8 +58,8 @@
 #include "qubes_allocator.h"
 #include "qubes_backend.h"
 #include "qubes_output.h"
-#include "qubes_xwayland.h"
 #include "qubes_wayland.h"
+#include "qubes_xwayland.h"
 #include <qubes-gui-protocol.h>
 
 /* NOT IMPLEMENTABLE:

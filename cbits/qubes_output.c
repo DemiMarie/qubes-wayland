@@ -108,7 +108,7 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box,
 			struct msg_hdr header;
 			struct msg_shmimage shmimage;
 		} new_msg = {
-		   .header = {
+			.header = {
 				.type = MSG_SHMIMAGE,
 				.window = output->window_id,
 				.untrusted_len = sizeof(struct msg_shmimage),

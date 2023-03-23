@@ -23,10 +23,10 @@
 #include <systemd/sd-daemon.h>
 #else
 #define sd_notify(...)                                                         \
-	do {                                                                   \
+	do {                                                                        \
 	} while (0)
 #define sd_notifyf(...)                                                        \
-	do {                                                                   \
+	do {                                                                        \
 	} while (0)
 #endif
 
@@ -37,8 +37,8 @@
 #include "qubes_clipboard.h"
 #include "qubes_data_source.h"
 #include "qubes_output.h"
-#include "qubes_xwayland.h"
 #include "qubes_wayland.h"
+#include "qubes_xwayland.h"
 
 static void handle_keypress(struct qubes_output *output, uint32_t timestamp,
                             const uint8_t *ptr)
