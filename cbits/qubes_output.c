@@ -637,7 +637,7 @@ void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 	if ((box.width < 1) || (box.height < 1))
 		return;
 	if ((output->magic == QUBES_XWAYLAND_MAGIC) &&
-	    ((output->x != box.width) || (output->y != box.height))) {
+	    ((output->x != box.x) || (output->y != box.y))) {
 		need_configure = true;
 	}
 	qubes_output_ensure_created(output, box);
