@@ -25,7 +25,7 @@ struct qubes_output {
 	char *name;
 
 	int x, y, left, top;
-	int last_width, last_height;
+	uint32_t last_width, last_height;
 	uint32_t window_id;
 	uint32_t magic;
 	uint32_t flags;

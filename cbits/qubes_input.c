@@ -408,8 +408,7 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	        output->x, output->y, output->last_width, output->last_height, x, y,
 	        width, height);
 
-	if ((width == (uint32_t)output->last_width) &&
-	    (height == (uint32_t)output->last_height) &&
+	if ((width == output->last_width) && (height == output->last_height) &&
 	    ((output->magic == QUBES_VIEW_MAGIC))) {
 		// Just ACK without doing anything
 		qubes_send_configure(output, width, height);

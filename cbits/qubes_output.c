@@ -641,8 +641,8 @@ void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 		need_configure = true;
 	}
 	qubes_output_ensure_created(output, box);
-	if (((output->last_width != box.width) ||
-	     (output->last_height != box.height)) &&
+	if (((output->last_width != (unsigned)box.width) ||
+	     (output->last_height != (unsigned)box.height)) &&
 	    (!(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE))) {
 		wlr_log(WLR_DEBUG, "Resized window %u: old size %u %u, new size %u %u",
 		        (unsigned)output->window_id, output->last_width,
