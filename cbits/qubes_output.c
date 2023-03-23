@@ -164,10 +164,10 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
 	qubes_output_damage(output, box, state);
 }
 
-void qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
+bool qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
 {
 	if ((output->x == x) && (output->y == y)) {
-		return;
+		return false;
 	}
 
 	/* Output position has changed.  Update accordingly. */
@@ -186,9 +186,14 @@ void qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
 	 * anything if its position on screen is wrong.
 	 */
 	if (output->magic == QUBES_VIEW_MAGIC) {
+		// Moving a plain Wayland window does not require any changes,
+		// other than repositioning the output.
 		wlr_scene_output_set_position(output->scene_output, x, y);
+		return false;
 	} else {
+		// Moving an Xwayland window *does* require changes
 		assert(output->magic == QUBES_XWAYLAND_MAGIC);
+		return true;
 	}
 }
 
