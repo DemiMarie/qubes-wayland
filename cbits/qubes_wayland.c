@@ -367,8 +367,8 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 		struct tinywl_view *parent_view =
 		   wlr_xdg_surface_from_wlr_surface(popup->parent)->data;
 		assert(parent_view);
-		output->left = geometry.x + parent_view->output.left;
-		output->top = geometry.y + parent_view->output.top;
+		output->left = output->x = geometry.x + parent_view->output.left;
+		output->top = output->y = geometry.y + parent_view->output.top;
 		output->last_width = geometry.width,
 		output->last_height = geometry.height;
 		wl_list_init(&view->request_maximize.link);
