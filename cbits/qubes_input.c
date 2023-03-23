@@ -408,8 +408,15 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 	        output->x, output->y, output->last_width, output->last_height, x, y,
 	        width, height);
 
-	if ((width == output->last_width) && (height == output->last_height) &&
-	    ((output->magic == QUBES_VIEW_MAGIC))) {
+	bool anything_changed = output->magic == QUBES_VIEW_MAGIC;
+	if ((width != output->last_width) || (height != output->last_height)) {
+		wlr_output_update_custom_mode(&output->output, width, height, 60000);
+		output->last_width = width;
+		output->last_height = height;
+		anything_changed = true;
+	}
+
+	if (!anything_changed) {
 		// Just ACK without doing anything
 		qubes_send_configure(output, width, height);
 		output->left = x;
