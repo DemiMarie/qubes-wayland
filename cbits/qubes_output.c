@@ -202,7 +202,8 @@ bool qubes_output_ensure_created(struct qubes_output *output,
 	    ((box.height < 1) || (box.height > MAX_WINDOW_HEIGHT))) {
 		return false;
 	}
-	qubes_output_move(output, box.x, box.y);
+	if (!(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE))
+		qubes_output_move(output, box.x, box.y);
 	if (qubes_output_created(output))
 		return true;
 	if (!output->window_id)
