@@ -198,8 +198,8 @@ bool qubes_output_ensure_created(struct qubes_output *output,
 	// implemented in Rust
 	extern uint32_t qubes_rust_generate_id(void *backend, void *data)
 	   __attribute__((warn_unused_result));
-	if (box.width <= 0 || box.height <= 0 || box.width > MAX_WINDOW_WIDTH ||
-	    box.height > MAX_WINDOW_HEIGHT) {
+	if (((box.width < 1) || (box.width > MAX_WINDOW_WIDTH)) ||
+	    ((box.height < 1) || (box.height > MAX_WINDOW_HEIGHT))) {
 		return false;
 	}
 	qubes_output_move(output, box.x, box.y);
