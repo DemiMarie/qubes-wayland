@@ -416,18 +416,13 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 		anything_changed = true;
 	}
 
+	output->left = output->x = x;
+	output->top = output->y = y;
+
 	if (!anything_changed) {
 		// Just ACK without doing anything
 		qubes_send_configure(output, width, height);
-		output->left = x;
-		output->top = y;
 		return;
-	}
-	output->left = x;
-	output->top = y;
-	if (output->magic == QUBES_XWAYLAND_MAGIC) {
-		output->x = x;
-		output->y = y;
 	}
 
 	output->last_width = width, output->last_height = height;
