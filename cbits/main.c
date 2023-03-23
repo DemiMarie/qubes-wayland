@@ -219,10 +219,16 @@ static void seat_request_set_selection(struct wl_listener *listener, void *data)
 	/* QUBES HOOK: store a copy to send to GUI qube */
 	struct tinywl_server *server =
 	   wl_container_of(listener, server, request_set_selection);
+	assert(data);
 	struct wlr_seat_request_set_selection_event *event = data;
 	const char **mime_type;
 	assert(QUBES_SERVER_MAGIC == server->magic);
 	struct wlr_data_source *source = event->source;
+	if (!source) {
+		wlr_log(WLR_ERROR, "NULL source?");
+		return;
+	}
+
 	// Sanitize MIME types
 	wl_array_for_each (mime_type, &source->mime_types) {
 		for (const char *s = *mime_type; *s; ++s) {
