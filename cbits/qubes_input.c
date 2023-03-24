@@ -151,15 +151,11 @@ static void handle_pointer_movement(struct qubes_output *output, int32_t x,
                                     int32_t y, uint32_t timestamp,
                                     struct wlr_seat *seat)
 {
-	// TODO: should these be host values?
-	const double seat_relative_x = x + (double)output->guest.x,
-	             seat_relative_y = y + (double)output->guest.y;
 	double sx, sy;
 	struct wlr_surface *surface = NULL;
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
-		surface = wlr_xdg_surface_surface_at(view->xdg_surface, seat_relative_x,
-		                                     seat_relative_y, &sx, &sy);
+		surface = wlr_xdg_surface_surface_at(view->xdg_surface, x, y, &sx, &sy);
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		surface = view->xwayland_surface->surface;
