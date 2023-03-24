@@ -43,6 +43,7 @@ enum {
 	QUBES_OUTPUT_MAPPED = 1 << 1,
 	QUBES_OUTPUT_IGNORE_CLIENT_RESIZE = 1 << 2,
 	QUBES_OUTPUT_OVERRIDE_REDIRECT = 1 << 3,
+	QUBES_OUTPUT_NEED_CONFIGURE = 1 << 4,
 };
 
 static inline bool qubes_output_created(struct qubes_output *output)
@@ -60,6 +61,16 @@ static inline bool qubes_output_mapped(struct qubes_output *output)
 static inline bool qubes_output_override_redirect(struct qubes_output *output)
 {
 	return output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT;
+}
+
+static inline bool qubes_output_ignore_client_resize(struct qubes_output *output)
+{
+	return output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
+}
+
+static inline bool qubes_output_need_configure(struct qubes_output *output)
+{
+	return output->flags & QUBES_OUTPUT_NEED_CONFIGURE;
 }
 
 /* Initialize a qubes_output */

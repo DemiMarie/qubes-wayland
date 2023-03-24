@@ -207,7 +207,7 @@ bool qubes_output_ensure_created(struct qubes_output *output,
 	    ((box.height < 1) || (box.height > MAX_WINDOW_HEIGHT))) {
 		return false;
 	}
-	if (!(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE))
+	if (!qubes_output_ignore_client_resize(output))
 		qubes_output_move(output, box.x, box.y);
 	if (qubes_output_created(output))
 		return true;
@@ -633,7 +633,7 @@ void qubes_output_map(struct qubes_output *output,
 
 void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 {
-	bool need_configure = false;
+	bool need_configure = qubes_output_need_configure(output);
 	if ((box.width < 1) || (box.height < 1))
 		return;
 	if ((output->magic == QUBES_XWAYLAND_MAGIC) &&
@@ -643,7 +643,7 @@ void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 	qubes_output_ensure_created(output, box);
 	if (((output->last_width != (unsigned)box.width) ||
 	     (output->last_height != (unsigned)box.height)) &&
-	    (!(output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE))) {
+	    (!qubes_output_ignore_client_resize(output))) {
 		wlr_log(WLR_DEBUG, "Resized window %u: old size %u %u, new size %u %u",
 		        (unsigned)output->window_id, output->last_width,
 		        output->last_height, box.width, box.height);
@@ -652,9 +652,10 @@ void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 		need_configure = true;
 	}
 	if (need_configure) {
-		qubes_send_configure(output, box.width, box.height);
 		output->last_width = box.width;
 		output->last_height = box.height;
+		qubes_send_configure(output, box.width, box.height);
+		output->flags &= ~QUBES_OUTPUT_NEED_CONFIGURE;
 		output->x = box.x;
 		output->y = box.y;
 	}

@@ -424,7 +424,7 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 		qubes_send_configure(output, width, height);
 		return;
 	}
-
+	output->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
 	output->last_width = width, output->last_height = height;
 	wlr_output_update_custom_mode(&output->output, width, height, 60000);
 
