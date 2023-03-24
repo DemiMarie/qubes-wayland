@@ -127,8 +127,13 @@ qubes_buffer_create(struct wlr_allocator *alloc, const int width,
 	assert(alloc->impl == &qubes_allocator_impl);
 	struct qubes_allocator *qalloc = wl_container_of(alloc, qalloc, inner);
 	assert(qalloc->refcount > 0);
-	if (width < 1 || height < 1)
+	if (((width < 1) || (width > MAX_WINDOW_WIDTH)) ||
+	    ((height < 1) || (height > MAX_WINDOW_HEIGHT))) {
+		wlr_log(WLR_ERROR,
+		        "Refusing allocation because width %d or height %d is bad", width,
+		        height);
 		return NULL;
+	}
 
 	/* Only ARGB8888 and XRGB8888 are supported */
 	if (format->format != DRM_FORMAT_XRGB8888 &&
@@ -148,15 +153,6 @@ qubes_buffer_create(struct wlr_allocator *alloc, const int width,
 		        "Refusing allocation because of unsupported format modifier "
 		        "0x%" PRIx64,
 		        format->modifiers[i]);
-		return NULL;
-	}
-
-	/* Check for excessive sizes */
-	if (width <= 0 || width > MAX_WINDOW_WIDTH || height <= 0 ||
-	    height > MAX_WINDOW_HEIGHT) {
-		wlr_log(WLR_ERROR,
-		        "Refusing allocation because width %d and/or height %d is bad",
-		        width, height);
 		return NULL;
 	}
 

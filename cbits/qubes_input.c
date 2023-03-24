@@ -509,19 +509,13 @@ static void handle_clipboard_request(struct qubes_output *output)
 // Called when the GUI agent has reconnected to the daemon.
 static void qubes_recreate_window(struct qubes_output *output)
 {
-	struct wlr_box box = {
-		.x = output->host.x = output->guest.x,
-		.y = output->host.y = output->guest.y,
-		.width = output->host.width = output->guest.width,
-		.height = output->host.height = output->guest.height,
-	};
-
-	if (!qubes_output_ensure_created(output, box)) {
+	if (!qubes_output_ensure_created(output)) {
 		return;
 	}
+
 	qubes_send_configure(output);
 	if (output->buffer) {
-		qubes_output_dump_buffer(output, box, NULL);
+		qubes_output_dump_buffer(output, NULL);
 	}
 	if (!qubes_output_mapped(output))
 		return;

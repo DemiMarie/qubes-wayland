@@ -87,11 +87,10 @@ void qubes_output_deinit(struct qubes_output *output);
 void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
                        struct msg_hdr hdr, const uint8_t *ptr);
 void qubes_send_configure(struct qubes_output *output);
-void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
+void qubes_output_dump_buffer(struct qubes_output *output,
                               const struct wlr_output_state *state);
-bool qubes_output_ensure_created(struct qubes_output *output,
-                                 struct wlr_box box);
-void qubes_output_configure(struct qubes_output *output, struct wlr_box box);
+bool qubes_output_ensure_created(struct qubes_output *output);
+bool qubes_output_configure(struct qubes_output *output, struct wlr_box box);
 void qubes_output_unmap(struct qubes_output *output);
 void qubes_change_window_flags(struct qubes_output *output, uint32_t flags_set,
                                uint32_t flags_unset);
