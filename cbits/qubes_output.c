@@ -169,8 +169,10 @@ bool qubes_output_ensure_created(struct qubes_output *output)
 	// implemented in Rust
 	extern uint32_t qubes_rust_generate_id(void *backend, void *data)
 	   __attribute__((warn_unused_result));
-	if (((output->guest.width < 1) || (output->guest.width > MAX_WINDOW_WIDTH)) ||
-	    ((output->guest.height < 1) || (output->guest.height > MAX_WINDOW_HEIGHT))) {
+	if (((output->guest.width < 1) ||
+	     (output->guest.width > MAX_WINDOW_WIDTH)) ||
+	    ((output->guest.height < 1) ||
+	     (output->guest.height > MAX_WINDOW_HEIGHT))) {
 		return false;
 	}
 	if (qubes_output_created(output))
@@ -411,7 +413,7 @@ void qubes_send_configure(struct qubes_output *output)
 			.y = output->guest.y,
 			.width = output->guest.width,
 			.height = output->guest.height,
-			.override_redirect = output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT ? 1 : 0,
+			.override_redirect = ((output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT) ? 1 : 0),
 		},
 	};
 	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.configure);

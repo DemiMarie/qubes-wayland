@@ -276,8 +276,8 @@ static void qubes_toplevel_ack_configure(struct wl_listener *listener,
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
 
-	if (output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE &&
-	    view->configure_serial == configure->serial) {
+	if ((output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE) &&
+	    (view->configure_serial == configure->serial)) {
 		output->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 		qubes_send_configure(output);
 	}

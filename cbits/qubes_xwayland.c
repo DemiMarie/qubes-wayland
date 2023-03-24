@@ -237,7 +237,7 @@ static void xwayland_surface_set_title(struct wl_listener *listener, void *data)
 	   wl_container_of(listener, view, set_title);
 	(void)data;
 	assert(view->destroy.link.next);
-	if (view->xwayland_surface->title && qubes_output_mapped(&view->output)) {
+	if (view->xwayland_surface->title && qubes_output_created(&view->output)) {
 		qubes_set_view_title(&view->output, view->xwayland_surface->title);
 	}
 }
