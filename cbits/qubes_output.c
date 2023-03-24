@@ -164,6 +164,7 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
 	qubes_output_damage(output, box, state);
 }
 
+#if 0
 bool qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
 {
 	if ((output->x == x) && (output->y == y)) {
@@ -196,6 +197,7 @@ bool qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
 		return true;
 	}
 }
+#endif
 
 bool qubes_output_ensure_created(struct qubes_output *output,
                                  struct wlr_box box)
@@ -207,8 +209,6 @@ bool qubes_output_ensure_created(struct qubes_output *output,
 	    ((box.height < 1) || (box.height > MAX_WINDOW_HEIGHT))) {
 		return false;
 	}
-	if (!qubes_output_ignore_client_resize(output))
-		qubes_output_move(output, box.x, box.y);
 	if (qubes_output_created(output))
 		return true;
 	if (!output->window_id)
@@ -225,8 +225,8 @@ bool qubes_output_ensure_created(struct qubes_output *output,
 			.untrusted_len = sizeof(struct msg_create),
 		},
 		.create = {
-			.x = output->left,
-			.y = output->top,
+			.x = box.x,
+			.y = box.y,
 			.width = box.width,
 			.height = box.height,
 			.parent = 0,
@@ -271,9 +271,14 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 
 	if (state->committed & WLR_OUTPUT_STATE_MODE) {
 		assert(state->mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
+		assert(state->custom_mode.width > 0);
+		assert(state->custom_mode.height > 0);
+		assert((uint32_t)state->custom_mode.width == output->guest.width);
+		assert((uint32_t)state->custom_mode.height == output->guest.height);
 		wlr_output_update_custom_mode(raw_output, state->custom_mode.width,
 		                              state->custom_mode.height,
 		                              state->custom_mode.refresh);
+		qubes_send_configure(output);
 	}
 
 	if ((state->committed & WLR_OUTPUT_STATE_BUFFER) &&
@@ -341,15 +346,6 @@ static void qubes_output_frame(struct wl_listener *listener,
                                void *data __attribute__((unused)))
 {
 	struct qubes_output *output = wl_container_of(listener, output, frame);
-	// HACK HACK
-	//
-	// This fixes a *nasty* bug: without it, really fast resizes can cause the
-	// wlr_output to lose sync with the qubes_output, causing parts of the
-	// window to *never* be displayed until the next window resize.  This bug
-	// took more than three days to fix.
-	if ((output->last_width > 0) && (output->last_height > 0))
-		wlr_output_update_custom_mode(&output->output, output->last_width,
-		                              output->last_height, 60000);
 	assert(QUBES_VIEW_MAGIC == output->magic ||
 	       QUBES_XWAYLAND_MAGIC == output->magic);
 	if (qubes_output_mapped(output) &&
@@ -394,7 +390,8 @@ bool qubes_output_set_surface(struct qubes_output *const output,
 bool qubes_output_init(struct qubes_output *const output,
                        struct tinywl_server *const server,
                        bool const is_override_redirect,
-                       struct wlr_surface *const surface, uint32_t const magic)
+                       struct wlr_surface *const surface, uint32_t const magic,
+                       int32_t x, int32_t y, uint32_t width, uint32_t height)
 {
 	assert(output);
 	memset(output, 0, sizeof *output);
@@ -439,26 +436,12 @@ bool qubes_output_init(struct qubes_output *const output,
 	return qubes_output_set_surface(output, surface);
 }
 
-void qubes_send_configure(struct qubes_output *output, uint32_t width,
-                          uint32_t height)
+void qubes_send_configure(struct qubes_output *output)
 {
 	if (!qubes_output_created(output))
 		return;
-	if (width <= 0 || height <= 0)
-		return;
-	// Refuse excessive sizes
-	if (width > MAX_WINDOW_WIDTH)
-		width = MAX_WINDOW_WIDTH;
-	if (height > MAX_WINDOW_HEIGHT)
-		height = MAX_WINDOW_HEIGHT;
-	if (output->left < -MAX_WINDOW_WIDTH)
-		output->left = -MAX_WINDOW_WIDTH;
-	if (output->top < -MAX_WINDOW_HEIGHT)
-		output->top = -MAX_WINDOW_HEIGHT;
-	if (output->left > MAX_WINDOW_WIDTH)
-		output->left = MAX_WINDOW_WIDTH;
-	if (output->top > MAX_WINDOW_HEIGHT)
-		output->top = MAX_WINDOW_HEIGHT;
+	assert(output->guest.width > 0);
+	assert(output->guest.height > 0);
 
 	// clang-format off
 	struct {
@@ -468,13 +451,13 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width,
 		.header = {
 			.type = MSG_CONFIGURE,
 			.window = output->window_id,
-			.untrusted_len = sizeof(struct msg_configure),
+			.untrusted_len = sizeof(msg.configure),
 		},
 		.configure = {
-			.x = output->left,
-			.y = output->top,
-			.width = width,
-			.height = height,
+			.x = output->guest.x,
+			.y = output->guest.y,
+			.width = output->guest.width,
+			.height = output->guest.height,
 			.override_redirect = output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT ? 1 : 0,
 		},
 	};
@@ -484,6 +467,7 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width,
 	        MSG_CONFIGURE, output->window_id);
 	qubes_rust_send_message(output->server->backend->rust_backend,
 	                        (struct msg_hdr *)&msg);
+	output->host = output->guest;
 }
 
 void qubes_set_view_title(struct qubes_output *output, const char *const title)
@@ -633,31 +617,15 @@ void qubes_output_map(struct qubes_output *output,
 
 void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 {
-	bool need_configure = qubes_output_need_configure(output);
-	if ((box.width < 1) || (box.height < 1))
-		return;
-	if ((output->magic == QUBES_XWAYLAND_MAGIC) &&
-	    ((output->x != box.x) || (output->y != box.y))) {
-		need_configure = true;
-	}
-	qubes_output_ensure_created(output, box);
-	if (((output->last_width != (unsigned)box.width) ||
-	     (output->last_height != (unsigned)box.height)) &&
-	    (!qubes_output_ignore_client_resize(output))) {
-		wlr_log(WLR_DEBUG, "Resized window %u: old size %u %u, new size %u %u",
-		        (unsigned)output->window_id, output->last_width,
-		        output->last_height, box.width, box.height);
-		wlr_output_update_custom_mode(&output->output, box.width, box.height,
-		                              60000);
-		need_configure = true;
-	}
-	if (need_configure) {
-		output->last_width = box.width;
-		output->last_height = box.height;
-		qubes_send_configure(output, box.width, box.height);
-		output->flags &= ~QUBES_OUTPUT_NEED_CONFIGURE;
-		output->x = box.x;
-		output->y = box.y;
+	if ((box.width > 0) && (box.height > 0)) {
+		output->guest.x = box.x;
+		output->guest.y = box.y;
+		output->guest.width = (unsigned)box.width;
+		output->guest.height = (unsigned)box.height;
+		qubes_output_ensure_created(output, box);
+		wlr_output_update_custom_mode(&output->output, output->guest.width,
+		                              output->guest.height, 60000);
+		qubes_send_configure(output);
 	}
 	wlr_output_send_frame(&output->output);
 }

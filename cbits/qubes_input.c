@@ -151,8 +151,9 @@ static void handle_pointer_movement(struct qubes_output *output, int32_t x,
                                     int32_t y, uint32_t timestamp,
                                     struct wlr_seat *seat)
 {
-	const double seat_relative_x = x + (double)output->x,
-	             seat_relative_y = y + (double)output->y;
+	// TODO: should these be host values?
+	const double seat_relative_x = x + (double)output->guest.x,
+	             seat_relative_y = y + (double)output->guest.y;
 	double sx, sy;
 	struct wlr_surface *surface = NULL;
 	if (QUBES_VIEW_MAGIC == output->magic) {
@@ -396,37 +397,39 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 		        "Bad configure from GUI daemon: x %" PRIi32 " y %" PRIi32
 		        " width %" PRIu32 " height %" PRIu32 " window %" PRIu32,
 		        x, y, width, height, output->window_id);
-		// this should never happen, but better to ACK the configure
-		// than to crash; return to avoid giving clients an invalid state
-		qubes_send_configure(output, width, height);
+		abort(); /* TODO */
+	}
+
+	bool anything_changed =
+	   ((width != output->host.width) || (height != output->host.height) ||
+	    (x != output->host.x) || (y != output->host.y));
+	anything_changed |=
+	   ((width != output->guest.width) || (height != output->guest.height) ||
+	    (x != output->guest.x) || (y != output->guest.y));
+
+	if (anything_changed) {
+		// Host state trumps guest state
+		output->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
+		output->guest.x = output->host.x = x;
+		output->guest.y = output->host.y = y;
+		output->host.width = width;
+		output->host.height = height;
+		if ((output->guest.width != width) || (output->guest.height != height)) {
+			output->guest.width = width;
+			output->guest.height = height;
+			wlr_output_set_custom_mode(&output->output, width, height, 60000);
+			wlr_output_schedule_frame(&output->output);
+		} else if (QUBES_VIEW_MAGIC == output->magic) {
+			// This is basically a no-op, just ack
+			qubes_send_configure(output);
+			return;
+		}
+	} else {
+		// Just ACK without doing anything.  If this is stale the daemon
+		// will resend new information.
+		qubes_send_configure(output);
 		return;
 	}
-
-	wlr_log(WLR_DEBUG,
-	        "handle_configure: old rect x=%d y=%d w=%u h=%u, new rect x=%d y=%d "
-	        "x=%u y=%u",
-	        output->x, output->y, output->last_width, output->last_height, x, y,
-	        width, height);
-
-	bool anything_changed = output->magic == QUBES_VIEW_MAGIC;
-	if ((width != output->last_width) || (height != output->last_height)) {
-		wlr_output_update_custom_mode(&output->output, width, height, 60000);
-		output->last_width = width;
-		output->last_height = height;
-		anything_changed = true;
-	}
-
-	output->left = output->x = x;
-	output->top = output->y = y;
-
-	if (!anything_changed) {
-		// Just ACK without doing anything
-		qubes_send_configure(output, width, height);
-		return;
-	}
-	output->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
-	output->last_width = width, output->last_height = height;
-	wlr_output_update_custom_mode(&output->output, width, height, 60000);
 
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		// Ignore client-initiated resizes until this configure is ACKd, to
@@ -447,7 +450,7 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 			        "Got a configure event for non-toplevel window %" PRIu32
 			        "; returning early",
 			        output->window_id);
-			qubes_send_configure(output, width, height);
+			qubes_send_configure(output);
 		}
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
@@ -456,7 +459,7 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 			                               height);
 		// There won’t be a configure event ACKd by the client, so
 		// ACK early.  Neglecting this for Xwayland cost two weeks of debugging.
-		qubes_send_configure(output, width, height);
+		qubes_send_configure(output);
 	} else {
 		abort();
 	}
@@ -510,30 +513,17 @@ static void handle_clipboard_request(struct qubes_output *output)
 // Called when the GUI agent has reconnected to the daemon.
 static void qubes_recreate_window(struct qubes_output *output)
 {
-	struct wlr_box box;
-	switch (output->magic) {
-	case QUBES_VIEW_MAGIC: {
-		struct tinywl_view *view = wl_container_of(output, view, output);
-		wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
-		break;
-	}
-	case QUBES_XWAYLAND_MAGIC: {
-		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
-		box.x = view->xwayland_surface->x;
-		box.y = view->xwayland_surface->y;
-		box.width = view->xwayland_surface->width;
-		box.height = view->xwayland_surface->height;
-		break;
-	}
-	default:
-		assert(!"Invalid output type");
-		abort();
-	}
+	struct wlr_box box = {
+		.x = output->host.x = output->guest.x,
+		.y = output->host.y = output->guest.y,
+		.width = output->host.width = output->guest.width,
+		.height = output->host.height = output->guest.height,
+	};
 
-	output->last_width = box.width, output->last_height = box.height;
-	if (!qubes_output_ensure_created(output, box))
+	if (!qubes_output_ensure_created(output, box)) {
 		return;
-	qubes_send_configure(output, box.width, box.height);
+	}
+	qubes_send_configure(output);
 	if (output->buffer) {
 		qubes_output_dump_buffer(output, box, NULL);
 	}

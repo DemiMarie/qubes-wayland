@@ -127,8 +127,8 @@ qubes_buffer_create(struct wlr_allocator *alloc, const int width,
 	assert(alloc->impl == &qubes_allocator_impl);
 	struct qubes_allocator *qalloc = wl_container_of(alloc, qalloc, inner);
 	assert(qalloc->refcount > 0);
-	assert(width > 0);
-	assert(height > 0);
+	if (width < 1 || height < 1)
+		return NULL;
 
 	/* Only ARGB8888 and XRGB8888 are supported */
 	if (format->format != DRM_FORMAT_XRGB8888 &&
