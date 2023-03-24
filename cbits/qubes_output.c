@@ -254,6 +254,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 	if (QUBES_VIEW_MAGIC == output->magic) {
 		struct tinywl_view *view = wl_container_of(output, view, output);
 		wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+		wlr_scene_output_set_position(output->scene_output, box.x, box.y);
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		struct wlr_xwayland_surface *surface = view->xwayland_surface;

@@ -212,6 +212,7 @@ bool qubes_xdg_surface_ensure_created(struct tinywl_view *view,
 {
 	assert(box);
 	wlr_xdg_surface_get_geometry(view->xdg_surface, box);
+	wlr_scene_output_set_position(view->output.scene_output, box->x, box->y);
 	return qubes_output_ensure_created(&view->output, *box);
 }
 
@@ -391,6 +392,7 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 	} else {
 		abort();
 	}
+	wlr_scene_output_set_position(output->scene_output, geometry.x, geometry.y);
 
 	/* Listen to surface events */
 	view->commit.notify = qubes_surface_commit;
