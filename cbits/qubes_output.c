@@ -396,6 +396,11 @@ void qubes_send_configure(struct qubes_output *output)
 	assert(output->guest.width > 0);
 	assert(output->guest.height > 0);
 
+	if (!(output->flags & QUBES_OUTPUT_NEED_CONFIGURE) &&
+	    (output->magic == QUBES_VIEW_MAGIC))
+		return;
+	output->flags &= ~QUBES_OUTPUT_NEED_CONFIGURE;
+
 	// clang-format off
 	struct {
 		struct msg_hdr header;
