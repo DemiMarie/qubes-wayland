@@ -207,14 +207,6 @@ static void xdg_surface_destroy(struct wl_listener *listener,
 	free(view);
 }
 
-bool qubes_xdg_surface_ensure_created(struct tinywl_view *view,
-                                      struct wlr_box *box)
-{
-	assert(box);
-	wlr_xdg_surface_get_geometry(view->xdg_surface, box);
-	return qubes_output_ensure_created(&view->output, *box);
-}
-
 static void qubes_surface_commit(struct wl_listener *listener,
                                  void *data __attribute__((unused)))
 {
@@ -228,7 +220,11 @@ static void qubes_surface_commit(struct wl_listener *listener,
 	assert(QUBES_VIEW_MAGIC == output->magic);
 	assert(output->scene_output);
 	assert(output->scene_output->output == &output->output);
-	if (!qubes_xdg_surface_ensure_created(view, &box))
+	wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+	wlr_scene_output_set_position(view->output.scene_output, box.x, box.y);
+	box.x = output->guest.x;
+	box.y = output->guest.y;
+	if (!qubes_output_configure(output, box))
 		return;
 	if (surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		uint32_t flags =
@@ -269,8 +265,6 @@ static void qubes_surface_commit(struct wl_listener *listener,
 		qubes_rust_send_message(output->server->backend->rust_backend,
 		                        (struct msg_hdr *)&msg);
 	}
-
-	qubes_output_configure(output, box);
 }
 
 static void qubes_toplevel_ack_configure(struct wl_listener *listener,
@@ -285,7 +279,7 @@ static void qubes_toplevel_ack_configure(struct wl_listener *listener,
 	if (output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE &&
 	    view->configure_serial == configure->serial) {
 		output->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-		qubes_send_configure(output, output->last_width, output->last_height);
+		qubes_send_configure(output);
 	}
 }
 
@@ -312,8 +306,11 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 		goto cleanup;
 
 	struct qubes_output *output = &view->output;
+	struct wlr_box geometry;
+	wlr_xdg_surface_get_geometry(xdg_surface, &geometry);
 	if (!qubes_output_init(output, server, is_override_redirect,
-	                       xdg_surface->surface, QUBES_VIEW_MAGIC))
+	                       xdg_surface->surface, QUBES_VIEW_MAGIC, geometry.x,
+	                       geometry.y, geometry.width, geometry.height))
 		goto cleanup;
 
 	view->xdg_surface = xdg_surface;
@@ -367,10 +364,14 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 		struct tinywl_view *parent_view =
 		   wlr_xdg_surface_from_wlr_surface(popup->parent)->data;
 		assert(parent_view);
-		output->left = output->x = geometry.x + parent_view->output.left;
-		output->top = output->y = geometry.y + parent_view->output.top;
-		output->last_width = geometry.width,
-		output->last_height = geometry.height;
+		// Use the parent's guest values in case changes have not propagated to
+		// the host.
+		output->guest.x = output->host.x =
+		   geometry.x + parent_view->output.guest.x;
+		output->guest.y = output->host.y =
+		   geometry.y + parent_view->output.guest.y;
+		output->guest.width = output->host.width = geometry.width;
+		output->guest.height = output->host.height = geometry.height;
 		wl_list_init(&view->request_maximize.link);
 		wl_list_init(&view->request_fullscreen.link);
 		wl_list_init(&view->request_minimize.link);
@@ -382,6 +383,7 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 	} else {
 		abort();
 	}
+	wlr_scene_output_set_position(output->scene_output, geometry.x, geometry.y);
 
 	/* Listen to surface events */
 	view->commit.notify = qubes_surface_commit;
@@ -391,13 +393,8 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 	assert(output->window_id == 0);
 
 	/* Tell GUI daemon to create window */
-	struct wlr_box box;
-	wlr_xdg_surface_get_geometry(xdg_surface, &box);
-	if (box.width <= 0)
-		box.width = 1;
-	if (box.height <= 0)
-		box.height = 1;
-	wlr_output_set_custom_mode(&output->output, box.width, box.height, 60000);
+	wlr_output_update_custom_mode(&output->output, output->guest.width,
+	                              output->guest.height, 60000);
 	return;
 cleanup:
 	wl_resource_post_no_memory(xdg_surface->resource);
@@ -414,7 +411,11 @@ void qubes_view_map(struct tinywl_view *view)
 	struct qubes_output *output = &view->output;
 
 	struct wlr_xdg_surface *xdg_surface = view->xdg_surface;
-	if (!qubes_xdg_surface_ensure_created(view, &box))
+	wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
+	wlr_scene_output_set_position(view->output.scene_output, box.x, box.y);
+	box.x = output->guest.x;
+	box.y = output->guest.y;
+	if (!qubes_output_configure(output, box))
 		return;
 	uint32_t transient_for_window = 0;
 	if (xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {

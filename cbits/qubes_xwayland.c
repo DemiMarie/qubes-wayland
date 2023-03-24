@@ -116,11 +116,6 @@ static void xwayland_surface_set_size(struct qubes_xwayland_view *view,
 {
 	struct qubes_output *output = &view->output;
 
-	wlr_log(WLR_DEBUG, "%p: Got %dx%d w %d h %d, new %dx%d w %u h %u%s", view,
-	        output->x, output->y, output->last_width, output->last_height, x, y,
-	        width, height,
-	        view->xwayland_surface->override_redirect ? " (override-redirect)"
-	                                                  : "");
 	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 	if (width <= 0 || height <= 0 || width > MAX_WINDOW_WIDTH ||
 	    height > MAX_WINDOW_HEIGHT || x < -MAX_WINDOW_WIDTH ||
@@ -161,12 +156,6 @@ static void xwayland_surface_request_configure(struct wl_listener *listener,
 		        width, height);
 		return; /* cannot handle this */
 	}
-
-	wlr_log(WLR_DEBUG, "%p: Got %dx%d w %d h %d, new %dx%d w %u h %u%s", view,
-	        output->x, output->y, output->last_width, output->last_height, x, y,
-	        width, height,
-	        view->xwayland_surface->override_redirect ? " (override-redirect)"
-	                                                  : "");
 
 	struct wlr_box box = {
 		.width = width,
@@ -372,28 +361,20 @@ static void qubes_xwayland_surface_set_parent(struct wl_listener *listener,
 	struct wlr_xwayland_surface *surface = data;
 	struct wlr_xwayland_surface *parent;
 	struct qubes_output *output = &view->output;
-	struct qubes_output *parent_output;
 
 	assert(QUBES_XWAYLAND_MAGIC == output->magic);
 	assert(surface);
 	assert(surface == view->xwayland_surface);
 	parent = surface->parent;
 	parent_view = parent->data;
-	parent_output = &parent_view->output;
 
 	if (parent) {
 		wlr_log(WLR_DEBUG,
 		        "Setting parent of surface %p (%dx%d) to %p (coordinates %dx%d)",
 		        view, surface->x, surface->y, parent_view, parent->x, parent->y);
-		wlr_log(WLR_DEBUG, "Actual coordinates of surface %p %dx%d w %d h %d",
-		        view, output->x, output->y, output->last_width,
-		        output->last_height);
-		wlr_log(WLR_DEBUG, "Actual coordinates of parent %p %dx%d w %d h %d",
-		        parent_view, parent_output->x, parent_output->y,
-		        parent_output->last_width, parent_output->last_height);
 		struct wlr_box box = {
-			.x = output->left = output->x = surface->x,
-			.y = output->top = output->y = surface->y,
+			.x = surface->x,
+			.y = surface->y,
 			.width = surface->width,
 			.height = surface->height,
 		};
@@ -428,15 +409,9 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
 	struct qubes_output *output = &view->output;
 
 	if (!qubes_output_init(output, server, surface->override_redirect,
-	                       surface->surface, QUBES_XWAYLAND_MAGIC))
+	                       surface->surface, QUBES_XWAYLAND_MAGIC, surface->x,
+	                       surface->y, surface->width, surface->height))
 		goto cleanup;
-
-	output->left = output->x = surface->x;
-	output->top = output->y = surface->y;
-	output->last_width = surface->width;
-	output->last_height = surface->height;
-	wlr_output_set_custom_mode(&output->output, surface->width, surface->height,
-	                           60000);
 
 	view->xwayland_surface = surface;
 

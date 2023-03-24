@@ -70,13 +70,13 @@ static bool qubes_output_test(struct wlr_output *raw_output,
 	return true;
 }
 
-static void qubes_output_damage(struct qubes_output *output, struct wlr_box box,
+static void qubes_output_damage(struct qubes_output *output,
                                 const struct wlr_output_state *state)
 {
 	if (state && !(state->committed & WLR_OUTPUT_STATE_DAMAGE))
 		return;
 	pixman_box32_t fake_rect = {
-		.x1 = 0, .y1 = 0, .x2 = box.width, .y2 = box.height
+		.x1 = 0, .y1 = 0, .x2 = output->guest.width, .y2 = output->guest.height
 	};
 	pixman_box32_t *rects;
 	int n_rects;
@@ -129,7 +129,7 @@ static void qubes_output_damage(struct qubes_output *output, struct wlr_box box,
 	}
 }
 
-void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
+void qubes_output_dump_buffer(struct qubes_output *output,
                               const struct wlr_output_state *state)
 {
 	assert(output->buffer->impl == qubes_buffer_impl_addr);
@@ -161,59 +161,24 @@ void qubes_output_dump_buffer(struct qubes_output *output, struct wlr_box box,
 	   sizeof(buffer->qubes) + NUM_PAGES(buffer->size) * SIZEOF_GRANT_REF;
 	qubes_rust_send_message(output->server->backend->rust_backend,
 	                        &buffer->header);
-	qubes_output_damage(output, box, state);
+	qubes_output_damage(output, state);
 }
 
-bool qubes_output_move(struct qubes_output *output, int32_t x, int32_t y)
-{
-	if ((output->x == x) && (output->y == y)) {
-		return false;
-	}
-
-	/* Output position has changed.  Update accordingly. */
-	output->x = x;
-	output->y = y;
-
-	/*
-	 * The Qubes GUI protocol uses coordinates relative to the top left of the
-	 * screen, since those are the coordinates X11 uses.  Native Wayland
-	 * windows, however, use output-relative coordinates.  Therefore,
-	 * wlr_scene needs to be told of its position so that it can translate
-	 * coordinates appropriately.  XWayland windows, however, are already in
-	 * the coordinates used by the Qubes GUI protocol, so they must not be
-	 * translated.  The symptom of getting this wrong is black bars near the
-	 * edge of a maximized window, or non-maximized windows not displaying
-	 * anything if its position on screen is wrong.
-	 */
-	if (output->magic == QUBES_VIEW_MAGIC) {
-		// Moving a plain Wayland window does not require any changes,
-		// other than repositioning the output.
-		wlr_scene_output_set_position(output->scene_output, x, y);
-		return false;
-	} else {
-		// Moving an Xwayland window *does* require changes
-		assert(output->magic == QUBES_XWAYLAND_MAGIC);
-		return true;
-	}
-}
-
-bool qubes_output_ensure_created(struct qubes_output *output,
-                                 struct wlr_box box)
+bool qubes_output_ensure_created(struct qubes_output *output)
 {
 	// implemented in Rust
 	extern uint32_t qubes_rust_generate_id(void *backend, void *data)
 	   __attribute__((warn_unused_result));
-	if (((box.width < 1) || (box.width > MAX_WINDOW_WIDTH)) ||
-	    ((box.height < 1) || (box.height > MAX_WINDOW_HEIGHT))) {
+	if (((output->guest.width < 1) || (output->guest.width > MAX_WINDOW_WIDTH)) ||
+	    ((output->guest.height < 1) || (output->guest.height > MAX_WINDOW_HEIGHT))) {
 		return false;
 	}
-	if (!qubes_output_ignore_client_resize(output))
-		qubes_output_move(output, box.x, box.y);
 	if (qubes_output_created(output))
 		return true;
-	if (!output->window_id)
+	if (!output->window_id) {
 		output->window_id =
 		   qubes_rust_generate_id(output->server->backend->rust_backend, output);
+	}
 	// clang-format off
 	struct {
 		struct msg_hdr header;
@@ -225,10 +190,10 @@ bool qubes_output_ensure_created(struct qubes_output *output,
 			.untrusted_len = sizeof(struct msg_create),
 		},
 		.create = {
-			.x = output->left,
-			.y = output->top,
-			.width = box.width,
-			.height = box.height,
+			.x = output->host.x = output->guest.x,
+			.y = output->host.y = output->guest.y,
+			.width = output->host.width = output->guest.width,
+			.height = output->host.height = output->guest.height,
 			.parent = 0,
 			.override_redirect = (output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT) ? 1 : 0,
 		},
@@ -250,30 +215,19 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 	assert(raw_output->impl == &qubes_wlr_output_impl);
 	assert(state);
 	struct qubes_output *output = wl_container_of(raw_output, output, output);
-	struct wlr_box box;
-	if (QUBES_VIEW_MAGIC == output->magic) {
-		struct tinywl_view *view = wl_container_of(output, view, output);
-		wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
-	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
-		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
-		struct wlr_xwayland_surface *surface = view->xwayland_surface;
-		assert(surface);
-		box.x = surface->x;
-		box.y = surface->y;
-		box.width = surface->width;
-		box.height = surface->height;
-	} else {
-		assert(!"Bad magic in qubes_output_commit");
-		abort();
-	}
-	if (!qubes_output_ensure_created(output, box))
+	if (!qubes_output_ensure_created(output))
 		return false;
 
 	if (state->committed & WLR_OUTPUT_STATE_MODE) {
 		assert(state->mode_type == WLR_OUTPUT_STATE_MODE_CUSTOM);
+		assert(state->custom_mode.width > 0);
+		assert(state->custom_mode.height > 0);
+		assert((uint32_t)state->custom_mode.width == output->guest.width);
+		assert((uint32_t)state->custom_mode.height == output->guest.height);
 		wlr_output_update_custom_mode(raw_output, state->custom_mode.width,
 		                              state->custom_mode.height,
 		                              state->custom_mode.refresh);
+		qubes_send_configure(output);
 	}
 
 	if ((state->committed & WLR_OUTPUT_STATE_BUFFER) &&
@@ -287,7 +241,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 			wlr_buffer_lock(output->buffer);
 			wl_signal_add(&output->buffer->events.destroy,
 			              &output->buffer_destroy);
-			qubes_output_dump_buffer(output, box, state);
+			qubes_output_dump_buffer(output, state);
 		}
 	}
 	if (state->committed & WLR_OUTPUT_STATE_ENABLED)
@@ -341,15 +295,6 @@ static void qubes_output_frame(struct wl_listener *listener,
                                void *data __attribute__((unused)))
 {
 	struct qubes_output *output = wl_container_of(listener, output, frame);
-	// HACK HACK
-	//
-	// This fixes a *nasty* bug: without it, really fast resizes can cause the
-	// wlr_output to lose sync with the qubes_output, causing parts of the
-	// window to *never* be displayed until the next window resize.  This bug
-	// took more than three days to fix.
-	if ((output->last_width > 0) && (output->last_height > 0))
-		wlr_output_update_custom_mode(&output->output, output->last_width,
-		                              output->last_height, 60000);
 	assert(QUBES_VIEW_MAGIC == output->magic ||
 	       QUBES_XWAYLAND_MAGIC == output->magic);
 	if (qubes_output_mapped(output) &&
@@ -394,7 +339,8 @@ bool qubes_output_set_surface(struct qubes_output *const output,
 bool qubes_output_init(struct qubes_output *const output,
                        struct tinywl_server *const server,
                        bool const is_override_redirect,
-                       struct wlr_surface *const surface, uint32_t const magic)
+                       struct wlr_surface *const surface, uint32_t const magic,
+                       int32_t x, int32_t y, uint32_t width, uint32_t height)
 {
 	assert(output);
 	memset(output, 0, sizeof *output);
@@ -439,26 +385,12 @@ bool qubes_output_init(struct qubes_output *const output,
 	return qubes_output_set_surface(output, surface);
 }
 
-void qubes_send_configure(struct qubes_output *output, uint32_t width,
-                          uint32_t height)
+void qubes_send_configure(struct qubes_output *output)
 {
 	if (!qubes_output_created(output))
 		return;
-	if (width <= 0 || height <= 0)
-		return;
-	// Refuse excessive sizes
-	if (width > MAX_WINDOW_WIDTH)
-		width = MAX_WINDOW_WIDTH;
-	if (height > MAX_WINDOW_HEIGHT)
-		height = MAX_WINDOW_HEIGHT;
-	if (output->left < -MAX_WINDOW_WIDTH)
-		output->left = -MAX_WINDOW_WIDTH;
-	if (output->top < -MAX_WINDOW_HEIGHT)
-		output->top = -MAX_WINDOW_HEIGHT;
-	if (output->left > MAX_WINDOW_WIDTH)
-		output->left = MAX_WINDOW_WIDTH;
-	if (output->top > MAX_WINDOW_HEIGHT)
-		output->top = MAX_WINDOW_HEIGHT;
+	assert(output->guest.width > 0);
+	assert(output->guest.height > 0);
 
 	// clang-format off
 	struct {
@@ -468,13 +400,13 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width,
 		.header = {
 			.type = MSG_CONFIGURE,
 			.window = output->window_id,
-			.untrusted_len = sizeof(struct msg_configure),
+			.untrusted_len = sizeof(msg.configure),
 		},
 		.configure = {
-			.x = output->left,
-			.y = output->top,
-			.width = width,
-			.height = height,
+			.x = output->guest.x,
+			.y = output->guest.y,
+			.width = output->guest.width,
+			.height = output->guest.height,
 			.override_redirect = output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT ? 1 : 0,
 		},
 	};
@@ -484,6 +416,7 @@ void qubes_send_configure(struct qubes_output *output, uint32_t width,
 	        MSG_CONFIGURE, output->window_id);
 	qubes_rust_send_message(output->server->backend->rust_backend,
 	                        (struct msg_hdr *)&msg);
+	output->host = output->guest;
 }
 
 void qubes_set_view_title(struct qubes_output *output, const char *const title)
@@ -631,35 +564,22 @@ void qubes_output_map(struct qubes_output *output,
 	                        (struct msg_hdr *)&msg);
 }
 
-void qubes_output_configure(struct qubes_output *output, struct wlr_box box)
+bool qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 {
-	bool need_configure = qubes_output_need_configure(output);
-	if ((box.width < 1) || (box.height < 1))
-		return;
-	if ((output->magic == QUBES_XWAYLAND_MAGIC) &&
-	    ((output->x != box.x) || (output->y != box.y))) {
-		need_configure = true;
+	if ((box.width > 0) && (box.height > 0)) {
+		output->guest.x = box.x;
+		output->guest.y = box.y;
+		output->guest.width = (unsigned)box.width;
+		output->guest.height = (unsigned)box.height;
+		if (!qubes_output_ensure_created(output))
+			return false;
+		wlr_output_update_custom_mode(&output->output, output->guest.width,
+		                              output->guest.height, 60000);
+		qubes_send_configure(output);
+		wlr_output_send_frame(&output->output);
+		return true;
 	}
-	qubes_output_ensure_created(output, box);
-	if (((output->last_width != (unsigned)box.width) ||
-	     (output->last_height != (unsigned)box.height)) &&
-	    (!qubes_output_ignore_client_resize(output))) {
-		wlr_log(WLR_DEBUG, "Resized window %u: old size %u %u, new size %u %u",
-		        (unsigned)output->window_id, output->last_width,
-		        output->last_height, box.width, box.height);
-		wlr_output_update_custom_mode(&output->output, box.width, box.height,
-		                              60000);
-		need_configure = true;
-	}
-	if (need_configure) {
-		output->last_width = box.width;
-		output->last_height = box.height;
-		qubes_send_configure(output, box.width, box.height);
-		output->flags &= ~QUBES_OUTPUT_NEED_CONFIGURE;
-		output->x = box.x;
-		output->y = box.y;
-	}
-	wlr_output_send_frame(&output->output);
+	return false;
 }
 
 void qubes_output_set_class(struct qubes_output *output, const char *class)
