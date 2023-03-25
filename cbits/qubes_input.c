@@ -12,6 +12,7 @@
 
 #include <wlr/interfaces/wlr_keyboard.h>
 #include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
@@ -154,8 +155,10 @@ static void handle_pointer_movement(struct qubes_output *output, int32_t x,
 	double sx, sy;
 	struct wlr_surface *surface = NULL;
 	if (QUBES_VIEW_MAGIC == output->magic) {
+		double rx = (double)x + (double)output->scene_output->x;
+		double ry = (double)y + (double)output->scene_output->y;
 		struct tinywl_view *view = wl_container_of(output, view, output);
-		surface = wlr_xdg_surface_surface_at(view->xdg_surface, x, y, &sx, &sy);
+		surface = wlr_xdg_surface_surface_at(view->xdg_surface, rx, ry, &sx, &sy);
 	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
 		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
 		surface = view->xwayland_surface->surface;
