@@ -42,6 +42,7 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_server_decoration.h>
@@ -318,8 +319,10 @@ static void sigpipe_handler(int signum, siginfo_t *siginfo, void *ucontext) {}
 static _Noreturn void usage(char *name, int status)
 {
 	printf("Usage: %s [-v [silent|error|info|debug]] [-s startup command] [-d "
-	       "domid]\n",
+	       "domid] [-p] [-n]\n",
 	       name);
+	printf("-p - enable primary selection\n");
+	printf("-n - do not catch sigint\n");
 	exit(status);
 }
 
@@ -494,9 +497,10 @@ int main(int argc, char *argv[])
 	if (sigaction(SIGPIPE, &sigpipe, &old_sighnd))
 		err(1, "Cannot set empty handler for SIGPIPE");
 
+	bool primary_selection = false;
 	bool override_verbosity = false;
 	bool handle_sigint = true;
-	while ((c = getopt(argc, argv, "v:s:d:l:hn")) != -1) {
+	while ((c = getopt(argc, argv, "v:s:d:l:hnp")) != -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
@@ -512,6 +516,9 @@ int main(int argc, char *argv[])
 			usage(argv[0], 0);
 		case 'n':
 			handle_sigint = false;
+			break;
+		case 'p':
+			primary_selection = true;
 			break;
 		default:
 			usage(argv[0], 1);
@@ -607,6 +614,12 @@ int main(int argc, char *argv[])
 	if (!(server->data_device =
 	         wlr_data_device_manager_create(server->wl_display))) {
 		wlr_log(WLR_ERROR, "Cannot create data device");
+		return 1;
+	}
+
+	if (primary_selection &&
+	    !wlr_primary_selection_v1_device_manager_create(server->wl_display)) {
+		wlr_log(WLR_ERROR, "Cannot create primary selection device manager");
 		return 1;
 	}
 
