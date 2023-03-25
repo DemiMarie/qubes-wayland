@@ -393,8 +393,8 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 	assert(output->window_id == 0);
 
 	/* Tell GUI daemon to create window */
-	wlr_output_set_custom_mode(&output->output, output->guest.width,
-	                           output->guest.height, 60000);
+	wlr_output_update_custom_mode(&output->output, output->guest.width,
+	                              output->guest.height, 60000);
 	return;
 cleanup:
 	wl_resource_post_no_memory(xdg_surface->resource);
