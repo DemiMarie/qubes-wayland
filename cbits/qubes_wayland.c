@@ -207,6 +207,12 @@ static void xdg_surface_destroy(struct wl_listener *listener,
 	free(view);
 }
 
+static bool qubes_box_valid(struct wlr_box *box)
+{
+	return ((box->width > 0 && box->width <= MAX_WINDOW_WIDTH) &&
+	        (box->height > 0 && box->height <= MAX_WINDOW_HEIGHT));
+}
+
 static void qubes_surface_commit(struct wl_listener *listener,
                                  void *data __attribute__((unused)))
 {
@@ -224,8 +230,34 @@ static void qubes_surface_commit(struct wl_listener *listener,
 	wlr_scene_output_set_position(view->output.scene_output, box.x, box.y);
 	box.x = output->guest.x;
 	box.y = output->guest.y;
-	if (!qubes_output_configure(output, box))
-		return;
+	if (!qubes_box_valid(&box))
+		return; /* refuse to commit invalid size */
+	// Only honor size changes if there is no configure from the daemon
+	// that must be ACKd.
+	if (qubes_output_ignore_client_resize(output)) {
+		// Window must have been created in the daemon to have received
+		// a MSG_CONFIGURE for it.
+		assert(qubes_output_created(output));
+	} else if (((unsigned)box.width != output->guest.width) ||
+	           ((unsigned)box.height != output->guest.height)) {
+		// Honor the client's resize request.
+		//
+		// Set the surface mode
+		wlr_output_update_custom_mode(&output->output, output->guest.width,
+		                              output->guest.height, 60000);
+		output->guest.width = (unsigned)box.width;
+		output->guest.height = (unsigned)box.height;
+		// Create the surface if necessary
+		if (qubes_output_created(output)) {
+			qubes_send_configure(output);
+		} else if (!qubes_output_ensure_created(output)) {
+			return;
+		}
+	} else {
+		if (!qubes_output_ensure_created(output))
+			return;
+	}
+
 	if (surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		uint32_t flags =
 		   ((surface->toplevel->current.min_width ? XCB_ICCCM_SIZE_HINT_P_MIN_SIZE
@@ -265,6 +297,7 @@ static void qubes_surface_commit(struct wl_listener *listener,
 		qubes_rust_send_message(output->server->backend->rust_backend,
 		                        (struct msg_hdr *)&msg);
 	}
+	wlr_output_send_frame(&output->output);
 }
 
 static void qubes_toplevel_ack_configure(struct wl_listener *listener,
