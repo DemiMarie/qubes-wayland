@@ -6,6 +6,7 @@
 #include <wlr/util/box.h>
 
 #include <qubes-gui-protocol.h>
+#include <qubesdb-client.h>
 void qubes_rust_send_message(void *backend, struct msg_hdr *header);
 void qubes_rust_delete_id(void *backend, uint32_t id);
 
@@ -17,6 +18,17 @@ enum tinywl_cursor_mode {
 	TINYWL_CURSOR_PASSTHROUGH,
 	TINYWL_CURSOR_MOVE,
 	TINYWL_CURSOR_RESIZE,
+};
+
+struct tinywl_keyboard {
+	struct wl_list link;
+	struct tinywl_server *server;
+	struct wlr_keyboard *keyboard;
+	struct xkb_context *context;
+
+	struct wl_listener modifiers;
+	struct wl_listener key;
+	uint32_t magic;
 };
 
 /**
@@ -50,16 +62,19 @@ struct tinywl_server {
 	struct wlr_server_decoration_manager *old_manager;
 	struct wlr_xdg_decoration_manager_v1 *new_manager;
 	struct wl_listener new_decoration;
-	struct wl_event_source *timer, *listener;
+	struct wl_event_source *timer, *qubesdb_watcher;
 	struct wlr_compositor *compositor;
 	struct wlr_subcompositor *subcompositor;
 	struct wlr_data_device_manager *data_device;
 	struct wlr_xwayland *xwayland;
+	struct tinywl_keyboard keyboard;
+	qdb_handle_t qubesdb_connection;
 	uint32_t magic;
 	uint16_t domid;
 	bool frame_pending, vchan_error;
 	uint64_t output_counter;
 	int listening_socket;
+	uint8_t exit_status;
 };
 
 #endif
