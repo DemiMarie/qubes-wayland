@@ -80,16 +80,6 @@ struct tinywl_output {
 	struct wlr_output *wlr_output;
 };
 
-struct tinywl_keyboard {
-	struct wl_list link;
-	struct tinywl_server *server;
-	struct wlr_keyboard *keyboard;
-
-	struct wl_listener modifiers;
-	struct wl_listener key;
-	uint32_t magic;
-};
-
 static void qubes_send_frame_done(struct wlr_scene_buffer *surface,
                                   int sx __attribute__((unused)),
                                   int sy __attribute__((unused)), void *data)
@@ -153,25 +143,23 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data)
 static void server_new_keyboard(struct tinywl_server *server,
                                 struct wlr_keyboard *device)
 {
-	struct tinywl_keyboard *keyboard = calloc(1, sizeof(struct tinywl_keyboard));
+	struct tinywl_keyboard *keyboard = &server->keyboard;
 	assert(device);
-	assert(keyboard);
+	assert(keyboard->magic == 0);
 	keyboard->magic = QUBES_KEYBOARD_MAGIC;
 	keyboard->server = server;
 	keyboard->keyboard = device;
 
 	/* We need to prepare an XKB keymap and assign it to the keyboard. This
 	 * assumes the defaults (e.g. layout = "us"). */
-	struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-	struct xkb_keymap *keymap =
-	   xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
-
-	if (keymap && device) {
-		wlr_keyboard_set_keymap(device, keymap);
-		xkb_keymap_unref(keymap);
-		wlr_keyboard_set_repeat_info(device, 0, 0);
-	}
-	xkb_context_unref(context);
+	keyboard->context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+	assert(keyboard->context && "xkb context creation failed");
+	struct xkb_keymap *keymap = xkb_keymap_new_from_names(
+	   keyboard->context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+	assert(keymap && "cannot create keymap");
+	wlr_keyboard_set_keymap(device, keymap);
+	xkb_keymap_unref(keymap);
+	wlr_keyboard_set_repeat_info(device, 0, 0);
 
 	/* Here we set up listeners for keyboard events. */
 	keyboard->modifiers.notify = keyboard_handle_modifiers;
@@ -318,11 +306,48 @@ static void sigpipe_handler(int signum, siginfo_t *siginfo, void *ucontext) {}
 
 static _Noreturn void usage(char *name, int status)
 {
-	printf("Usage: %s [-v [silent|error|info|debug]] [-s startup command] [-d "
-	       "domid] [-p] [-n]\n",
-	       name);
-	printf("-p - enable primary selection\n");
-	printf("-n - do not catch sigint\n");
+	fprintf(status ? stderr : stdout,
+	   "Usage: %s [options]\n"
+	   "\n"
+	   "Options:\n"
+	   "\n"
+	   " -v, --log-level [silent|error|info|debug]:\n"
+	   "   Set log level. Default is \"debug\" if the qube has debugging\n"
+	   "   enabled, otherwise \"error\".\n"
+	   " -p, --primary-selection boolean-option:\n"
+	   "   Enable or disable the primary selection. The default is\n"
+	   "   disabled, as it is easy to accidentally paste data from the\n"
+	   "   primary selection (which might not be trusted) into a\n"
+		"   terminal.\n"
+	   " -n, --sigint-handler boolean-option:\n"
+	   "   Enable or disable the SIGINT handler. The handler allows the\n"
+	   "   compositor to shut down cleanly when SIGINT is received. This\n"
+		"   is usually what one wants, but it conflicts with the use of\n"
+		"   SIGINT by GDB.\n"
+	   " -x, --xwayland boolean-option:\n"
+	   "   Enable or disable Xwayland support. Xwayland allows legacy X11\n"
+	   "   programs to run under Wayland compositors such as this one.\n"
+		"   The default is enabled.\n"
+	   " -g, --gui-domain-id [Xen domid]:\n"
+	   "   Specifiy the Xen domain ID of the GUI daemon. The default is\n"
+		"   to read the domain ID from QubesDB, which is nearly always\n"
+		"   what you want. This option is only useful for GUI domain\n"
+		"   testing.\n"
+	   " -s, --startup-cmd shell-command [shell command]:\n"
+	   "   Run the argument to this option as a shell command after\n"
+		"   startup.\n"
+	   " --keymap-errors [exit|continue]:\n"
+	   "   Specify what to do if the keyboard layout changes and the new\n"
+		"   layout cannot be switched to. \"exit\" means to exit with status\n"
+		"   78. \"continue\" means to continue using the old layout.\n"
+		"   \"continue\" is the default.\n"
+	   "\n"
+	   "For boolean option arguments, \"yes\", \"1\", \"enabled\", and \"true\"\n"
+	   "are considered true, \"no\", \"0\", \"disabled\", and \"false\" are\n"
+	   "considered false, and anything else is an error.\n",
+	   name);
+	if (ferror(stdout) || ferror(stderr) || fflush(NULL))
+		exit(1);
 	exit(status);
 }
 
@@ -479,6 +504,114 @@ static int parse_verbosity(const char *optarg)
 	     optarg);
 }
 
+static void qubes_refresh_keyboard_layout(struct tinywl_server *server)
+{
+	wlr_log(WLR_DEBUG, "Refreshing keyboard layout from qubesdb");
+	struct xkb_rule_names names = { 0 };
+	char *keyboard_layout =
+	   qdb_read(server->qubesdb_connection, "/keyboard-layout", NULL);
+	if (keyboard_layout) {
+		names.layout = keyboard_layout;
+		char *end_layout = strchr(keyboard_layout, '+');
+		if (end_layout) {
+			*end_layout++ = 0;
+			names.variant = end_layout;
+			end_layout = strchr(end_layout, '+');
+			if (end_layout) {
+				*end_layout++ = 0;
+				// use NULL for defaults rather than disabling all options
+				if (*end_layout)
+					names.options = end_layout;
+			}
+		}
+		struct xkb_keymap *keymap = xkb_keymap_new_from_names(
+		   server->keyboard.context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+		free(keyboard_layout);
+		if (!keymap) {
+			wlr_log(WLR_ERROR, "Cannot compile XKB keymap");
+			if (server->keymap_errors_fatal) {
+				server->exit_status = 78;
+				sd_notifyf(0, "STOPPING=1\nSTATUS=Failed to compile XKB keymap\n");
+				wl_display_terminate(server->wl_display);
+			}
+			return;
+		}
+		wlr_keyboard_set_keymap(server->keyboard.keyboard, keymap);
+		xkb_keymap_unref(keymap);
+		wlr_log(WLR_DEBUG, "Refreshed keyboard layout from qubesdb");
+	} else if (errno != ENOENT) {
+		wlr_log(WLR_ERROR, "FATAL: cannot obtain new keyboard layout from "
+		                   "qubesdb: errno %m");
+		sd_notifyf(0,
+		           "STOPPING=1\n"
+		           "STATUS=Cannot obtain new keyboard layout from qubesdb: %m\n"
+		           "ERRNO=%d",
+		           errno);
+		server->exit_status = 71; /* EX_OSERR */
+		wl_display_terminate(server->wl_display);
+		return;
+	}
+}
+
+static int qubes_reap_watches(int fd, uint32_t mask, void *data)
+{
+	struct tinywl_server *server = data;
+	assert(mask & WL_EVENT_READABLE);
+	assert(fd == qdb_watch_fd(server->qubesdb_connection));
+	assert(server->magic == QUBES_SERVER_MAGIC);
+	char *ev = qdb_read_watch(server->qubesdb_connection);
+	if (!ev) {
+		wlr_log(WLR_ERROR, "Cannot get new qubesdb entry");
+	} else if (!strcmp(ev, "/keyboard-layout")) {
+		free(ev);
+		qubes_refresh_keyboard_layout(server);
+	} else if (!strcmp(ev, "/qubes-gui-domain-xid")) {
+		free(ev);
+		wlr_log(WLR_ERROR, "Not yet implemented: changing GUI domain XID");
+	}
+	return 0;
+}
+
+static bool parse_bool_option(char *name)
+{
+	char *p = optarg;
+	char *cmp;
+	bool rc;
+	switch (*p) {
+	case 'y':
+		cmp = "es";
+		rc = true;
+		break;
+	case 'n':
+		cmp = "o";
+		rc = false;
+		break;
+	case 't':
+		cmp = "rue";
+		rc = true;
+		break;
+	case '1':
+	case '0':
+		cmp = "";
+		rc = *p == '1';
+		break;
+	case 'e':
+		cmp = "nabled";
+		rc = true;
+		break;
+	case 'd':
+		cmp = "isabled";
+		rc = false;
+		break;
+	default:
+		goto bad;
+	}
+	if (strcmp(p + 1, cmp) == 0)
+		return rc;
+bad:
+	usage(name, 1);
+}
+
 int main(int argc, char *argv[])
 {
 	const char *startup_cmd = NULL;
@@ -496,11 +629,27 @@ int main(int argc, char *argv[])
 	sigemptyset(&sigpipe.sa_mask);
 	if (sigaction(SIGPIPE, &sigpipe, &old_sighnd))
 		err(1, "Cannot set empty handler for SIGPIPE");
+	struct tinywl_server *server = calloc(1, sizeof(*server));
+	if (!server)
+		err(1, "Cannot create tinywl_server");
 
+	bool enable_xwayland = true;
 	bool primary_selection = false;
 	bool override_verbosity = false;
 	bool handle_sigint = true;
-	while ((c = getopt(argc, argv, "v:s:d:l:hnp")) != -1) {
+	struct option long_options[] = {
+		{ "startup-cmd", required_argument, 0, 's' },
+		{ "log-level", required_argument, 0, 'v' },
+		{ "gui-domain-id", required_argument, 0, 'd' },
+		{ "help", no_argument, 0, 'h' },
+		{ "sigint-handler", required_argument, 0, 'n' },
+		{ "primary-selection", required_argument, 0, 'p' },
+		{ "xwayland", required_argument, 0, 'x' },
+		{ "keymap-errors", required_argument, 0, 'k' },
+		{ NULL, 0, 0, 0 },
+	};
+	while ((c = getopt_long(argc, argv, "v:s:d:l:hn:p:", long_options, NULL)) !=
+	       -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
@@ -515,10 +664,21 @@ int main(int argc, char *argv[])
 		case 'h':
 			usage(argv[0], 0);
 		case 'n':
-			handle_sigint = false;
+			handle_sigint = parse_bool_option(argv[0]);
 			break;
 		case 'p':
-			primary_selection = true;
+			primary_selection = parse_bool_option(argv[0]);
+			break;
+		case 'x':
+			enable_xwayland = parse_bool_option(argv[0]);
+			break;
+		case 'k':
+			if (strcmp(optarg, "exit") == 0)
+				server->keymap_errors_fatal = true;
+			else if (strcmp(optarg, "continue") == 0)
+				server->keymap_errors_fatal = false;
+			else
+				usage(argv[0], 1);
 			break;
 		default:
 			usage(argv[0], 1);
@@ -533,33 +693,31 @@ int main(int argc, char *argv[])
 	// Drop root privileges
 	drop_privileges();
 
-	uint16_t domid;
-	{
-		qdb_handle_t qdb = NULL;
-		if ((!domid_str || !override_verbosity) && !(qdb = qdb_open(NULL)))
-			err(1, "Cannot connect to QubesDB");
-
-		domid = get_gui_domain_xid(qdb, domid_str);
-		if (!override_verbosity) {
-			char *debug_mode;
-			if (!(debug_mode = qdb_read(qdb, "/qubes-debug-mode", NULL)))
-				err(1, "Cannot determine debug mode");
+	qdb_handle_t qdb = qdb_open(NULL);
+	if (!qdb)
+		err(1, "Cannot connect to QubesDB");
+	uint16_t domid = get_gui_domain_xid(qdb, domid_str);
+	if (!override_verbosity) {
+		char *debug_mode = qdb_read(qdb, "/qubes-debug-mode", NULL);
+		if (debug_mode) {
 			if (strict_strtoul(debug_mode, "debug mode", ULONG_MAX))
 				loglevel = WLR_DEBUG;
 			free(debug_mode);
+		} else if (errno != ENOENT) {
+			err(1, "Cannot determine debug mode");
 		}
-
-		if (qdb)
-			qdb_close(qdb);
 	}
 
-	struct tinywl_server *server = calloc(1, sizeof(*server));
-	if (!server)
-		err(1, "Cannot create tinywl_server");
+	if (!qdb_watch(qdb, "/keyboard-layout"))
+		err(1, "Cannot watch for keyboard layout changes");
+
+	if (!domid_str && !qdb_watch(qdb, "/qubes-gui-domain-xid"))
+		err(1, "Cannot watch for GUI domain changes");
 
 	server->magic = QUBES_SERVER_MAGIC;
 	server->domid = domid;
 	server->listening_socket = -1;
+	server->qubesdb_connection = qdb;
 
 	if (!(server->allocator = qubes_allocator_create(domid)))
 		err(1, "Cannot create Qubes OS allocator");
@@ -703,8 +861,8 @@ int main(int argc, char *argv[])
 
 	wlr_log(WLR_INFO, "Socket path: %s", socket_path);
 	/* Create XWayland */
-	if (!(server->xwayland = wlr_xwayland_create(server->wl_display,
-	                                             server->compositor, true))) {
+	if (enable_xwayland && !(server->xwayland = wlr_xwayland_create(
+	                            server->wl_display, server->compositor, true))) {
 		wlr_log(WLR_ERROR, "Cannot create Xwayland device");
 		wlr_backend_destroy(&server->backend->backend);
 		return 1;
@@ -718,6 +876,14 @@ int main(int argc, char *argv[])
 
 	struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
 	assert(loop);
+	assert(qdb);
+
+	if (!(server->qubesdb_watcher =
+	         wl_event_loop_add_fd(loop, qdb_watch_fd(qdb), WL_EVENT_READABLE,
+	                              qubes_reap_watches, server))) {
+		wlr_log(WLR_ERROR, "Cannot poll for qubesdb watches");
+		return 1;
+	}
 
 	if (!(server->timer = wl_event_loop_add_timer(
 	         loop, qubes_send_frame_callbacks, server))) {
@@ -733,6 +899,9 @@ int main(int argc, char *argv[])
 		wl_display_destroy(server->wl_display);
 		return 1;
 	}
+
+	/* Refresh keyboard layout from qubesdb */
+	qubes_refresh_keyboard_layout(server);
 
 	/*
 	 * Add signal handlers for SIGTERM, SIGINT, and SIGHUP
@@ -782,6 +951,9 @@ int main(int argc, char *argv[])
 		wl_event_source_remove(sigint);
 	wl_event_source_remove(sigterm);
 	wl_event_source_remove(server->timer);
+	wl_event_source_remove(server->qubesdb_watcher);
+	if (server->xwayland)
+		wlr_xwayland_destroy(server->xwayland);
 
 	struct tinywl_keyboard *keyboard_to_free, *tmp_keyboard;
 	wl_list_for_each_safe (keyboard_to_free, tmp_keyboard, &server->keyboards,
@@ -789,14 +961,14 @@ int main(int argc, char *argv[])
 		wl_list_remove(&keyboard_to_free->key.link);
 		wl_list_remove(&keyboard_to_free->modifiers.link);
 		wl_list_remove(&keyboard_to_free->link);
-		free(keyboard_to_free);
 	}
-	wlr_xwayland_destroy(server->xwayland);
 	wlr_renderer_destroy(server->renderer);
 	wlr_allocator_destroy(server->allocator);
 	wlr_output_layout_destroy(server->output_layout);
 	wl_display_destroy(server->wl_display);
+	xkb_context_unref(server->keyboard.context);
 	free(server);
-	return 0;
+	qdb_close(qdb);
+	return server->exit_status;
 }
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:
