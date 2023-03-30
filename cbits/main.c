@@ -297,6 +297,7 @@ static int qubes_clean_exit(int signal_number, void *data)
 		abort();
 	}
 	wlr_log(WLR_ERROR, "Terminating due to signal %s", sig);
+	sd_notifyf(0, "STOPPING=1\nSTATUS=Terminating due to signal %s\n", sig);
 	wl_display_terminate(((struct tinywl_server *)data)->wl_display);
 	return 0;
 }
