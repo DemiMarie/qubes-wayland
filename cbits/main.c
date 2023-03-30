@@ -942,7 +942,6 @@ int main(int argc, char *argv[])
 	        socket_path);
 	sd_notifyf(0, "Running Wayland compositor on WAYLAND_DISPLAY=%s",
 	           socket_path);
-	/* Create XWayland */
 	wl_display_run(server->wl_display);
 
 	/* Once wl_display_run returns, we shut down the server */

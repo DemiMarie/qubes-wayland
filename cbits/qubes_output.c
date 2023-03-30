@@ -80,7 +80,7 @@ static void qubes_output_damage(struct qubes_output *output,
 	};
 	pixman_box32_t *rects;
 	int n_rects;
-	if (state) {
+	if (state && output->magic == QUBES_VIEW_MAGIC) {
 		n_rects = 0;
 		rects = pixman_region32_rectangles((pixman_region32_t *)&state->damage,
 		                                   &n_rects);
