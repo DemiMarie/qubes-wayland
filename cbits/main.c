@@ -865,8 +865,9 @@ int main(int argc, char *argv[])
 	wlr_output_layout_destroy(server->output_layout);
 	wl_display_destroy(server->wl_display);
 	xkb_context_unref(server->keyboard.context);
+	int exit_status = server->exit_status;
 	free(server);
 	qdb_close(qdb);
-	return server->exit_status;
+	return exit_status;
 }
 // vim: set noet ts=3 sts=3 sw=3 ft=c fenc=UTF-8:
