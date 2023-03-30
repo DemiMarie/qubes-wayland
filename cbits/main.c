@@ -307,11 +307,48 @@ static void sigpipe_handler(int signum, siginfo_t *siginfo, void *ucontext) {}
 
 static _Noreturn void usage(char *name, int status)
 {
-	printf("Usage: %s [-v [silent|error|info|debug]] [-s startup command] [-d "
-	       "domid] [-p] [-n]\n",
-	       name);
-	printf("-p - enable primary selection\n");
-	printf("-n - do not catch sigint\n");
+	fprintf(status ? stderr : stdout,
+	   "Usage: %s [options]\n"
+	   "\n"
+	   "Options:\n"
+	   "\n"
+	   " -v, --log-level [silent|error|info|debug]:\n"
+	   "   Set log level. Default is \"debug\" if the qube has debugging\n"
+	   "   enabled, otherwise \"error\".\n"
+	   " -p, --primary-selection boolean-option:\n"
+	   "   Enable or disable the primary selection. The default is\n"
+	   "   disabled, as it is easy to accidentally paste data from the\n"
+	   "   primary selection (which might not be trusted) into a\n"
+		"   terminal.\n"
+	   " -n, --sigint-handler boolean-option:\n"
+	   "   Enable or disable the SIGINT handler. The handler allows the\n"
+	   "   compositor to shut down cleanly when SIGINT is received. This\n"
+		"   is usually what one wants, but it conflicts with the use of\n"
+		"   SIGINT by GDB.\n"
+	   " -x, --xwayland boolean-option:\n"
+	   "   Enable or disable Xwayland support. Xwayland allows legacy X11\n"
+	   "   programs to run under Wayland compositors such as this one.\n"
+		"   The default is enabled.\n"
+	   " -g, --gui-domain-id [Xen domid]:\n"
+	   "   Specifiy the Xen domain ID of the GUI daemon. The default is\n"
+		"   to read the domain ID from QubesDB, which is nearly always\n"
+		"   what you want. This option is only useful for GUI domain\n"
+		"   testing.\n"
+	   " -s, --startup-cmd shell-command [shell command]:\n"
+	   "   Run the argument to this option as a shell command after\n"
+		"   startup.\n"
+	   " --keymap-errors [exit|continue]:\n"
+	   "   Specify what to do if the keyboard layout changes and the new\n"
+		"   layout cannot be switched to. \"exit\" means to exit with status\n"
+		"   78. \"continue\" means to continue using the old layout.\n"
+		"   \"continue\" is the default.\n"
+	   "\n"
+	   "For boolean option arguments, \"yes\", \"1\", \"enabled\", and \"true\"\n"
+	   "are considered true, \"no\", \"0\", \"disabled\", and \"false\" are\n"
+	   "considered false, and anything else is an error.\n",
+	   name);
+	if (ferror(stdout) || ferror(stderr) || fflush(NULL))
+		exit(1);
 	exit(status);
 }
 
@@ -492,10 +529,12 @@ static void qubes_refresh_keyboard_layout(struct tinywl_server *server)
 		   server->keyboard.context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
 		free(keyboard_layout);
 		if (!keymap) {
-			server->exit_status = 78; /* EX_CONFIG */
-			wlr_log(WLR_ERROR, "FATAL: cannot compile XKB keymap");
-			sd_notifyf("STOPPING=1\nSTATUS=Failed to compile XKB keymap\n");
-			wl_display_terminate(server->wl_display);
+			wlr_log(WLR_ERROR, "Cannot compile XKB keymap");
+			if (server->keymap_errors_fatal) {
+				server->exit_status = 78;
+				sd_notifyf(0, "STOPPING=1\nSTATUS=Failed to compile XKB keymap\n");
+				wl_display_terminate(server->wl_display);
+			}
 			return;
 		}
 		wlr_keyboard_set_keymap(server->keyboard.keyboard, keymap);
@@ -534,6 +573,46 @@ static int qubes_reap_watches(int fd, uint32_t mask, void *data)
 	return 0;
 }
 
+static bool parse_bool_option(char *name)
+{
+	char *p = optarg;
+	char *cmp;
+	bool rc;
+	switch (*p) {
+	case 'y':
+		cmp = "es";
+		rc = true;
+		break;
+	case 'n':
+		cmp = "o";
+		rc = false;
+		break;
+	case 't':
+		cmp = "rue";
+		rc = true;
+		break;
+	case '1':
+	case '0':
+		cmp = "";
+		rc = *p == '1';
+		break;
+	case 'e':
+		cmp = "nabled";
+		rc = true;
+		break;
+	case 'd':
+		cmp = "isabled";
+		rc = false;
+		break;
+	default:
+		goto bad;
+	}
+	if (strcmp(p + 1, cmp) == 0)
+		return rc;
+bad:
+	usage(name, 1);
+}
+
 int main(int argc, char *argv[])
 {
 	const char *startup_cmd = NULL;
@@ -551,11 +630,27 @@ int main(int argc, char *argv[])
 	sigemptyset(&sigpipe.sa_mask);
 	if (sigaction(SIGPIPE, &sigpipe, &old_sighnd))
 		err(1, "Cannot set empty handler for SIGPIPE");
+	struct tinywl_server *server = calloc(1, sizeof(*server));
+	if (!server)
+		err(1, "Cannot create tinywl_server");
 
+	bool enable_xwayland = true;
 	bool primary_selection = false;
 	bool override_verbosity = false;
 	bool handle_sigint = true;
-	while ((c = getopt(argc, argv, "v:s:d:l:hnp")) != -1) {
+	struct option long_options[] = {
+		{ "startup-cmd", required_argument, 0, 's' },
+		{ "log-level", required_argument, 0, 'v' },
+		{ "gui-domain-id", required_argument, 0, 'd' },
+		{ "help", no_argument, 0, 'h' },
+		{ "sigint-handler", required_argument, 0, 'n' },
+		{ "primary-selection", required_argument, 0, 'p' },
+		{ "xwayland", required_argument, 0, 'x' },
+		{ "keymap-errors", required_argument, 0, 'k' },
+		{ NULL, 0, 0, 0 },
+	};
+	while ((c = getopt_long(argc, argv, "v:s:d:l:hn:p:", long_options, NULL)) !=
+	       -1) {
 		switch (c) {
 		case 's':
 			startup_cmd = optarg;
@@ -570,10 +665,21 @@ int main(int argc, char *argv[])
 		case 'h':
 			usage(argv[0], 0);
 		case 'n':
-			handle_sigint = false;
+			handle_sigint = parse_bool_option(argv[0]);
 			break;
 		case 'p':
-			primary_selection = true;
+			primary_selection = parse_bool_option(argv[0]);
+			break;
+		case 'x':
+			enable_xwayland = parse_bool_option(argv[0]);
+			break;
+		case 'k':
+			if (strcmp(optarg, "exit") == 0)
+				server->keymap_errors_fatal = true;
+			else if (strcmp(optarg, "continue") == 0)
+				server->keymap_errors_fatal = false;
+			else
+				usage(argv[0], 1);
 			break;
 		default:
 			usage(argv[0], 1);
@@ -608,10 +714,6 @@ int main(int argc, char *argv[])
 
 	if (!domid_str && !qdb_watch(qdb, "/qubes-gui-domain-xid"))
 		err(1, "Cannot watch for GUI domain changes");
-
-	struct tinywl_server *server = calloc(1, sizeof(*server));
-	if (!server)
-		err(1, "Cannot create tinywl_server");
 
 	server->magic = QUBES_SERVER_MAGIC;
 	server->domid = domid;
@@ -760,8 +862,8 @@ int main(int argc, char *argv[])
 
 	wlr_log(WLR_INFO, "Socket path: %s", socket_path);
 	/* Create XWayland */
-	if (!(server->xwayland = wlr_xwayland_create(server->wl_display,
-	                                             server->compositor, true))) {
+	if (enable_xwayland && !(server->xwayland = wlr_xwayland_create(
+	                            server->wl_display, server->compositor, true))) {
 		wlr_log(WLR_ERROR, "Cannot create Xwayland device");
 		wlr_backend_destroy(&server->backend->backend);
 		return 1;

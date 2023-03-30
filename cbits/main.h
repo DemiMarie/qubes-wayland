@@ -75,6 +75,7 @@ struct tinywl_server {
 	uint64_t output_counter;
 	int listening_socket;
 	uint8_t exit_status;
+	bool keymap_errors_fatal;
 };
 
 #endif
