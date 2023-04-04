@@ -396,7 +396,22 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 		        "Bad configure from GUI daemon: x %" PRIi32 " y %" PRIi32
 		        " width %" PRIu32 " height %" PRIu32 " window %" PRIu32,
 		        x, y, width, height, output->window_id);
-		abort(); /* TODO */
+		qubes_send_configure(output);
+		return;
+	}
+
+	if (QUBES_XWAYLAND_MAGIC == output->magic) {
+		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
+		wlr_xwayland_surface_configure(view->xwayland_surface, x, y, width,
+		                               height);
+		output->host.x = output->guest.x = x;
+		output->host.y = output->guest.y = y;
+		output->host.width = output->guest.width = width;
+		output->host.height = output->guest.height = height;
+		// There won’t be a configure event ACKd by the client, so
+		// ACK early.  Neglecting this for Xwayland cost two weeks of debugging.
+		qubes_send_configure(output);
+		return;
 	}
 
 	bool anything_changed =
@@ -430,37 +445,25 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 		return;
 	}
 
-	if (QUBES_VIEW_MAGIC == output->magic) {
-		// Ignore client-initiated resizes until this configure is ACKd, to
-		// avoid racing against the GUI daemon.
-		output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-		struct tinywl_view *view = wl_container_of(output, view, output);
-		if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-			view->configure_serial = wlr_xdg_toplevel_set_size(
-			   view->xdg_surface->toplevel, width, height);
-			wlr_log(WLR_DEBUG,
-			        "Will ACK configure from GUI daemon (width %u, height %u)"
-			        " when client ACKS configure with serial %u",
-			        width, height, view->configure_serial);
-		} else {
-			// There won’t be a configure event ACKd by the client, so
-			// ACK early
-			wlr_log(WLR_DEBUG,
-			        "Got a configure event for non-toplevel window %" PRIu32
-			        "; returning early",
-			        output->window_id);
-			qubes_send_configure(output);
-		}
-	} else if (QUBES_XWAYLAND_MAGIC == output->magic) {
-		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
-		if (!view->xwayland_surface->override_redirect)
-			wlr_xwayland_surface_configure(view->xwayland_surface, x, y, width,
-			                               height);
-		// There won’t be a configure event ACKd by the client, so
-		// ACK early.  Neglecting this for Xwayland cost two weeks of debugging.
-		qubes_send_configure(output);
+	// Ignore client-initiated resizes until this configure is ACKd, to
+	// avoid racing against the GUI daemon.
+	output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
+	struct tinywl_view *view = wl_container_of(output, view, output);
+	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+		view->configure_serial = wlr_xdg_toplevel_set_size(
+			view->xdg_surface->toplevel, width, height);
+		wlr_log(WLR_DEBUG,
+				  "Will ACK configure from GUI daemon (width %u, height %u)"
+				  " when client ACKS configure with serial %u",
+				  width, height, view->configure_serial);
 	} else {
-		abort();
+		// There won’t be a configure event ACKd by the client, so
+		// ACK early
+		wlr_log(WLR_DEBUG,
+				  "Got a configure event for non-toplevel window %" PRIu32
+				  "; returning early",
+				  output->window_id);
+		qubes_send_configure(output);
 	}
 }
 
