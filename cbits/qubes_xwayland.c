@@ -278,9 +278,39 @@ static void xwayland_surface_set_hints(struct wl_listener *listener, void *data)
 	assert(view->output.magic == QUBES_XWAYLAND_MAGIC);
 	assert(view->destroy.link.next);
 
-	if (surface->hints == NULL) {
-		return;
-	}
+	xcb_size_hints_t *hints = surface->size_hints;
+	qubes_output_ensure_created(&view->output);
+	wlr_output_send_frame(&view->output.output);
+	const uint32_t allowed_flags =
+	   (XCB_ICCCM_SIZE_HINT_US_POSITION | XCB_ICCCM_SIZE_HINT_P_POSITION |
+	    XCB_ICCCM_SIZE_HINT_P_MIN_SIZE | XCB_ICCCM_SIZE_HINT_P_MAX_SIZE |
+	    XCB_ICCCM_SIZE_HINT_P_RESIZE_INC | XCB_ICCCM_SIZE_HINT_BASE_SIZE);
+	// clang-format off
+	struct {
+		struct msg_hdr header;
+		struct msg_window_hints hints;
+	} msg = {
+		.header = {
+			 .type = MSG_WINDOW_HINTS,
+			 .window = view->output.window_id,
+			 .untrusted_len = sizeof(msg.hints),
+		},
+		.hints = hints ? (struct msg_window_hints) {
+			.flags = hints->flags & allowed_flags,
+			.min_width = hints->min_width,
+			.min_height = hints->min_height,
+			.max_width = hints->max_width,
+			.max_height = hints->max_height,
+			.width_inc = hints->width_inc,
+			.height_inc = hints->height_inc,
+			.base_width = hints->base_width,
+			.base_height = hints->base_height,
+		 } : (struct msg_window_hints) { 0 },
+	};
+	// clang-format on
+	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.hints);
+	qubes_rust_send_message(view->output.server->backend->rust_backend,
+				(struct msg_hdr *)&msg);
 }
 
 static void xwayland_surface_set_override_redirect(struct wl_listener *listener,
@@ -306,7 +336,6 @@ static void qubes_xwayland_surface_commit(struct wl_listener *listener,
 	struct qubes_output *output = &view->output;
 	struct wlr_box box;
 	struct wlr_xwayland_surface *surface;
-	xcb_size_hints_t *hints;
 
 	assert(QUBES_XWAYLAND_MAGIC == output->magic);
 	assert(output->scene_output);
@@ -315,39 +344,6 @@ static void qubes_xwayland_surface_commit(struct wl_listener *listener,
 	if (!xwayland_get_box(surface, &box)) {
 		wlr_log(WLR_ERROR, "NO BOX");
 		return;
-	}
-	hints = surface->size_hints;
-	if (hints != NULL) {
-		const uint32_t allowed_flags =
-		   (XCB_ICCCM_SIZE_HINT_US_POSITION | XCB_ICCCM_SIZE_HINT_P_POSITION |
-		    XCB_ICCCM_SIZE_HINT_P_MIN_SIZE | XCB_ICCCM_SIZE_HINT_P_MAX_SIZE |
-		    XCB_ICCCM_SIZE_HINT_P_RESIZE_INC | XCB_ICCCM_SIZE_HINT_BASE_SIZE);
-		// clang-format off
-		struct {
-			struct msg_hdr header;
-			struct msg_window_hints hints;
-		} msg = {
-			.header = {
-				 .type = MSG_WINDOW_HINTS,
-				 .window = output->window_id,
-				 .untrusted_len = sizeof(msg.hints),
-			},
-			.hints = {
-				.flags = hints->flags & allowed_flags,
-				.min_width = hints->min_width,
-				.min_height = hints->min_height,
-				.max_width = hints->max_width,
-				.max_height = hints->max_height,
-				.width_inc = hints->width_inc,
-				.height_inc = hints->height_inc,
-				.base_width = hints->base_width,
-				.base_height = hints->base_height,
-			 },
-		};
-		// clang-format on
-		QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.hints);
-		qubes_rust_send_message(output->server->backend->rust_backend,
-		                        (struct msg_hdr *)&msg);
 	}
 	qubes_output_configure(output, box);
 }
