@@ -431,7 +431,7 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 		if ((output->guest.width != width) || (output->guest.height != height)) {
 			output->guest.width = width;
 			output->guest.height = height;
-			wlr_output_set_custom_mode(&output->output, width, height, 60000);
+			wlr_output_update_custom_mode(&output->output, width, height, 60000);
 			wlr_output_schedule_frame(&output->output);
 		} else if (QUBES_VIEW_MAGIC == output->magic) {
 			// This is basically a no-op, just ack
