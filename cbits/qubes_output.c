@@ -73,14 +73,21 @@ static bool qubes_output_test(struct wlr_output *raw_output,
 static void qubes_output_damage(struct qubes_output *output,
                                 const struct wlr_output_state *state)
 {
-	if (state && !(state->committed & WLR_OUTPUT_STATE_DAMAGE))
-		return;
 	pixman_box32_t fake_rect = {
 		.x1 = 0, .y1 = 0, .x2 = output->guest.width, .y2 = output->guest.height
 	};
 	pixman_box32_t *rects;
 	int n_rects;
-	if (state) {
+	if (state == NULL || (output->flags & QUBES_OUTPUT_DAMAGE_ALL) ||
+		 (state->committed & WLR_OUTPUT_STATE_MODE) ||
+		 (output->magic != QUBES_VIEW_MAGIC)) {
+		wlr_log(WLR_DEBUG, "Damaging everything");
+		n_rects = 1;
+		rects = &fake_rect;
+		output->flags &= ~QUBES_OUTPUT_DAMAGE_ALL;
+	} else if (!(state->committed & WLR_OUTPUT_STATE_DAMAGE)) {
+		return;
+	} else {
 		n_rects = 0;
 		rects = pixman_region32_rectangles((pixman_region32_t *)&state->damage,
 		                                   &n_rects);
@@ -88,9 +95,6 @@ static void qubes_output_damage(struct qubes_output *output,
 			wlr_log(WLR_DEBUG, "No damage!");
 			return;
 		}
-	} else {
-		n_rects = 1;
-		rects = &fake_rect;
 	}
 	for (int i = 0; i < n_rects; ++i) {
 		int32_t width, height;

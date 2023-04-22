@@ -423,7 +423,7 @@ static void handle_configure(struct qubes_output *output, uint32_t timestamp,
 
 	if (anything_changed) {
 		// Host state trumps guest state
-		output->flags |= QUBES_OUTPUT_NEED_CONFIGURE;
+		output->flags |= QUBES_OUTPUT_NEED_CONFIGURE | QUBES_OUTPUT_DAMAGE_ALL;
 		output->guest.x = output->host.x = x;
 		output->guest.y = output->host.y = y;
 		output->host.width = width;

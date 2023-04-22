@@ -46,6 +46,7 @@ enum {
 	QUBES_OUTPUT_IGNORE_CLIENT_RESIZE = 1 << 2,
 	QUBES_OUTPUT_OVERRIDE_REDIRECT = 1 << 3,
 	QUBES_OUTPUT_NEED_CONFIGURE = 1 << 4,
+	QUBES_OUTPUT_DAMAGE_ALL = 1 << 5,
 };
 
 static inline bool qubes_output_created(struct qubes_output *output)
