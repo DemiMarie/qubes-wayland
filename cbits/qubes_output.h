@@ -61,7 +61,8 @@ static inline bool qubes_output_mapped(struct qubes_output *output)
 	return output->flags & QUBES_OUTPUT_MAPPED;
 }
 
-static inline bool qubes_output_override_redirect(struct qubes_output *output)
+static inline bool
+qubes_output_override_redirect(struct qubes_output *output)
 {
 	return output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT;
 }
@@ -72,7 +73,8 @@ qubes_output_ignore_client_resize(struct qubes_output *output)
 	return output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
 }
 
-static inline bool qubes_output_need_configure(struct qubes_output *output)
+static inline bool
+qubes_output_need_configure(struct qubes_output *output)
 {
 	return output->flags & QUBES_OUTPUT_NEED_CONFIGURE;
 }
