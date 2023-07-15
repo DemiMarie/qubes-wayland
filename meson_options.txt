@@ -1,1 +1,2 @@
 option('use-system-wlroots', type: 'feature', value: 'auto', description: 'Use system-provided wlroots')
+option('systemd', type: 'feature', value: 'auto', description: 'Enable systemd integration')
