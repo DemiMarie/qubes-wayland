@@ -875,11 +875,13 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	wlr_xwayland_set_seat(server->xwayland, server->seat);
+	if (server->xwayland != NULL) {
+		wlr_xwayland_set_seat(server->xwayland, server->seat);
 
-	server->new_xwayland_surface.notify = qubes_xwayland_new_xwayland_surface;
-	wl_signal_add(&server->xwayland->events.new_surface,
-	              &server->new_xwayland_surface);
+		server->new_xwayland_surface.notify = qubes_xwayland_new_xwayland_surface;
+		wl_signal_add(&server->xwayland->events.new_surface,
+			      &server->new_xwayland_surface);
+	}
 
 	struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
 	assert(loop);
