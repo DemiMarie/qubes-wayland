@@ -614,7 +614,7 @@ static bool parse_bool_option(char *name)
 	if (strcmp(p + 1, cmp) == 0)
 		return rc;
 bad:
-	usage(name, 1);
+	usage(program_invocation_name, 1);
 }
 
 int main(int argc, char *argv[])
@@ -653,7 +653,8 @@ int main(int argc, char *argv[])
 		{ "keymap-errors", required_argument, 0, 'k' },
 		{ NULL, 0, 0, 0 },
 	};
-	while ((c = getopt_long(argc, argv, "v:s:d:l:hn:p:", long_options, NULL)) !=
+	int last_option;
+	while ((last_option = optind), (c = getopt_long(argc, argv, "+v:s:d:l:hn:p:", long_options, NULL)) !=
 	       -1) {
 		switch (c) {
 		case 's':
@@ -669,13 +670,13 @@ int main(int argc, char *argv[])
 		case 'h':
 			usage(argv[0], 0);
 		case 'n':
-			handle_sigint = parse_bool_option(argv[0]);
+			handle_sigint = parse_bool_option(optarg);
 			break;
 		case 'p':
-			primary_selection = parse_bool_option(argv[0]);
+			primary_selection = parse_bool_option(optarg);
 			break;
 		case 'x':
-			enable_xwayland = parse_bool_option(argv[0]);
+			enable_xwayland = parse_bool_option(optarg);
 			break;
 		case 'k':
 			if (strcmp(optarg, "exit") == 0)
@@ -686,6 +687,7 @@ int main(int argc, char *argv[])
 				usage(argv[0], 1);
 			break;
 		default:
+			warn("Unknown option %s", argv[last_option]);
 			usage(argv[0], 1);
 		}
 	}
