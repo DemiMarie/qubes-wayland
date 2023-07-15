@@ -109,6 +109,7 @@ wlroots_options = [
   'backends=[]',
   'allocators=[]',
   'auto_features=disabled',
+  'werror=false',
 ]
 wlroots = dependency('wlroots',
                      version: ['>=0.16.0', '<0.17.0'],
