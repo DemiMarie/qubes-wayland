@@ -115,7 +115,8 @@ static void qubes_backend_destroy(struct qubes_backend *backend)
 		wl_event_source_remove(backend->source);
 	qubes_rust_backend_free(backend->rust_backend);
 	wlr_output_destroy(backend->output);
-	wl_list_remove(&backend->display_destroy.link);
+	if (backend->display_destroy.link.next)
+		wl_list_remove(&backend->display_destroy.link);
 	free(backend);
 }
 
