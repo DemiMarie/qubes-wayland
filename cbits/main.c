@@ -591,6 +591,10 @@ static bool parse_bool_option(char *name)
 		cmp = "rue";
 		rc = true;
 		break;
+	case 'f':
+		cmp = "alse";
+		rc = false;
+		break;
 	case '1':
 	case '0':
 		cmp = "";
