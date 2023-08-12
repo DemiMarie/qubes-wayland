@@ -9,7 +9,8 @@ BuildRequires: (pkgconfig(wlroots) < 0.17.0)
 BuildRequires: rustc
 BuildRequires: cargo
 BuildRequires: pkgconfig(xcb)
-BuildRequires: pkgconfig(vchan-xen)
+BuildRequires: qubes-libvchan-devel
+BuildRequires: qubes-gui-common-devel
 BuildRequires: pkgconfig(libdrm)
 BuildRequires: pkgconfig(xkbcommon)
 BuildRequires: pkgconfig(pixman-1)
