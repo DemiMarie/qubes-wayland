@@ -45,5 +45,8 @@ if you are willing to report bugs for stuff that does not work.
 %_unitdir/qubes-gui-agent-wayland.service
 %_presetdir/30_qubes-gui-agent-wayland.preset
 
+%post
+%systemd_post qubes-gui-agent-wayland.service
+
 %changelog
 %autochangelog
