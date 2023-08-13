@@ -18,7 +18,7 @@ add_project_arguments(
     '-D_GNU_SOURCE=1',
     '-Wno-unused-parameter',
     '-Wno-error=cpp',
-    '-Wno-error=stringop-overflow',
+    # '-Wno-error=stringop-overflow',
     '-Wvla',
   ],
   language: 'c',
