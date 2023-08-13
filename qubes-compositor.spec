@@ -43,6 +43,7 @@ if you are willing to report bugs for stuff that does not work.
 %_bindir/qubes-gui-runuser-2
 %_bindir/qubes-wayland-session
 %_unitdir/qubes-gui-agent-wayland.service
+%_presetdir/30_qubes-gui-agent-wayland.preset
 
 %changelog
 %autochangelog

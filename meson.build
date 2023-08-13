@@ -172,5 +172,6 @@ bin_runuser = executable(
   gnu_symbol_visibility: 'hidden',
 )
 
+install_data(sources: '30_qubes-gui-agent-wayland.preset', install_dir: 'lib/systemd/system-preset')
 install_data(sources: out_file, install_dir: 'lib/systemd/system')
 install_data(sources: 'qubes-wayland-session', install_dir: 'bin', install_mode: 'rwxr-xr-x')
