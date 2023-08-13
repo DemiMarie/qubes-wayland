@@ -140,12 +140,20 @@ wayland_server = dependency('wayland-server')
 xkbcommon = dependency('xkbcommon')
 pixman = dependency('pixman-1')
 systemd = dependency('libsystemd', required: false)
+pam = dependency('pam')
 conf_data = configuration_data()
 conf_data.set('QUBES_HAS_SYSTEMD', systemd.found(), description: 'Is systemd found?')
+conf_data.set('PREFIX', get_option('prefix'))
 conf_h = configure_file(
   output: 'config.h',
   configuration: conf_data,
 )
+out_file = configure_file(
+  input: 'qubes-gui-agent-wayland.service.in',
+  output: 'qubes-gui-agent-wayland.service',
+  configuration: conf_data,
+)
+
 
 bin_compositor = executable(
   meson.project_name(),
@@ -156,3 +164,13 @@ bin_compositor = executable(
   install: true,
   gnu_symbol_visibility: 'hidden',
 )
+bin_runuser = executable(
+  'qubes-gui-runuser-2',
+  ['common/qubes-gui-runuser.c'],
+  install: true,
+  dependencies: [pam, qubesdb],
+  gnu_symbol_visibility: 'hidden',
+)
+
+install_data(sources: out_file, install_dir: 'lib/systemd/system')
+install_data(sources: 'qubes-wayland-session', install_dir: 'bin', install_mode: 'rwxr-xr-x')

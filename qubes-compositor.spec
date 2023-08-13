@@ -14,6 +14,7 @@ BuildRequires: qubes-gui-common-devel
 BuildRequires: pkgconfig(libdrm)
 BuildRequires: pkgconfig(xkbcommon)
 BuildRequires: pkgconfig(pixman-1)
+BuildRequires: pkgconfig(pam)
 BuildRequires: pkgconfig(libsystemd)
 BuildRequires: qubes-db-devel
 BuildRequires: meson
@@ -39,6 +40,9 @@ if you are willing to report bugs for stuff that does not work.
 
 %files
 %_bindir/qubes-compositor
+%_bindir/qubes-gui-runuser-2
+%_bindir/qubes-wayland-session
+%_unitdir/qubes-gui-agent-wayland.service
 
 %changelog
 %autochangelog
