@@ -165,7 +165,7 @@ bin_compositor = executable(
   gnu_symbol_visibility: 'hidden',
 )
 bin_runuser = executable(
-  'qubes-gui-runuser-2',
+  'qubes-gui-runuser',
   ['common/qubes-gui-runuser.c'],
   install: true,
   dependencies: [pam, qubesdb],

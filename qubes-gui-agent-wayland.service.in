@@ -1,0 +1,11 @@
+[Unit]
+Description=Qubes OS Wayland Compositor
+Conflicts=qubes-gui-agent.service
+
+[Service]
+UMask=0077
+Type=exec
+ExecStart=@PREFIX@/bin/qubes-gui-runuser '' /bin/sh sh -c 'exec "$@"' sh @PREFIX@/bin/qubes-compositor -s @PREFIX@/bin/qubes-wayland-session
+
+[Install]
+WantedBy=default.targetgui-agent
