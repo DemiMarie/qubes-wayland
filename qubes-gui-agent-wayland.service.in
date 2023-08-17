@@ -5,6 +5,7 @@ Conflicts=qubes-gui-agent.service
 [Service]
 UMask=0077
 Type=exec
+ExecStartPre=/bin/sh -c 'echo 1000 > /sys/module/grant_table/parameters/free_per_iteration'
 ExecStart=@PREFIX@/bin/qubes-gui-runuser '' /bin/sh sh -c 'exec "$@"' sh @PREFIX@/bin/qubes-compositor -s @PREFIX@/bin/qubes-wayland-session
 
 [Install]
