@@ -25,7 +25,7 @@ Source0: qubes-compositor-%{version}.tar.xz
 Source1: @gui-rust@
 
 %prep
-%autosetup -c
+%autosetup -N -c -T -a 0
 
 %build
 find
