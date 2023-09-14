@@ -1,0 +1,7 @@
+vm:
+  rpm:
+    build:
+    - qubes-compositor.spec
+  deb:
+    build:
+    - debian
