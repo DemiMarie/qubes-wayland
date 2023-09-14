@@ -164,13 +164,6 @@ bin_compositor = executable(
   install: true,
   gnu_symbol_visibility: 'hidden',
 )
-bin_runuser = executable(
-  'qubes-gui-runuser',
-  ['common/qubes-gui-runuser.c'],
-  install: true,
-  dependencies: [pam, qubesdb],
-  gnu_symbol_visibility: 'hidden',
-)
 
 install_data(sources: '30_qubes-gui-agent-wayland.preset', install_dir: 'lib/systemd/system-preset')
 install_data(sources: out_file, install_dir: 'lib/systemd/system')
