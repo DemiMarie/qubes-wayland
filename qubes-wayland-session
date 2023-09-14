@@ -1,0 +1,54 @@
+#!/bin/bash --
+#
+# The Qubes OS Project, http://www.qubes-os.org
+#
+# Copyright (C) 2011  Tomasz Sterna <tomek@xiaoka.com>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+#
+#
+
+# shellcheck disable=SC2164
+# shellcheck disable=SC1090
+# shellcheck disable=SC1091
+. /usr/lib/qubes/init/functions
+
+loginctl activate "$XDG_SESSION_ID"
+
+# Now import the environment from the systemd user session.
+# This is necessary to enable users to configure their
+# Qubes environment using the standard environment.d
+# facility.  Documentation for the facility is at:
+# https://www.freedesktop.org/software/systemd/man/environment.d.html
+set -a # export all variables
+env=$(systemctl --user show-environment) && eval "$env" || exit
+
+
+# Process XDG Autostart files
+shopt -s nullglob
+
+# Get VM type from XenStore
+VMTYPE=$(/usr/bin/qubesdb-read /qubes-vm-type)
+
+UPDTYPE=$(/usr/bin/qubesdb-read /qubes-vm-updateable)
+case $UPDTYPE in
+True) UPDTYPE=UpdateableVM;;
+False) UPDTYPE=NonUpdateableVM;;
+*) echo 'Invalid update type' >&2; exit 1;;
+esac
+
+# process /etc/xdg/autostart and friends (according to Desktop Application
+# Autostart Specification)
+/usr/bin/qubes-session-autostart QUBES X-QUBES "X-$VMTYPE" "X-$UPDTYPE"
