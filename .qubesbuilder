@@ -5,3 +5,6 @@ vm:
   deb:
     build:
     - debian
+source:
+  modules:
+  - gui-rust
