@@ -15,7 +15,7 @@ Build-Depends:
  libpixman-1-dev,
  libxkbcommon-dev,
  libxcb1-dev,
- libdrm2-dev,
+ libdrm-dev,
 Standards-Version: 4.6.2
 Homepage: https://www.qubes-os.org
 
