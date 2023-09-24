@@ -8,4 +8,4 @@ vm:
 source:
   modules:
   - gui-rust
-  - subprojects/wlroots
+  - wlroots-subproject

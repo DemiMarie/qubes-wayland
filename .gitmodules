@@ -4,4 +4,4 @@
 [submodule "subprojects/wlroots"]
 	url = git+ssh://git@gitlab.freedesktop.org/wlroots/wlroots.git
 	branch = 0.16
-	path = subprojects/wlroots
+	path = wlroots-subproject
