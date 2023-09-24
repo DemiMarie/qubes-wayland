@@ -1,0 +1,29 @@
+Source: qubes-compositor
+Section: graphics
+Priority: extra
+Maintainer: Demi Marie Obenour <demi@invisiblethingslab.com>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+ debhelper (>= 9~),
+ meson (>= 0.53.2),
+ rustc,
+ cargo,
+ binutils,
+ libvchan-xen-dev,
+ libsystemd-dev,
+ libpixman-1-dev,
+ libxkbcommon-dev,
+ libxcb1-dev,
+ libdrm2-dev,
+Standards-Version: 4.6.2
+Homepage: https://www.qubes-os.org
+
+Package: qubes-compositor
+Section: graphics
+Architecture: amd64
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends}
+Recommends:
+ xwayland
