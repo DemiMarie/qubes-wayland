@@ -16,6 +16,7 @@ Build-Depends:
  libxkbcommon-dev,
  libxcb1-dev,
  libdrm-dev,
+ qubesdb-dev,
 Standards-Version: 4.6.2
 Homepage: https://www.qubes-os.org
 
