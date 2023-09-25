@@ -29,6 +29,7 @@ Build-Depends:
  libxcb-render0-dev,
  libxcb-res0-dev,
  libxcb-xfixes0-dev,
+ qubes-gui-common,
 Standards-Version: 4.6.2
 Homepage: https://www.qubes-os.org
 
