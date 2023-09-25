@@ -41,3 +41,6 @@ Depends:
  ${misc:Depends}
 Recommends:
  xwayland
+Description:
+ Experimental Wayland compositor for use in a Qubes OS VM.  Only use
+ if you are willing to report bugs for stuff that does not work.
