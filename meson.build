@@ -101,6 +101,16 @@ foreach name, path : protocols
 	protocols_server_header += { name: server_header }
 endforeach
 
+xcb = dependency('xcb')
+threads = dependency('threads')
+vchan_xen = dependency('vchan-xen')
+drm = dependency('libdrm')
+wayland_server = dependency('wayland-server')
+xkbcommon = dependency('xkbcommon')
+pixman = dependency('pixman-1')
+systemd = dependency('libsystemd', required: false)
+pam = dependency('pam')
+
 wlroots_options = [
   'examples=false',
   'xwayland=enabled',
@@ -131,16 +141,6 @@ rust_parts = custom_target(
   output: ['libqubes_gui_rust.a'],
   build_by_default: true,
 )
-
-xcb = dependency('xcb')
-threads = dependency('threads')
-vchan_xen = dependency('vchan-xen')
-drm = dependency('libdrm')
-wayland_server = dependency('wayland-server')
-xkbcommon = dependency('xkbcommon')
-pixman = dependency('pixman-1')
-systemd = dependency('libsystemd', required: false)
-pam = dependency('pam')
 conf_data = configuration_data()
 conf_data.set('QUBES_HAS_SYSTEMD', systemd.found(), description: 'Is systemd found?')
 conf_data.set('PREFIX', get_option('prefix'))

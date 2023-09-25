@@ -5,7 +5,7 @@ vm:
   deb:
     build:
     - debian
-source:
-  modules:
-  - gui-rust
-  - wlroots-subproject
+# source:
+#   modules:
+#   - gui-rust
+#   - wlroots-subproject
