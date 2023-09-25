@@ -20,7 +20,7 @@
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 
-#include <drm/drm_fourcc.h>
+#include <drm_fourcc.h>
 #include <qubes-gui-protocol.h>
 #include <xen/gntalloc.h>
 

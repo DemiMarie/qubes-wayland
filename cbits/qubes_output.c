@@ -23,7 +23,7 @@
 #include "qubes_output.h"
 #include "qubes_wayland.h"
 #include "qubes_xwayland.h"
-#include <drm/drm_fourcc.h>
+#include <drm_fourcc.h>
 
 /* Qubes OS doesn’t support gamma LUTs */
 static size_t qubes_get_gamma_size(struct wlr_output *output
