@@ -14,7 +14,6 @@ Build-Depends:
  libsystemd-dev,
  libpixman-1-dev,
  libxkbcommon-dev,
- libxcb1-dev,
  libdrm-dev,
  qubesdb-dev,
  pkg-config,
@@ -22,6 +21,14 @@ Build-Depends:
  libwayland-dev,
  libpam0g-dev,
  libudev-dev,
+ libseat-dev,
+ xwayland,
+ libxcb1-dev,
+ libxcb-composite0-dev,
+ libxcb-icccm4-dev,
+ libxcb-render0-dev,
+ libxcb-res0-dev,
+ libxcb-xfixes0-dev,
 Standards-Version: 4.6.2
 Homepage: https://www.qubes-os.org
 
