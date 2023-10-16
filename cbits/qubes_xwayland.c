@@ -279,12 +279,14 @@ static void xwayland_surface_set_hints(struct wl_listener *listener, void *data)
 	assert(view->destroy.link.next);
 
 	xcb_size_hints_t *hints = surface->size_hints;
-	qubes_output_ensure_created(&view->output);
+	if (!qubes_output_ensure_created(&view->output))
+		return;
 	wlr_output_send_frame(&view->output.output);
 	const uint32_t allowed_flags =
 	   (XCB_ICCCM_SIZE_HINT_US_POSITION | XCB_ICCCM_SIZE_HINT_P_POSITION |
 	    XCB_ICCCM_SIZE_HINT_P_MIN_SIZE | XCB_ICCCM_SIZE_HINT_P_MAX_SIZE |
 	    XCB_ICCCM_SIZE_HINT_P_RESIZE_INC | XCB_ICCCM_SIZE_HINT_BASE_SIZE);
+	assert(view->output.window_id != 0);
 	// clang-format off
 	struct {
 		struct msg_hdr header;

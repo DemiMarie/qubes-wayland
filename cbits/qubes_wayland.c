@@ -270,6 +270,7 @@ static void qubes_surface_commit(struct wl_listener *listener,
 		    (surface->toplevel->current.max_height
 		        ? XCB_ICCCM_SIZE_HINT_P_MAX_SIZE
 		        : 0));
+		assert(output->window_id != 0);
 		// clang-format off
 		struct {
 			struct msg_hdr header;
