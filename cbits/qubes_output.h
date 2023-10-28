@@ -38,6 +38,42 @@ struct qubes_link {
 	struct qubes_buffer *buffer;
 };
 
+// Resizing will work as follows:
+//
+// 1. If the new size is not valid, acknowledge it and return.
+//
+// 2. If this is an Xwayland window, send a configure event back to the GUI
+//    daemon and return.
+//
+// 3. If the "ignore configure events" flag is set, return.
+//
+// 4. Record what has changed, so that subsequent ack_configure requests
+//    can be handled appropriately.
+//
+// 5. If the size has _not_ changed (the whole window was dragged),
+//    record the new X and Y coordinates, but do _not_ inform the client
+//    _unless_ this is a popup surface.  *Do* move all child popups,
+//    though.
+//
+// 6. Send a configure event to the client.  Tell the client that it
+//    is being resized.  Indicate which edges are currently being resized.
+//
+// 7. Wait (asynchronously) for the client to acknowledge the configure event.
+//
+// 8. Wait (asynchronously) for the client to commit.
+//
+// 9. Compare the new size to the size chosen by the GUI daemon.  If the size
+//    is the same, just ack the GUI daemon's resize message.  If the size is _not_
+//    the same, but the GUI daemon's resize message preserved the position of
+//    a specific edge, keep the position of that edge unchanged.  Otherwise,
+//    do something else (FIXME).
+//
+//10. Clear the "ignore configure events" flag.
+//
+//11. Send a new configure request to the GUI daemon.
+//
+//12. Commit a new surface size.
+
 struct tinywl_server;
 struct wlr_xdg_surface;
 enum {
