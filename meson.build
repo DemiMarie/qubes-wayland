@@ -32,6 +32,7 @@ qubes_files = [
   'cbits/qubes_xwayland.c',
   'cbits/qubes_data_source.c',
   'cbits/qubes_wayland.c',
+  'cbits/qubes_window_position.c',
   'cbits/main.c',
 ]
 

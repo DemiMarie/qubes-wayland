@@ -207,12 +207,6 @@ static void xdg_surface_destroy(struct wl_listener *listener,
 	free(view);
 }
 
-static bool qubes_box_valid(struct wlr_box *box)
-{
-	return ((box->width > 0 && box->width <= MAX_WINDOW_WIDTH) &&
-	        (box->height > 0 && box->height <= MAX_WINDOW_HEIGHT));
-}
-
 static void qubes_surface_commit(struct wl_listener *listener,
                                  void *data __attribute__((unused)))
 {
@@ -227,37 +221,12 @@ static void qubes_surface_commit(struct wl_listener *listener,
 	assert(output->scene_output);
 	assert(output->scene_output->output == &output->output);
 	wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
-	wlr_scene_output_set_position(view->output.scene_output, box.x, box.y);
-	box.x = output->guest.x;
-	box.y = output->guest.y;
-	if (!qubes_box_valid(&box))
-		return; /* refuse to commit invalid size */
-	// Only honor size changes if there is no configure from the daemon
-	// that must be ACKd.
-	if (qubes_output_ignore_client_resize(output)) {
-		// Window must have been created in the daemon to have received
-		// a MSG_CONFIGURE for it.
-		assert(qubes_output_created(output));
-	} else if (((unsigned)box.width != output->guest.width) ||
-	           ((unsigned)box.height != output->guest.height)) {
-		// Honor the client's resize request.
-		//
-		// Set the surface mode
-		wlr_output_update_custom_mode(&output->output, output->guest.width,
-		                              output->guest.height, 60000);
-		output->guest.width = (unsigned)box.width;
-		output->guest.height = (unsigned)box.height;
-		// Create the surface if necessary
-		if (qubes_output_created(output)) {
-			qubes_send_configure(output);
-		} else if (!qubes_output_ensure_created(output)) {
-			return;
-		}
-	} else {
-		if (!qubes_output_ensure_created(output))
-			return;
+	qubes_window_log(output, WLR_DEBUG, "Surface commit: width %" PRIu32 " height %" PRIu32
+	                 " x %" PRIi32 " y %" PRIi32, box.width, box.height, box.x, box.y);
+	if (!qubes_output_commit_size(output, box)) {
+		qubes_window_log(output, WLR_DEBUG, "Ignoring because size commit failed");
+		return;
 	}
-
 	if (surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		uint32_t flags =
 		   ((surface->toplevel->current.min_width ? XCB_ICCCM_SIZE_HINT_P_MIN_SIZE
@@ -309,11 +278,12 @@ static void qubes_toplevel_ack_configure(struct wl_listener *listener,
 	struct qubes_output *output = &view->output;
 
 	assert(QUBES_VIEW_MAGIC == output->magic);
+	qubes_window_log(output, WLR_DEBUG, "Client acknowledged serial %" PRIu32, view->configure_serial);
 
-	if ((output->flags & QUBES_OUTPUT_IGNORE_CLIENT_RESIZE) &&
+	if ((output->flags & QUBES_OUTPUT_NEED_CONFIGURE_ACK) &&
 	    (view->configure_serial == configure->serial)) {
-		output->flags &= ~QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-		qubes_send_configure(output);
+		output->flags &= ~QUBES_OUTPUT_NEED_CONFIGURE_ACK;
+		wlr_output_send_frame(&output->output);
 	}
 }
 

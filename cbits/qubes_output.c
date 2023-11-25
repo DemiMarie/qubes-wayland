@@ -395,40 +395,6 @@ bool qubes_output_init(struct qubes_output *const output,
 	return qubes_output_set_surface(output, surface);
 }
 
-void qubes_send_configure(struct qubes_output *output)
-{
-	if (!qubes_output_created(output))
-		return;
-	assert(output->guest.width > 0);
-	assert(output->guest.height > 0);
-
-	// clang-format off
-	struct {
-		struct msg_hdr header;
-		struct msg_configure configure;
-	} msg = {
-		.header = {
-			.type = MSG_CONFIGURE,
-			.window = output->window_id,
-			.untrusted_len = sizeof(msg.configure),
-		},
-		.configure = {
-			.x = output->guest.x,
-			.y = output->guest.y,
-			.width = output->guest.width,
-			.height = output->guest.height,
-			.override_redirect = ((output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT) ? 1 : 0),
-		},
-	};
-	QUBES_STATIC_ASSERT(sizeof msg == sizeof msg.header + sizeof msg.configure);
-	// clang-format on
-	wlr_log(WLR_DEBUG, "Sending MSG_CONFIGURE (0x%x) to window %" PRIu32,
-	        MSG_CONFIGURE, output->window_id);
-	qubes_rust_send_message(output->server->backend->rust_backend,
-	                        (struct msg_hdr *)&msg);
-	output->host = output->guest;
-}
-
 void qubes_set_view_title(struct qubes_output *output, const char *const title)
 {
 	assert(qubes_output_created(output));

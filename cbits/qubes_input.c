@@ -38,6 +38,7 @@
 #include "qubes_clipboard.h"
 #include "qubes_data_source.h"
 #include "qubes_output.h"
+#include "qubes_input.h"
 #include "qubes_wayland.h"
 #include "qubes_xwayland.h"
 
@@ -374,99 +375,6 @@ static void handle_window_flags(struct qubes_output *output, const uint8_t *ptr)
 
 	// DEMANDS_ATTENTION has no Wayland analog
 }
-
-static void handle_configure(struct qubes_output *output, uint32_t timestamp,
-                             const uint8_t *ptr)
-{
-	struct msg_configure configure;
-
-	memcpy(&configure, ptr, sizeof(configure));
-	uint32_t const width = configure.width;
-	uint32_t const height = configure.height;
-	// Old GUI protocol headers incorrectly used uint32_t for x and y, so cast.
-	int32_t const x = (int32_t)configure.x;
-	int32_t const y = (int32_t)configure.y;
-
-	// Validate that the coordinates are reasonable
-	if (((width < 1) || (width > MAX_WINDOW_WIDTH)) ||
-	    ((height < 1) || (height > MAX_WINDOW_HEIGHT)) ||
-	    ((x < -MAX_WINDOW_WIDTH) || (x > MAX_WINDOW_WIDTH)) ||
-	    ((y < -MAX_WINDOW_HEIGHT) || (y > MAX_WINDOW_HEIGHT))) {
-		wlr_log(WLR_ERROR,
-		        "Bad configure from GUI daemon: x %" PRIi32 " y %" PRIi32
-		        " width %" PRIu32 " height %" PRIu32 " window %" PRIu32,
-		        x, y, width, height, output->window_id);
-		qubes_send_configure(output);
-		return;
-	}
-
-	if (QUBES_XWAYLAND_MAGIC == output->magic) {
-		struct qubes_xwayland_view *view = wl_container_of(output, view, output);
-		wlr_xwayland_surface_configure(view->xwayland_surface, x, y, width,
-		                               height);
-		output->host.x = output->guest.x = x;
-		output->host.y = output->guest.y = y;
-		output->host.width = output->guest.width = width;
-		output->host.height = output->guest.height = height;
-		// There won’t be a configure event ACKd by the client, so
-		// ACK early.  Neglecting this for Xwayland cost two weeks of debugging.
-		qubes_send_configure(output);
-		return;
-	}
-
-	bool anything_changed =
-	   ((width != output->host.width) || (height != output->host.height) ||
-	    (x != output->host.x) || (y != output->host.y));
-	anything_changed |=
-	   ((width != output->guest.width) || (height != output->guest.height) ||
-	    (x != output->guest.x) || (y != output->guest.y));
-
-	if (anything_changed) {
-		// Host state trumps guest state
-		output->flags |= QUBES_OUTPUT_NEED_CONFIGURE | QUBES_OUTPUT_DAMAGE_ALL;
-		output->guest.x = output->host.x = x;
-		output->guest.y = output->host.y = y;
-		output->host.width = width;
-		output->host.height = height;
-		if ((output->guest.width != width) || (output->guest.height != height)) {
-			output->guest.width = width;
-			output->guest.height = height;
-			wlr_output_update_custom_mode(&output->output, width, height, 60000);
-			wlr_output_schedule_frame(&output->output);
-		} else if (QUBES_VIEW_MAGIC == output->magic) {
-			// This is basically a no-op, just ack
-			qubes_send_configure(output);
-			return;
-		}
-	} else {
-		// Just ACK without doing anything.  If this is stale the daemon
-		// will resend new information.
-		qubes_send_configure(output);
-		return;
-	}
-
-	// Ignore client-initiated resizes until this configure is ACKd, to
-	// avoid racing against the GUI daemon.
-	output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE;
-	struct tinywl_view *view = wl_container_of(output, view, output);
-	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-		view->configure_serial = wlr_xdg_toplevel_set_size(
-			view->xdg_surface->toplevel, width, height);
-		wlr_log(WLR_DEBUG,
-				  "Will ACK configure from GUI daemon (width %u, height %u)"
-				  " when client ACKS configure with serial %u",
-				  width, height, view->configure_serial);
-	} else {
-		// There won’t be a configure event ACKd by the client, so
-		// ACK early
-		wlr_log(WLR_DEBUG,
-				  "Got a configure event for non-toplevel window %" PRIu32
-				  "; returning early",
-				  output->window_id);
-		qubes_send_configure(output);
-	}
-}
-
 static void handle_clipboard_data(struct qubes_output *output, uint32_t len,
                                   const uint8_t *ptr)
 {
@@ -663,10 +571,13 @@ void qubes_parse_event(void *raw_backend, void *raw_view, uint32_t timestamp,
 		assert(hdr.untrusted_len == sizeof(struct msg_keypress));
 		handle_keypress(output, timestamp, ptr);
 		break;
-	case MSG_CONFIGURE:
+	case MSG_CONFIGURE: {
 		assert(hdr.untrusted_len == sizeof(struct msg_configure));
-		handle_configure(output, timestamp, ptr);
+		struct msg_configure configure;
+		memcpy(&configure, ptr, sizeof(configure));
+		qubes_handle_configure(output, timestamp, &configure);
 		break;
+	}
 	case MSG_MAP:
 		break;
 	case MSG_BUTTON:
