@@ -89,10 +89,10 @@ static void qubes_send_configure_msg(struct qubes_output *output,
 static void qubes_send_configure_raw(struct qubes_output *output)
 {
 	struct msg_configure configure = {
-		.x = output->guest.x,
-		.y = output->guest.y,
-		.width = output->guest.width,
-		.height = output->guest.height,
+		.x = output->host.x,
+		.y = output->host.y,
+		.width = output->host.width,
+		.height = output->host.height,
 		.override_redirect =
 		   ((output->flags & QUBES_OUTPUT_OVERRIDE_REDIRECT) ? 1 : 0),
 	};
