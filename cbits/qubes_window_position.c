@@ -37,6 +37,7 @@
 // 12. Commit a new surface size.
 #include "common.h"
 #include <inttypes.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,8 +105,8 @@ void qubes_send_configure(struct qubes_output *output)
 	if (output->flags & QUBES_CHANGED_MASK) {
 		qubes_send_configure_raw(output);
 		output->host = output->guest;
-		output->flags &= ~(__typeof__(output->flags))QUBES_CHANGED_MASK;
 	}
+	output->flags &= ~(__typeof__(output->flags))QUBES_CHANGED_MASK;
 	qubes_send_configure_raw(output);
 }
 
@@ -134,6 +135,11 @@ void qubes_handle_configure(struct qubes_output *output, uint32_t timestamp,
 		return;
 	}
 
+	qubes_window_log(output, WLR_DEBUG,
+	                 "Good configure from GUI daemon: x %" PRIi32 " y %" PRIi32
+	                 " width %" PRIu32 " height %" PRIu32,
+	                 x, y, width, height);
+
 	output->host.width = width;
 	output->host.height = height;
 	output->host.x = x;
@@ -154,6 +160,7 @@ void qubes_handle_configure(struct qubes_output *output, uint32_t timestamp,
 		qubes_send_configure_raw(output);
 		return;
 	}
+	assert(output->magic == QUBES_VIEW_MAGIC);
 
 	// Step 4: Check what has changed.
 	output->flags &= ~QUBES_CHANGED_MASK;
@@ -258,6 +265,7 @@ static bool qubes_box_valid(struct wlr_box *box)
 
 bool qubes_output_commit_size(struct qubes_output *output, struct wlr_box box)
 {
+	assert(output->magic == QUBES_VIEW_MAGIC);
 	if (!qubes_box_valid(&box)) {
 		qubes_window_log(output, WLR_ERROR, "Refusing to commit invalid size");
 		return false; /* refuse to commit invalid size */
@@ -273,6 +281,57 @@ bool qubes_output_commit_size(struct qubes_output *output, struct wlr_box box)
 	}
 	output->flags &= ~QUBES_OUTPUT_NEED_CONFIGURE_ACK;
 
+	if ((output->flags & QUBES_OUTPUT_WIDTH_CHANGED) != 0 &&
+	    (uint32_t)box.width != output->host.width) {
+		qubes_window_log(output, WLR_DEBUG,
+		                 "Surface committed with width different than expected: "
+		                 "got %d, expected %" PRIu32,
+		                 box.width, output->host.width);
+		// Width mismatch, figure out what to do.
+		if ((output->flags & QUBES_OUTPUT_LEFT_CHANGED) == 0 &&
+		    (output->flags & QUBES_OUTPUT_RIGHT_CHANGED) != 0) {
+			// Right edge dragged
+			int32_t x = output->host.x + (int32_t)output->host.width - box.width;
+			qubes_window_log(output, WLR_DEBUG,
+			                 "Right edge dragged: Moving X from %d to %" PRIi32,
+			                 output->guest.x, x);
+			output->guest.x = x;
+		} else if ((output->flags & QUBES_OUTPUT_LEFT_CHANGED) != 0 &&
+		           (output->flags & QUBES_OUTPUT_RIGHT_CHANGED) == 0) {
+			// Left edge dragged
+			qubes_window_log(output, WLR_DEBUG,
+			                 "Left edge dragged: Moving X from %d to %" PRIi32,
+			                 box.x, output->host.x);
+			output->guest.x = output->host.x;
+		}
+		output->guest.width = box.width;
+	}
+
+	if ((output->flags & QUBES_OUTPUT_HEIGHT_CHANGED) != 0 &&
+	    (uint32_t)box.height != output->host.height) {
+		qubes_window_log(output, WLR_DEBUG,
+		                 "Surface committed with height different than expected: "
+		                 "expected %d, got %" PRIu32,
+		                 box.height, output->host.height);
+		// Height mismatch, figure out what to do.
+		if ((output->flags & QUBES_OUTPUT_TOP_CHANGED) == 0 &&
+		    (output->flags & QUBES_OUTPUT_BOTTOM_CHANGED) != 0) {
+			// Bottom edge dragged
+			int32_t y = output->host.y + (int32_t)output->host.height - box.height;
+			qubes_window_log(output, WLR_DEBUG,
+			                 "Bottom edge dragged: Moving Y from %d to %" PRIi32,
+			                 output->guest.y, y);
+			output->guest.y = y;
+		} else if ((output->flags & QUBES_OUTPUT_TOP_CHANGED) != 0 &&
+		           (output->flags & QUBES_OUTPUT_BOTTOM_CHANGED) == 0) {
+			qubes_window_log(output, WLR_DEBUG,
+			                 "Top edge dragged: Moving Y from %d to %" PRIi32,
+			                 output->guest.y, output->host.y);
+			// Top edge dragged
+			output->guest.y = output->host.y;
+		}
+		output->guest.height = box.height;
+	}
 	wlr_scene_output_set_position(output->scene_output, box.x, box.y);
 	if (!qubes_output_ensure_created(output))
 		return false;
@@ -293,5 +352,6 @@ bool qubes_output_commit_size(struct qubes_output *output, struct wlr_box box)
 	}
 	// Send the new configure
 	qubes_send_configure(output);
+	output->flags &= (__typeof__(output->flags))~QUBES_CHANGED_MASK;
 	return true;
 }
