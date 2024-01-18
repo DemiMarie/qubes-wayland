@@ -22,7 +22,7 @@ Version: 0.0.1
 Release: 0%{dist}
 Summary: Experimental Wayland compositor for use in a Qubes OS VM.
 Source0: qubes-compositor-%{version}.tar.xz
-Source1: @gui-rust@
+#Source1: @gui-rust@
 
 %prep
 %autosetup -N -c -T -a 0
