@@ -234,9 +234,6 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 		if ((uint32_t)state->custom_mode.height != output->guest.height)
 			wlr_log(WLR_ERROR, "BUG: size mismatch: %d vs %" PRIu32,
 			        state->custom_mode.height, output->guest.height);
-		wlr_output_set_custom_mode(raw_output, output->guest.width,
-		                           output->guest.height,
-		                           state->custom_mode.refresh);
 		qubes_send_configure(output);
 	}
 
