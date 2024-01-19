@@ -234,8 +234,6 @@ void qubes_handle_configure(struct qubes_output *output, uint32_t timestamp,
 	// Ignore client-initiated resizes until this configure is ACKd, to
 	// avoid racing against the GUI daemon.
 	output->flags |= QUBES_OUTPUT_IGNORE_CLIENT_RESIZE | QUBES_OUTPUT_DAMAGE_ALL;
-	wlr_output_update_custom_mode(&output->output, width, height, 60000);
-	wlr_output_schedule_frame(&output->output);
 	struct tinywl_view *view = wl_container_of(output, view, output);
 	if (view->xdg_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 		// Step 7: Wait for client to acknowledge configure event.
@@ -255,6 +253,12 @@ void qubes_handle_configure(struct qubes_output *output, uint32_t timestamp,
 		   "Got a configure event for non-toplevel window; returning early");
 		output->guest = output->host;
 	}
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+	wlr_output_state_set_enabled(&state, true);
+	wlr_output_state_set_custom_mode(&state, width, height, 60000);
+	wlr_output_commit_state(&output->output, &state);
+	wlr_output_state_finish(&state);
 }
 
 static bool qubes_box_valid(struct wlr_box *box)
@@ -344,11 +348,15 @@ bool qubes_output_commit_size(struct qubes_output *output, struct wlr_box box)
 		// Honor the client's resize request.
 		//
 		// Set the surface mode
+		struct wlr_output_state state;
+
 		output->guest.width = (unsigned)box.width;
 		output->guest.height = (unsigned)box.height;
-		wlr_output_update_custom_mode(&output->output, output->guest.width,
-		                              output->guest.height, 60000);
-		wlr_output_schedule_frame(&output->output);
+		wlr_output_state_init(&state);
+		wlr_output_state_set_enabled(&state, true);
+		wlr_output_state_set_custom_mode(&state, box.width, box.height, 60000);
+		wlr_output_commit_state(&output->output, &state);
+		wlr_output_state_finish(&state);
 	}
 	// Send the new configure
 	qubes_send_configure(output);

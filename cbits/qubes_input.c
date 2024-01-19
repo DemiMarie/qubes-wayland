@@ -237,15 +237,15 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output,
 		 * it no longer has focus and the client will repaint accordingly, e.g.
 		 * stop displaying a caret.
 		 */
-		if (wlr_surface_is_xdg_surface(prev_surface)) {
-			struct wlr_xdg_surface *previous =
-			   wlr_xdg_surface_from_wlr_surface(prev_surface);
-			if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
-				wlr_xdg_toplevel_set_activated(previous->toplevel, false);
+		struct wlr_xdg_surface *previous_xdg =
+		   wlr_xdg_surface_try_from_wlr_surface(prev_surface);
+		if (previous_xdg != NULL) {
+			if (previous_xdg->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+				wlr_xdg_toplevel_set_activated(previous_xdg->toplevel, false);
 			}
 		} else {
 			struct wlr_xwayland_surface *previous =
-			   wlr_xwayland_surface_from_wlr_surface(prev_surface);
+			   wlr_xwayland_surface_try_from_wlr_surface(prev_surface);
 			if (previous)
 				wlr_xwayland_surface_activate(previous, false);
 		}
@@ -261,7 +261,7 @@ static void qubes_give_view_keyboard_focus(struct qubes_output *output,
 		struct wlr_xdg_surface *view_surface = view->xdg_surface;
 		while (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_POPUP) {
 			view_surface =
-			   wlr_xdg_surface_from_wlr_surface(view_surface->popup->parent);
+			   wlr_xdg_surface_try_from_wlr_surface(view_surface->popup->parent);
 		}
 		if (view_surface && view_surface->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 			wlr_xdg_toplevel_set_activated(view_surface->toplevel, true);
@@ -304,9 +304,10 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp,
 			 * it no longer has focus and the client will repaint accordingly, e.g.
 			 * stop displaying a caret.
 			 */
-			if (wlr_surface_is_xdg_surface(seat->keyboard_state.focused_surface)) {
-				struct wlr_xdg_surface *previous = wlr_xdg_surface_from_wlr_surface(
-				   seat->keyboard_state.focused_surface);
+			struct wlr_xdg_surface *previous =
+			   wlr_xdg_surface_try_from_wlr_surface(
+			      seat->keyboard_state.focused_surface);
+			if (previous != NULL) {
 				if (previous->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
 					wlr_xdg_toplevel_set_activated(previous->toplevel, false);
 				} else if (previous->role == WLR_XDG_SURFACE_ROLE_POPUP) {
@@ -315,7 +316,7 @@ static void handle_focus(struct qubes_output *output, uint32_t timestamp,
 				}
 			} else {
 				struct wlr_xwayland_surface *previous =
-				   wlr_xwayland_surface_from_wlr_surface(
+				   wlr_xwayland_surface_try_from_wlr_surface(
 				      seat->keyboard_state.focused_surface);
 				if (previous)
 					wlr_xwayland_surface_activate(previous, false);

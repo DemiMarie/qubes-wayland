@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
@@ -391,6 +392,7 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
 	struct wlr_xwayland_surface *surface = data;
 
 	assert(surface);
+	assert(surface->surface);
 	assert(QUBES_SERVER_MAGIC == server->magic);
 
 	struct qubes_xwayland_view *view = calloc(1, sizeof(*view));
@@ -416,9 +418,9 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
 	view->destroy.notify = xwayland_surface_destroy;
 	wl_signal_add(&surface->events.destroy, &view->destroy);
 	view->map.notify = xwayland_surface_map;
-	wl_signal_add(&surface->events.map, &view->map);
+	wl_signal_add(&surface->surface->events.map, &view->map);
 	view->unmap.notify = xwayland_surface_unmap;
-	wl_signal_add(&surface->events.unmap, &view->unmap);
+	wl_signal_add(&surface->surface->events.unmap, &view->unmap);
 	view->request_configure.notify = xwayland_surface_request_configure;
 	wl_signal_add(&surface->events.request_configure, &view->request_configure);
 	view->request_minimize.notify = xwayland_surface_request_minimize;

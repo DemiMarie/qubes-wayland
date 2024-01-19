@@ -59,8 +59,6 @@ typedef void (*qubes_parse_event_callback)(void *raw_view, void *raw_backend,
 static const struct wlr_backend_impl qubes_backend_impl = {
 	.start = qubes_backend_start,
 	.destroy = qubes_backend_handle_wlr_destroy,
-	.get_session = NULL,
-	.get_presentation_clock = NULL,
 	.get_drm_fd = NULL,
 	.get_buffer_caps = qubes_backend_get_buffer_caps,
 };
@@ -175,7 +173,7 @@ struct qubes_backend *qubes_backend_create(struct wl_display *display,
 	output->serial = "1.0";
 	output->phys_width = 344, output->phys_height = 194;
 	wlr_output_init(output, &backend->backend, &qubes_backend_output_impl,
-	                display);
+	                display, NULL);
 	wlr_output_set_description(output, "Qubes OS Virtual Output Device");
 	wlr_output_set_name(output, "Qubes OS Virtual Output Device");
 	assert(wl_list_empty(&output->modes));

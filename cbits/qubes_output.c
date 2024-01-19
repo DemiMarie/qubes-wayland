@@ -12,8 +12,8 @@
 #include <wlr/render/drm_format_set.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
-#include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 
@@ -234,9 +234,9 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 		if ((uint32_t)state->custom_mode.height != output->guest.height)
 			wlr_log(WLR_ERROR, "BUG: size mismatch: %d vs %" PRIu32,
 			        state->custom_mode.height, output->guest.height);
-		wlr_output_update_custom_mode(raw_output, output->guest.width,
-		                              output->guest.height,
-		                              state->custom_mode.refresh);
+		wlr_output_set_custom_mode(raw_output, output->guest.width,
+		                           output->guest.height,
+		                           state->custom_mode.refresh);
 		qubes_send_configure(output);
 	}
 
@@ -254,33 +254,31 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 			qubes_output_dump_buffer(output, state);
 		}
 	}
-	if (state->committed & WLR_OUTPUT_STATE_ENABLED)
-		wlr_output_update_enabled(raw_output, state->enabled);
 	return true;
 }
 
-static const struct wlr_drm_format xrgb8888 = {
-	.format = DRM_FORMAT_XRGB8888,
-	.len = 2,
-	.capacity = 0,
-	.modifiers = { DRM_FORMAT_MOD_INVALID, DRM_FORMAT_MOD_LINEAR },
-};
-static const struct wlr_drm_format argb8888 = {
-	.format = DRM_FORMAT_ARGB8888,
-	.len = 2,
-	.capacity = 0,
-	.modifiers = { DRM_FORMAT_MOD_INVALID, DRM_FORMAT_MOD_LINEAR },
-};
+static const uint64_t modifiers[2] = { DRM_FORMAT_MOD_INVALID,
+	                                    DRM_FORMAT_MOD_LINEAR };
 
-static const struct wlr_drm_format *const global_pointer_array[2] = {
-	&xrgb8888,
-	&argb8888,
+static const struct wlr_drm_format global_pointer_array[2] = {
+	{
+	   .format = DRM_FORMAT_ARGB8888,
+	   .len = 2,
+	   .capacity = 0,
+	   .modifiers = (uint64_t *)modifiers,
+	},
+	{
+	   .format = DRM_FORMAT_XRGB8888,
+	   .len = 2,
+	   .capacity = 0,
+	   .modifiers = (uint64_t *)modifiers,
+	},
 };
 
 static const struct wlr_drm_format_set global_formats = {
 	.len = 2,
 	.capacity = 0,
-	.formats = (struct wlr_drm_format **)global_pointer_array,
+	.formats = (struct wlr_drm_format *)global_pointer_array,
 };
 
 static const struct wlr_drm_format_set *qubes_output_get_primary_formats(
@@ -307,9 +305,30 @@ static void qubes_output_frame(struct wl_listener *listener,
 	struct qubes_output *output = wl_container_of(listener, output, frame);
 	assert(QUBES_VIEW_MAGIC == output->magic ||
 	       QUBES_XWAYLAND_MAGIC == output->magic);
-	if (qubes_output_mapped(output) &&
-	    !wlr_scene_output_commit(output->scene_output)) {
-		return;
+	if (qubes_output_mapped(output)) {
+		if (false && (output->scene_output->output->needs_frame ||
+		              pixman_region32_not_empty(
+		                 &output->scene_output->damage_ring.current))) {
+			struct wlr_output_state state;
+			wlr_output_state_init(&state);
+			if (!wlr_scene_output_build_state(output->scene_output, &state,
+			                                  NULL)) {
+				wlr_output_state_finish(&state);
+				return;
+			}
+			wlr_output_state_set_custom_mode(&state, output->guest.width,
+			                                 output->guest.height, 60000);
+			bool res =
+			   wlr_output_commit_state(output->scene_output->output, &state);
+			if (res)
+				wlr_damage_ring_rotate(&output->scene_output->damage_ring);
+			wlr_output_state_finish(&state);
+			if (!res)
+				return;
+		} else {
+			if (!wlr_scene_output_commit(output->scene_output, NULL))
+				return;
+		}
 	}
 	output->output.frame_pending = true;
 	if (!output->server->frame_pending) {
@@ -359,10 +378,15 @@ bool qubes_output_init(struct qubes_output *const output,
 	struct wlr_backend *const backend = &server->backend->backend;
 	assert(magic == QUBES_VIEW_MAGIC || magic == QUBES_XWAYLAND_MAGIC);
 
-	wlr_output_init(&output->output, backend, &qubes_wlr_output_impl,
-	                server->wl_display);
-	wlr_output_update_custom_mode(&output->output, 1280, 720, 0);
-	wlr_output_update_enabled(&output->output, true);
+	{
+		struct wlr_output_state state;
+		wlr_output_state_init(&state);
+		wlr_output_state_set_enabled(&state, true);
+		wlr_output_state_set_custom_mode(&state, 1280, 720, 60000);
+		wlr_output_init(&output->output, backend, &qubes_wlr_output_impl,
+		                server->wl_display, &state);
+		wlr_output_state_finish(&state);
+	}
 
 	if (asprintf(&output->name, "Virtual Output %" PRIu64,
 	             server->output_counter++) < 0) {
@@ -392,7 +416,27 @@ bool qubes_output_init(struct qubes_output *const output,
 	if (!(output->scene_output =
 	         wlr_scene_output_create(output->scene, &output->output)))
 		return false;
-	return qubes_output_set_surface(output, surface);
+	if (!(output->scene_layout = wlr_scene_attach_output_layout(
+	         output->scene, server->output_layout)))
+		return false;
+	if (!qubes_output_set_surface(output, surface))
+		return false;
+	/* Adds this to the output layout. The add_auto function arranges outputs
+	 * from left-to-right in the order they appear. A more sophisticated
+	 * compositor would let the user configure the arrangement of outputs in the
+	 * layout.
+	 *
+	 * The output layout utility automatically adds a wl_output global to the
+	 * display, which Wayland clients can see to find out information about the
+	 * output (such as DPI, scale factor, manufacturer, etc).
+	 */
+	struct wlr_output_layout_output *l_output =
+	   wlr_output_layout_add_auto(server->output_layout, &output->output);
+	if (l_output == NULL)
+		return false;
+	wlr_scene_output_layout_add_output(output->scene_layout, l_output,
+	                                   output->scene_output);
+	return true;
 }
 
 void qubes_set_view_title(struct qubes_output *output, const char *const title)
@@ -493,7 +537,13 @@ void qubes_change_window_flags(struct qubes_output *output, uint32_t flags_set,
 void qubes_output_unmap(struct qubes_output *output)
 {
 	output->flags &= ~(__typeof__(output->flags))QUBES_OUTPUT_MAPPED;
-	wlr_output_enable(&output->output, false);
+	{
+		struct wlr_output_state state;
+		wlr_output_state_init(&state);
+		wlr_output_state_set_enabled(&state, false);
+		wlr_output_commit_state(&output->output, &state);
+		wlr_output_state_finish(&state);
+	}
 	struct msg_hdr header = {
 		.type = MSG_UNMAP,
 		.window = output->window_id,
@@ -510,9 +560,14 @@ void qubes_output_map(struct qubes_output *output,
                       uint32_t transient_for_window, bool override_redirect)
 {
 	if (!qubes_output_mapped(output)) {
+		struct wlr_output_state state;
+
 		output->flags |= QUBES_OUTPUT_MAPPED;
 		wlr_scene_node_set_enabled(&output->scene_subsurface_tree->node, true);
-		wlr_output_enable(&output->output, true);
+		wlr_output_state_init(&state);
+		wlr_output_state_set_enabled(&state, true);
+		wlr_output_commit_state(&output->output, &state);
+		wlr_output_state_finish(&state);
 	}
 
 	// clang-format off
@@ -549,8 +604,6 @@ bool qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 		output->guest.height = (unsigned)box.height;
 		if (!qubes_output_ensure_created(output))
 			return false;
-		wlr_output_update_custom_mode(&output->output, output->guest.width,
-		                              output->guest.height, 60000);
 		qubes_send_configure(output);
 		wlr_output_send_frame(&output->output);
 		return true;

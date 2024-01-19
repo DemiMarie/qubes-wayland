@@ -123,17 +123,10 @@ wlroots_options = [
   'werror=false',
 ]
 wlroots = dependency('wlroots',
-                     version: ['>=0.16.0', '<0.17.0'],
+                     version: ['>=0.17.1', '<0.18.0'],
                      default_options: wlroots_options,
-                     required: get_option('use-system-wlroots'))
-if not wlroots.found()
-  wlroots_proj = subproject(
-    'wlroots',
-    default_options: wlroots_options,
-    version: ['>=0.16.1', '<0.17.0'],
-  )
-  wlroots = wlroots_proj.get_variable('wlroots')
-endif
+                     required: get_option('use-system-wlroots'),
+                     fallback: ['wlroots', 'wlroot'])
 
 rust_parts = custom_target(
   'Build Rust code',

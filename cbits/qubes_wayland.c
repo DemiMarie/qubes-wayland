@@ -282,8 +282,13 @@ static void qubes_toplevel_ack_configure(struct wl_listener *listener,
 
 	if ((output->flags & QUBES_OUTPUT_NEED_CONFIGURE_ACK) &&
 	    (view->configure_serial == configure->serial)) {
+		struct wlr_output_state state;
 		output->flags &= ~QUBES_OUTPUT_NEED_CONFIGURE_ACK;
-		wlr_output_send_frame(&output->output);
+		wlr_output_state_init(&state);
+		wlr_output_state_set_custom_mode(&state, output->host.width,
+		                                 output->host.height, 60000);
+		wlr_output_commit_state(&output->output, &state);
+		wlr_output_state_finish(&state);
 	}
 }
 
@@ -321,9 +326,9 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 
 	/* Listen to the various events it can emit */
 	view->map.notify = xdg_surface_map;
-	wl_signal_add(&xdg_surface->events.map, &view->map);
+	wl_signal_add(&xdg_surface->surface->events.map, &view->map);
 	view->unmap.notify = xdg_surface_unmap;
-	wl_signal_add(&xdg_surface->events.unmap, &view->unmap);
+	wl_signal_add(&xdg_surface->surface->events.unmap, &view->unmap);
 	view->destroy.notify = xdg_surface_destroy;
 	wl_signal_add(&xdg_surface->events.destroy, &view->destroy);
 	xdg_surface->data = view;
@@ -366,7 +371,7 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 		struct wlr_box geometry;
 		wlr_xdg_positioner_rules_get_geometry(&popup->scheduled.rules, &geometry);
 		struct tinywl_view *parent_view =
-		   wlr_xdg_surface_from_wlr_surface(popup->parent)->data;
+		   wlr_xdg_surface_try_from_wlr_surface(popup->parent)->data;
 		assert(parent_view);
 		// Use the parent's guest values in case changes have not propagated to
 		// the host.
@@ -397,8 +402,8 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 	assert(output->window_id == 0);
 
 	/* Tell GUI daemon to create window */
-	wlr_output_update_custom_mode(&output->output, output->guest.width,
-	                              output->guest.height, 60000);
+	wlr_output_set_custom_mode(&output->output, output->guest.width,
+	                           output->guest.height, 60000);
 	return;
 cleanup:
 	wl_resource_post_no_memory(xdg_surface->resource);
@@ -452,7 +457,8 @@ void qubes_view_map(struct tinywl_view *view)
 		struct wlr_xdg_popup *popup = xdg_surface->popup;
 		if (popup->parent) {
 			const struct wlr_xdg_surface *parent_surface =
-			   wlr_xdg_surface_from_wlr_surface(popup->parent);
+			   wlr_xdg_surface_try_from_wlr_surface(popup->parent);
+			assert(parent_surface != NULL);
 			transient_for_window =
 			   ((struct qubes_output *)parent_surface->data)->window_id;
 		}
