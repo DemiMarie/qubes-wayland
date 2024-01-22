@@ -299,6 +299,35 @@ static const struct wlr_output_impl qubes_wlr_output_impl = {
 	.get_primary_formats = qubes_output_get_primary_formats,
 };
 
+static bool qubes_wlr_scene_output_commit(
+   struct wlr_scene_output *scene_output,
+   uint32_t width, uint32_t height, uint32_t fps)
+{
+	if (!scene_output->output->needs_frame &&
+	    !pixman_region32_not_empty(&scene_output->damage_ring.current)) {
+		return true;
+	}
+
+	bool ok = false;
+	struct wlr_output_state state;
+	wlr_output_state_init(&state);
+	wlr_output_state_set_custom_mode(&state, width, height, fps);
+	if (!wlr_scene_output_build_state(scene_output, &state, NULL)) {
+		goto out;
+	}
+
+	ok = wlr_output_commit_state(scene_output->output, &state);
+	if (!ok) {
+		goto out;
+	}
+
+	wlr_damage_ring_rotate(&scene_output->damage_ring);
+
+out:
+	wlr_output_state_finish(&state);
+	return ok;
+}
+
 static void qubes_output_frame(struct wl_listener *listener,
                                void *data __attribute__((unused)))
 {
@@ -306,29 +335,8 @@ static void qubes_output_frame(struct wl_listener *listener,
 	assert(QUBES_VIEW_MAGIC == output->magic ||
 	       QUBES_XWAYLAND_MAGIC == output->magic);
 	if (qubes_output_mapped(output)) {
-		if (false && (output->scene_output->output->needs_frame ||
-		              pixman_region32_not_empty(
-		                 &output->scene_output->damage_ring.current))) {
-			struct wlr_output_state state;
-			wlr_output_state_init(&state);
-			if (!wlr_scene_output_build_state(output->scene_output, &state,
-			                                  NULL)) {
-				wlr_output_state_finish(&state);
-				return;
-			}
-			wlr_output_state_set_custom_mode(&state, output->guest.width,
-			                                 output->guest.height, 60000);
-			bool res =
-			   wlr_output_commit_state(output->scene_output->output, &state);
-			if (res)
-				wlr_damage_ring_rotate(&output->scene_output->damage_ring);
-			wlr_output_state_finish(&state);
-			if (!res)
-				return;
-		} else {
-			if (!wlr_scene_output_commit(output->scene_output, NULL))
-				return;
-		}
+		if (!qubes_wlr_scene_output_commit(output->scene_output, output->guest.width, output->guest.height, 60000))
+			return;
 	}
 	output->output.frame_pending = true;
 	if (!output->server->frame_pending) {

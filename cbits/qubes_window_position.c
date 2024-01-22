@@ -337,29 +337,18 @@ bool qubes_output_commit_size(struct qubes_output *output, struct wlr_box box)
 		output->guest.height = box.height;
 	}
 	wlr_scene_output_set_position(output->scene_output, box.x, box.y);
-	if (!qubes_output_ensure_created(output))
+	if (!qubes_output_ensure_created(output)) {
+		qubes_window_log(output, WLR_DEBUG, "Ignoring size commit because output could not be created");
 		return false;
-
-	// Only honor size changes if there is no configure from the daemon
-	// that must be ACKd, or if the
-	if (((unsigned)box.width != output->guest.width) ||
-	    ((unsigned)box.height != output->guest.height)) {
-		// ACK the original configure
-		// Honor the client's resize request.
-		//
-		// Set the surface mode
-		struct wlr_output_state state;
-
-		output->guest.width = (unsigned)box.width;
-		output->guest.height = (unsigned)box.height;
-		wlr_output_state_init(&state);
-		wlr_output_state_set_enabled(&state, true);
-		wlr_output_state_set_custom_mode(&state, box.width, box.height, 60000);
-		wlr_output_commit_state(&output->output, &state);
-		wlr_output_state_finish(&state);
 	}
+
+	// Send the host size then the guest size
+	output->flags |= (QUBES_OUTPUT_WIDTH_CHANGED | QUBES_OUTPUT_HEIGHT_CHANGED);
+	qubes_window_log(output, WLR_DEBUG, "Updating guest width and height to %dx%d",
+			           box.width, box.height);
+	output->guest.width = (unsigned)box.width;
+	output->guest.height = (unsigned)box.height;
 	// Send the new configure
 	qubes_send_configure(output);
-	output->flags &= (__typeof__(output->flags))~QUBES_CHANGED_MASK;
 	return true;
 }
