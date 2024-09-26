@@ -147,10 +147,10 @@ struct qubes_backend *qubes_backend_create(struct wl_display *display,
                                            uint16_t domid,
                                            struct wl_list *views)
 {
-	struct qubes_backend *backend = calloc(sizeof(*backend), 1);
-	struct wlr_keyboard *keyboard = calloc(sizeof(*keyboard), 1);
-	struct wlr_output *output = calloc(sizeof(*output), 1);
-	struct wlr_pointer *pointer = calloc(sizeof(*pointer), 1);
+	struct qubes_backend *backend = calloc(1, sizeof(*backend));
+	struct wlr_keyboard *keyboard = calloc(1, sizeof(*keyboard));
+	struct wlr_output *output = calloc(1, sizeof(*output));
+	struct wlr_pointer *pointer = calloc(1, sizeof(*pointer));
 
 	if (backend == NULL || keyboard == NULL || output == NULL || pointer == NULL)
 		goto fail;

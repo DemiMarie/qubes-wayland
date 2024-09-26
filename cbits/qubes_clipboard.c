@@ -133,7 +133,7 @@ done:
 struct qubes_clipboard_handler *
 qubes_clipboard_handler_create(struct tinywl_server *server, int fd)
 {
-	struct qubes_clipboard_handler *handler = calloc(sizeof(*handler), 1);
+	struct qubes_clipboard_handler *handler = calloc(1, sizeof(*handler));
 	if (!handler)
 		goto fail;
 	wl_array_init(&handler->clipboard_data);

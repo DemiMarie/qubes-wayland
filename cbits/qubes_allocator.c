@@ -84,7 +84,7 @@ static void qubes_allocator_decref(struct qubes_allocator *allocator)
 
 struct wlr_allocator *qubes_allocator_create(uint16_t domid)
 {
-	struct qubes_allocator *qubes = calloc(sizeof(*qubes), 1);
+	struct qubes_allocator *qubes = calloc(1, sizeof(*qubes));
 	if (!qubes)
 		return NULL;
 	qubes->domid = domid;

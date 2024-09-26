@@ -138,7 +138,7 @@ static void qubes_data_source_send(struct wlr_data_source *raw_source,
 	        mime_type);
 	struct qubes_data_source *source =
 	   qubes_data_source_from_wlr_data_source(raw_source);
-	struct qubes_clipboard_writer *writer = calloc(sizeof(*writer), 1);
+	struct qubes_clipboard_writer *writer = calloc(1, sizeof(*writer));
 	if (!writer)
 		goto fail;
 	writer->source =
@@ -190,7 +190,7 @@ struct qubes_data_source *qubes_data_source_create(struct wl_display *display,
 	for (size_t i = 0; i < sizeof(mime_types) / sizeof(mime_types[0]); ++i)
 		if (!mime_types[i])
 			goto destroy_mime;
-	if (!(source = calloc(sizeof(*source), 1)))
+	if (!(source = calloc(1, sizeof(*source))))
 		goto destroy_mime;
 	if (!(data = malloc(offsetof(__typeof__(*data), data) + len)))
 		goto free_source;
