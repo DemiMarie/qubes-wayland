@@ -259,16 +259,16 @@ static const uint64_t modifiers[2] = { DRM_FORMAT_MOD_INVALID,
 
 static const struct wlr_drm_format global_pointer_array[2] = {
 	{
-	   .format = DRM_FORMAT_ARGB8888,
-	   .len = 2,
-	   .capacity = 0,
-	   .modifiers = (uint64_t *)modifiers,
+		.format = DRM_FORMAT_ARGB8888,
+		.len = 2,
+		.capacity = 0,
+		.modifiers = (uint64_t *)modifiers,
 	},
 	{
-	   .format = DRM_FORMAT_XRGB8888,
-	   .len = 2,
-	   .capacity = 0,
-	   .modifiers = (uint64_t *)modifiers,
+		.format = DRM_FORMAT_XRGB8888,
+		.len = 2,
+		.capacity = 0,
+		.modifiers = (uint64_t *)modifiers,
 	},
 };
 
