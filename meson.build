@@ -63,7 +63,7 @@ qubesdb = cc.find_library('qubesdb')
 # SOFTWARE.
 
 wayland_protos = dependency('wayland-protocols',
-	version: '>=1.23',
+	version: '>=1.35',
 	fallback: ['wayland-protocols', 'wayland_protocols'],
 	default_options: ['tests=false'],
 )
@@ -121,12 +121,11 @@ wlroots_options = [
   'allocators=[]',
   'auto_features=disabled',
   'werror=false',
+  'default_library=static',
 ]
-wlroots = dependency('wlroots',
-                     version: ['>=0.17.1', '<0.18.0'],
-                     default_options: wlroots_options,
-                     required: get_option('use-system-wlroots'),
-                     fallback: ['wlroots', 'wlroot'])
+wlroots = subproject('wlroots-0.18',
+                     version: ['>=0.18.1', '<0.19.0'],
+                     default_options: wlroots_options).get_variable('wlroots')
 
 rust_parts = custom_target(
   'Build Rust code',

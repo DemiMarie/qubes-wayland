@@ -631,7 +631,7 @@ int main(int argc, char *argv[])
 	bool enable_xwayland = true;
 	bool primary_selection = false;
 	bool override_verbosity = false;
-	bool handle_sigint = true;
+	bool handle_sigint = false;
 	struct option long_options[] = {
 		{ "startup-cmd", required_argument, 0, 's' },
 		{ "log-level", required_argument, 0, 'v' },
@@ -716,22 +716,22 @@ int main(int argc, char *argv[])
 	server->listening_socket = -1;
 	server->qubesdb_connection = qdb;
 
-	if (!(server->allocator = qubes_allocator_create(domid)))
-		err(1, "Cannot create Qubes OS allocator");
-	if (!(server->output_layout = wlr_output_layout_create()))
-		err(1, "Cannot create scene layout");
-
-	// Check that the process is single threaded before using much from wlroots
-	check_single_threaded();
-
-	wlr_log_init(loglevel, NULL);
-
 	/* The Wayland display is managed by libwayland. It handles accepting
 	 * clients from the Unix socket, manging Wayland globals, and so on. */
 	if (!(server->wl_display = wl_display_create())) {
 		wlr_log(WLR_ERROR, "Cannot create wl_display");
 		return 1;
 	}
+
+	if (!(server->allocator = qubes_allocator_create(domid)))
+		err(1, "Cannot create Qubes OS allocator");
+	if (!(server->output_layout = wlr_output_layout_create(server->wl_display)))
+		err(1, "Cannot create scene layout");
+
+	// Check that the process is single threaded before using much from wlroots
+	check_single_threaded();
+
+	wlr_log_init(loglevel, NULL);
 
 	/* The backend is a wlroots feature which abstracts the underlying input and
 	 * output hardware. The autocreate option will choose the most suitable
@@ -803,7 +803,7 @@ int main(int argc, char *argv[])
 
 	/* Creates an output layout, which a wlroots utility for working with an
 	 * arrangement of screens in a physical layout. */
-	if (!(server->output_layout = wlr_output_layout_create())) {
+	if (!(server->output_layout = wlr_output_layout_create(server->wl_display))) {
 		wlr_log(WLR_ERROR, "Cannot create output layout");
 		return 1;
 	}
@@ -827,9 +827,12 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 
-	server->new_xdg_surface.notify = qubes_new_xdg_surface;
-	wl_signal_add(&server->xdg_shell->events.new_surface,
-	              &server->new_xdg_surface);
+	server->new_xdg_toplevel.notify = qubes_new_xdg_toplevel;
+	wl_signal_add(&server->xdg_shell->events.new_toplevel,
+	              &server->new_xdg_toplevel);
+	server->new_xdg_popup.notify = qubes_new_xdg_popup;
+	wl_signal_add(&server->xdg_shell->events.new_popup,
+	              &server->new_xdg_popup);
 
 	/*
 	 * Configures a seat, which is a single "seat" at which a user sits and

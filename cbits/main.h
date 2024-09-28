@@ -43,7 +43,9 @@ struct tinywl_server {
 	struct wlr_allocator *allocator;
 
 	struct wlr_xdg_shell *xdg_shell;
-	struct wl_listener new_xdg_surface, new_xwayland_surface;
+	struct wl_listener new_xdg_toplevel;
+	struct wl_listener new_xdg_popup;
+	struct wl_listener new_xwayland_surface;
 	struct wl_list views;
 
 	struct wlr_seat *seat;

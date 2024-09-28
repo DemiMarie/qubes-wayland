@@ -27,4 +27,5 @@ struct tinywl_view {
 	uint32_t configure_serial;
 };
 void qubes_view_map(struct tinywl_view *view);
-void qubes_new_xdg_surface(struct wl_listener *listener, void *data);
+void qubes_new_xdg_toplevel(struct wl_listener *listener, void *data);
+void qubes_new_xdg_popup(struct wl_listener *listener, void *data);

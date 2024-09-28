@@ -92,15 +92,15 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp,
                           const uint8_t *ptr)
 {
 	struct msg_button button;
-	enum wlr_button_state state;
+	enum wl_pointer_button_state state;
 
 	memcpy(&button, ptr, sizeof(button));
 	switch (button.type) {
 	case XCB_BUTTON_PRESS:
-		state = WLR_BUTTON_PRESSED;
+		state = WL_POINTER_BUTTON_STATE_PRESSED;
 		break;
 	case XCB_BUTTON_RELEASE:
-		state = WLR_BUTTON_RELEASED;
+		state = WL_POINTER_BUTTON_STATE_RELEASED;
 		break;
 	default:
 		wlr_log(WLR_ERROR, "Bad button event type %" PRIu32, button.type);
@@ -123,24 +123,28 @@ static void handle_button(struct wlr_seat *seat, uint32_t timestamp,
 	case XCB_BUTTON_INDEX_4:
 		/* Scroll up */
 		wlr_seat_pointer_notify_axis(
-		   seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, -15.0,
-		   -WLR_POINTER_AXIS_DISCRETE_STEP, WLR_AXIS_SOURCE_WHEEL);
+		   seat, timestamp, WL_POINTER_AXIS_VERTICAL_SCROLL, -15.0,
+		   -WLR_POINTER_AXIS_DISCRETE_STEP, WL_POINTER_AXIS_SOURCE_WHEEL,
+			WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL);
 		break;
 	case XCB_BUTTON_INDEX_5:
 		/* Scroll down */
 		wlr_seat_pointer_notify_axis(
-		   seat, timestamp, WLR_AXIS_ORIENTATION_VERTICAL, 15.0,
-		   WLR_POINTER_AXIS_DISCRETE_STEP, WLR_AXIS_SOURCE_WHEEL);
+		   seat, timestamp, WL_POINTER_AXIS_VERTICAL_SCROLL, 15.0,
+		   WLR_POINTER_AXIS_DISCRETE_STEP, WL_POINTER_AXIS_SOURCE_WHEEL,
+			WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL);
 		break;
 	case 6: /* Scroll left */
 		wlr_seat_pointer_notify_axis(
-		   seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, -15.0,
-		   -WLR_POINTER_AXIS_DISCRETE_STEP, WLR_AXIS_SOURCE_WHEEL);
+		   seat, timestamp, WL_POINTER_AXIS_HORIZONTAL_SCROLL, -15.0,
+		   -WLR_POINTER_AXIS_DISCRETE_STEP, WL_POINTER_AXIS_SOURCE_WHEEL,
+			WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL);
 		break;
 	case 7: /* Scroll right */
 		wlr_seat_pointer_notify_axis(
-		   seat, timestamp, WLR_AXIS_ORIENTATION_HORIZONTAL, 15.0,
-		   WLR_POINTER_AXIS_DISCRETE_STEP, WLR_AXIS_SOURCE_WHEEL);
+		   seat, timestamp, WL_POINTER_AXIS_HORIZONTAL_SCROLL, 15.0,
+		   WLR_POINTER_AXIS_DISCRETE_STEP, WL_POINTER_AXIS_SOURCE_WHEEL,
+			WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL);
 		break;
 	default:
 		wlr_log(WLR_DEBUG, "Unknown button event type %" PRIu32, button.button);

@@ -292,22 +292,32 @@ static void qubes_toplevel_ack_configure(struct wl_listener *listener,
 	}
 }
 
-void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
+static void qubes_new_xdg_surface(struct tinywl_server *server, struct wlr_xdg_surface *data, enum wlr_xdg_surface_role role);
+
+void qubes_new_xdg_toplevel(struct wl_listener *listener, void *data)
+{
+	struct tinywl_server *server =
+	   wl_container_of(listener, server, new_xdg_toplevel);
+	struct wlr_xdg_toplevel *toplevel = data;
+	qubes_new_xdg_surface(server, toplevel->base, WLR_XDG_SURFACE_ROLE_TOPLEVEL);
+}
+
+void qubes_new_xdg_popup(struct wl_listener *listener, void *data)
+{
+	struct tinywl_server *server =
+	   wl_container_of(listener, server, new_xdg_popup);
+	struct wlr_xdg_popup *popup = data;
+	qubes_new_xdg_surface(server, popup->base, WLR_XDG_SURFACE_ROLE_POPUP);
+}
+
+static void qubes_new_xdg_surface(struct tinywl_server *server, struct wlr_xdg_surface *xdg_surface, enum wlr_xdg_surface_role role)
 {
 	/* This event is raised when wlr_xdg_shell receives a new xdg surface from a
 	 * client, either a toplevel (application window) or popup. */
-	struct tinywl_server *server =
-	   wl_container_of(listener, server, new_xdg_surface);
-	struct wlr_xdg_surface *xdg_surface = data;
-
 	assert(QUBES_SERVER_MAGIC == server->magic);
-	if (xdg_surface->role != WLR_XDG_SURFACE_ROLE_TOPLEVEL &&
-	    xdg_surface->role != WLR_XDG_SURFACE_ROLE_POPUP) {
-		return;
-	}
 	/* QUBES HOOK: MSG_CREATE: create toplevel window */
 
-	bool is_override_redirect = xdg_surface->role == WLR_XDG_SURFACE_ROLE_POPUP;
+	bool is_override_redirect = role == WLR_XDG_SURFACE_ROLE_POPUP;
 
 	/* Allocate a tinywl_view for this surface */
 	struct tinywl_view *view = calloc(1, sizeof(struct tinywl_view));
@@ -401,9 +411,17 @@ void qubes_new_xdg_surface(struct wl_listener *listener, void *data)
 	/* Get the window ID */
 	assert(output->window_id == 0);
 
-	/* Tell GUI daemon to create window */
-	wlr_output_set_custom_mode(&output->output, output->guest.width,
-	                           output->guest.height, 60000);
+	/* Force commit */
+	{
+		struct wlr_output_state state;
+		wlr_output_state_init(&state);
+		wlr_output_state_set_enabled(&state, true);
+		wlr_output_state_set_custom_mode(&state, output->host.width,
+		                                 output->host.height, 60000);
+		wlr_output_commit_state(&output->output, &state);
+		wlr_output_state_finish(&state);
+	}
+
 	return;
 cleanup:
 	wl_resource_post_no_memory(xdg_surface->resource);

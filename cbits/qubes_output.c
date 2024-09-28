@@ -234,9 +234,11 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 		if ((uint32_t)state->custom_mode.height != output->guest.height)
 			wlr_log(WLR_ERROR, "BUG: size mismatch: %d vs %" PRIu32,
 			        state->custom_mode.height, output->guest.height);
+#if 0
 		wlr_output_set_custom_mode(raw_output, output->guest.width,
 		                           output->guest.height,
 		                           state->custom_mode.refresh);
+#endif
 		qubes_send_configure(output);
 	}
 
@@ -295,7 +297,7 @@ static const struct wlr_output_impl qubes_wlr_output_impl = {
 	.commit = qubes_output_commit,
 	.get_gamma_size = qubes_get_gamma_size,
 	.get_cursor_formats = NULL,
-	.get_cursor_size = NULL,
+	.get_cursor_sizes = NULL,
 	.get_primary_formats = qubes_output_get_primary_formats,
 };
 
@@ -392,7 +394,8 @@ bool qubes_output_init(struct qubes_output *const output,
 		wlr_output_state_set_enabled(&state, true);
 		wlr_output_state_set_custom_mode(&state, 1280, 720, 60000);
 		wlr_output_init(&output->output, backend, &qubes_wlr_output_impl,
-		                server->wl_display, &state);
+		                wl_display_get_event_loop(server->wl_display), &state);
+		wlr_output_commit_state(&output->output, &state);
 		wlr_output_state_finish(&state);
 	}
 
@@ -574,6 +577,7 @@ void qubes_output_map(struct qubes_output *output,
 		wlr_scene_node_set_enabled(&output->scene_subsurface_tree->node, true);
 		wlr_output_state_init(&state);
 		wlr_output_state_set_enabled(&state, true);
+		wlr_output_state_set_custom_mode(&state, output->guest.width, output->guest.height, 60);
 		wlr_output_commit_state(&output->output, &state);
 		wlr_output_state_finish(&state);
 	}

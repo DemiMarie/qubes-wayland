@@ -140,7 +140,7 @@ static const struct wlr_output_impl qubes_backend_output_impl = {
 	.commit = qubes_backend_output_commit,
 	.get_gamma_size = NULL,
 	.get_cursor_formats = NULL,
-	.get_cursor_size = NULL,
+	.get_cursor_sizes = NULL,
 };
 
 struct qubes_backend *qubes_backend_create(struct wl_display *display,
@@ -173,14 +173,19 @@ struct qubes_backend *qubes_backend_create(struct wl_display *display,
 	output->serial = "1.0";
 	output->phys_width = 344, output->phys_height = 194;
 	wlr_output_init(output, &backend->backend, &qubes_backend_output_impl,
-	                display, NULL);
+	                wl_display_get_event_loop(display), NULL);
 	wlr_output_set_description(output, "Qubes OS Virtual Output Device");
 	wlr_output_set_name(output, "Qubes OS Virtual Output Device");
-	assert(wl_list_empty(&output->modes));
-	wlr_output_set_mode(output, &backend->mode);
-	wlr_output_enable(output, true);
-	wl_list_insert(&output->modes, &backend->mode.link);
-	assert(wlr_output_commit(output));
+	{
+		struct wlr_output_state state = { 0 };
+		wlr_output_state_init(&state);
+		wlr_output_state_set_enabled(&state, true);
+		wlr_output_state_set_mode(&state, &backend->mode);
+		assert(wl_list_empty(&output->modes));
+		wl_list_insert(&output->modes, &backend->mode.link);
+		assert(wlr_output_commit_state(output, &state));
+		wlr_output_state_finish(&state);
+	}
 	output->current_mode = &backend->mode;
 	assert(!wl_list_empty(&output->modes));
 	assert(output->current_mode);
