@@ -9,6 +9,7 @@ struct qubes_xwayland_view {
 	struct qubes_output output;
 	struct wl_list link;
 	struct wlr_xwayland_surface *xwayland_surface;
+	struct tinywl_server *server;
 
 	struct wl_listener destroy;
 	struct wl_listener request_configure;
@@ -27,6 +28,8 @@ struct qubes_xwayland_view {
 	struct wl_listener set_override_redirect;
 	struct wl_listener set_parent;
 	struct wl_listener commit;
+	struct wl_listener associate;
+	struct wl_listener dissociate;
 };
 void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
                                          void *data);
