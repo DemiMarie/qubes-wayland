@@ -203,6 +203,7 @@ static void xdg_surface_destroy(struct wl_listener *listener,
 		wl_list_remove(&view->set_app_id.link);
 		wl_list_remove(&view->ack_configure.link);
 	}
+	assert(QUBES_VIEW_MAGIC == view->output.magic);
 	qubes_output_deinit(&view->output);
 	free(view);
 }
@@ -426,6 +427,7 @@ static void qubes_new_xdg_surface(struct tinywl_server *server, struct wlr_xdg_s
 cleanup:
 	wl_resource_post_no_memory(xdg_surface->resource);
 	if (view) {
+		assert(QUBES_VIEW_MAGIC == view->output.magic);
 		qubes_output_deinit(output);
 		free(view);
 	}

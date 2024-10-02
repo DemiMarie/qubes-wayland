@@ -487,11 +487,11 @@ struct wlr_surface *qubes_output_surface(struct qubes_output *output)
 
 void qubes_output_deinit(struct qubes_output *output)
 {
+	assert(output->magic == QUBES_VIEW_MAGIC ||
+	       output->magic == QUBES_XWAYLAND_MAGIC);
 	if (output->scene_subsurface_tree)
 		wlr_scene_node_destroy(&output->scene_subsurface_tree->node);
 	wl_list_remove(&output->link);
-	assert(output->magic == QUBES_VIEW_MAGIC ||
-	       output->magic == QUBES_XWAYLAND_MAGIC);
 	struct msg_hdr header = {
 		.type = MSG_DESTROY,
 		.window = output->window_id,
@@ -505,11 +505,9 @@ void qubes_output_deinit(struct qubes_output *output)
 	if (output->scene_output) {
 		wlr_scene_output_destroy(output->scene_output);
 	}
-	if (output->scene) {
-		wlr_scene_node_destroy(&output->scene->tree.node);
-	}
 	wlr_output_destroy(&output->output);
 	free(output->name);
+	memset(output, 0, sizeof(*output));
 }
 
 void qubes_change_window_flags(struct qubes_output *output, uint32_t flags_set,

@@ -35,11 +35,7 @@ static void xwayland_surface_destroy(struct wl_listener *listener,
 
 	wlr_log(WLR_DEBUG, "freeing view at %p", view);
 
-	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
-
 	wl_list_remove(&view->destroy.link);
-	wl_list_remove(&view->map.link);
-	wl_list_remove(&view->unmap.link);
 	wl_list_remove(&view->request_configure.link);
 	wl_list_remove(&view->request_minimize.link);
 	wl_list_remove(&view->request_maximize.link);
@@ -50,9 +46,14 @@ static void xwayland_surface_destroy(struct wl_listener *listener,
 	wl_list_remove(&view->set_override_redirect.link);
 	wl_list_remove(&view->set_geometry.link);
 	wl_list_remove(&view->set_parent.link);
-	if (view->commit.link.next)
-		wl_list_remove(&view->commit.link);
-	qubes_output_deinit(&view->output);
+	if (!wl_list_empty(&view->map.link)) {
+		assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
+		qubes_output_deinit(&view->output);
+		wl_list_remove(&view->map.link);
+		wl_list_remove(&view->unmap.link);
+		if (view->commit.link.next != NULL)
+			wl_list_remove(&view->commit.link);
+	}
 	memset(view, 0xFF, sizeof *view);
 	free(view);
 }
@@ -61,10 +62,11 @@ void qubes_xwayland_surface_map(struct qubes_xwayland_view *view)
 {
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	/* QUBES HOOK: MSG_MAP: map the corresponding window */
+	if (wl_list_empty(&view->map.link))
+		return;
 	struct wlr_xwayland_surface *surface = view->xwayland_surface;
 	assert(surface);
-	if (surface->surface == NULL)
-		return;
+	assert(surface->surface);
 	wlr_log(WLR_DEBUG, "mapping surface at %p", view);
 	struct qubes_output *output = &view->output;
 	struct wlr_box box;
@@ -94,16 +96,17 @@ void qubes_xwayland_surface_map(struct qubes_xwayland_view *view)
 	qubes_output_map(output, parent_window_id, surface->override_redirect);
 }
 
-static void xwayland_surface_map(struct wl_listener *listener, void *data)
+static void xwayland_surface_map(struct wl_listener *listener,
+                                 void *data __attribute__((unused)))
 {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, map);
 	if (wl_list_empty(&view->map.link))
 		return;
-	assert(data == view->xwayland_surface);
 	qubes_xwayland_surface_map(view);
 }
 
-static void xwayland_surface_unmap(struct wl_listener *listener, void *data)
+static void xwayland_surface_unmap(struct wl_listener *listener,
+                                   void *data __attribute__((unused)))
 {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, unmap);
 	if (wl_list_empty(&view->map.link))
@@ -113,7 +116,8 @@ static void xwayland_surface_unmap(struct wl_listener *listener, void *data)
 	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 	qubes_output_set_surface(&view->output, NULL);
 	qubes_output_unmap(&view->output);
-	wl_list_remove(&view->commit.link);
+	if (view->commit.link.next != NULL)
+		wl_list_remove(&view->commit.link);
 }
 
 static void xwayland_surface_set_size(struct qubes_xwayland_view *view,
@@ -197,14 +201,14 @@ static void xwayland_surface_request_minimize(struct wl_listener *listener,
 }
 
 static void xwayland_surface_request_maximize(struct wl_listener *listener,
-                                              void *data)
+                                              void *data __attribute__((unused)))
 {
 	struct qubes_xwayland_view *view =
 	   wl_container_of(listener, view, request_maximize);
-	struct wlr_xwayland_surface *surface = data;
-	if (surface->surface == NULL)
+	if (wl_list_empty(&view->map.link))
 		return;
-
+	struct wlr_xwayland_surface *surface = view->xwayland_surface;
+	assert(surface->surface != NULL);
 	assert(view->destroy.link.next);
 #if WINDOW_FLAG_MAXIMIZE
 	bool maximized = surface->maximized_vert && surface->maximized_horz;
@@ -224,11 +228,13 @@ static void xwayland_surface_request_maximize(struct wl_listener *listener,
 }
 
 static void xwayland_surface_request_fullscreen(struct wl_listener *listener,
-                                                void *data)
+                                                void *data __attribute__((unused)))
 {
 	struct qubes_xwayland_view *view =
 	   wl_container_of(listener, view, request_fullscreen);
-	struct wlr_xwayland_surface *surface = data;
+	if (wl_list_empty(&view->map.link))
+		return;
+	struct wlr_xwayland_surface *surface = view->xwayland_surface;
 	if (surface->surface == NULL)
 		return;
 	struct qubes_output *output = &view->output;
@@ -245,11 +251,11 @@ static void xwayland_surface_request_fullscreen(struct wl_listener *listener,
 	}
 }
 
-static void xwayland_surface_set_title(struct wl_listener *listener, void *data)
+static void xwayland_surface_set_title(struct wl_listener *listener,
+                                       void *data __attribute__((unused)))
 {
 	struct qubes_xwayland_view *view =
 	   wl_container_of(listener, view, set_title);
-	(void)data;
 	if (wl_list_empty(&view->map.link))
 		return;
 	assert(view->destroy.link.next);
@@ -276,9 +282,9 @@ static void xwayland_surface_set_class(struct wl_listener *listener, void *data)
 {
 	struct qubes_xwayland_view *view =
 	   wl_container_of(listener, view, set_class);
-	struct wlr_xwayland_surface *surface = data;
-	if (surface->surface == NULL)
+	if (wl_list_empty(&view->map.link))
 		return;
+	struct wlr_xwayland_surface *surface = view->xwayland_surface;
 
 	assert(view->output.magic == QUBES_XWAYLAND_MAGIC);
 	assert(view->destroy.link.next);
@@ -292,9 +298,10 @@ static void xwayland_surface_set_hints(struct wl_listener *listener, void *data)
 {
 	struct qubes_xwayland_view *view =
 	   wl_container_of(listener, view, set_hints);
-	struct wlr_xwayland_surface *surface = data;
-	if (surface->surface == NULL)
+	if (wl_list_empty(&view->map.link))
 		return;
+	struct wlr_xwayland_surface *surface = view->xwayland_surface;
+	assert(surface->surface != NULL);
 
 	assert(view == surface->data);
 	assert(view->output.magic == QUBES_XWAYLAND_MAGIC);
@@ -342,7 +349,7 @@ static void xwayland_surface_set_override_redirect(struct wl_listener *listener,
 {
 	struct qubes_xwayland_view *view =
 	   wl_container_of(listener, view, set_override_redirect);
-	struct wlr_xwayland_surface *surface = data;
+	struct wlr_xwayland_surface *surface = view->xwayland_surface;
 	if (surface->surface == NULL)
 		return;
 	assert(view->destroy.link.next);
@@ -375,17 +382,18 @@ static void qubes_xwayland_surface_commit(struct wl_listener *listener,
 }
 
 static void qubes_xwayland_surface_set_parent(struct wl_listener *listener,
-                                              void *data)
+                                              void *data __attribute__((unused)))
 {
 	struct qubes_xwayland_view *view =
 	   wl_container_of(listener, view, set_parent);
+	if (wl_list_empty(&view->map.link))
+		return;
 	struct qubes_xwayland_view *parent_view;
-	struct wlr_xwayland_surface *surface = data;
+	struct wlr_xwayland_surface *surface = view->xwayland_surface;
 	struct wlr_xwayland_surface *parent;
 
 	if (surface->surface == NULL)
 		return;
-	assert(!wl_list_empty(&view->map.link));
 	struct qubes_output *output = &view->output;
 
 	assert(QUBES_XWAYLAND_MAGIC == output->magic);
@@ -413,10 +421,9 @@ static void qubes_xwayland_surface_set_parent(struct wl_listener *listener,
 
 static void
 qubes_xwayland_xwayland_surface_associate(struct wl_listener *listener,
-                                          void *data)
+                                          void *data __attribute__((unused)))
 {
 	struct qubes_xwayland_view *view = wl_container_of(listener, view, associate);
-	assert(data == NULL);
 	assert(wl_list_empty(&view->map.link));
 	struct wlr_xwayland_surface *surface = view->xwayland_surface;
 	struct tinywl_server *server = view->server;
@@ -433,21 +440,20 @@ qubes_xwayland_xwayland_surface_associate(struct wl_listener *listener,
 
 static void
 qubes_xwayland_xwayland_surface_dissociate(struct wl_listener *listener,
-                                           void *data)
+                                           void *data __attribute__((unused)))
 {
-	struct qubes_xwayland_view *view = wl_container_of(listener, view, associate);
-	assert(data == NULL);
+	struct qubes_xwayland_view *view = wl_container_of(listener, view, dissociate);
 	assert(!wl_list_empty(&view->map.link));
 	wl_list_remove(&view->map.link);
 	wl_list_remove(&view->unmap.link);
-	wl_list_remove(&view->commit.link);
+	if (view->commit.link.next != NULL)
+		wl_list_remove(&view->commit.link);
 	wl_list_init(&view->map.link);
 	wl_list_init(&view->unmap.link);
 	wl_list_init(&view->commit.link);
+	assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 	qubes_output_deinit(&view->output);
 }
-
-
 
 void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
                                          void *data)
@@ -529,6 +535,7 @@ void qubes_xwayland_new_xwayland_surface(struct wl_listener *listener,
 
 cleanup:
 	if (view) {
+		assert(QUBES_XWAYLAND_MAGIC == view->output.magic);
 		qubes_output_deinit(&view->output);
 		free(view);
 	}
