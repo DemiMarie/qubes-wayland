@@ -221,6 +221,8 @@ static void qubes_surface_commit(struct wl_listener *listener,
 	assert(QUBES_VIEW_MAGIC == output->magic);
 	assert(output->scene_output);
 	assert(output->scene_output->output == &output->output);
+	if (view->xdg_surface->initial_commit)
+		wlr_xdg_surface_schedule_configure(view->xdg_surface);
 	wlr_xdg_surface_get_geometry(view->xdg_surface, &box);
 	qubes_window_log(output, WLR_DEBUG, "Surface commit: width %" PRIu32 " height %" PRIu32
 	                 " x %" PRIi32 " y %" PRIi32, box.width, box.height, box.x, box.y);
