@@ -422,26 +422,8 @@ bool qubes_output_init(struct qubes_output *const output,
 	if (!(output->scene_output =
 	         wlr_scene_output_create(output->scene, &output->output)))
 		return false;
-	if (!(output->scene_layout = wlr_scene_attach_output_layout(
-	         output->scene, server->output_layout)))
-		return false;
 	if (!qubes_output_set_surface(output, surface))
 		return false;
-	/* Adds this to the output layout. The add_auto function arranges outputs
-	 * from left-to-right in the order they appear. A more sophisticated
-	 * compositor would let the user configure the arrangement of outputs in the
-	 * layout.
-	 *
-	 * The output layout utility automatically adds a wl_output global to the
-	 * display, which Wayland clients can see to find out information about the
-	 * output (such as DPI, scale factor, manufacturer, etc).
-	 */
-	struct wlr_output_layout_output *l_output =
-	   wlr_output_layout_add_auto(server->output_layout, &output->output);
-	if (l_output == NULL)
-		return false;
-	wlr_scene_output_layout_add_output(output->scene_layout, l_output,
-	                                   output->scene_output);
 	return true;
 }
 
