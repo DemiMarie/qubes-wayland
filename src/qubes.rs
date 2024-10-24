@@ -98,6 +98,14 @@ impl QubesData {
             match res {
                 Poll::Ready(Ok(buffer)) => {
                     let (hdr, body) = (buffer.hdr(), buffer.body());
+                    // Type 0 is reserved for internal communication.
+                    // TODO: get rd of this gross hack and use a separate callback instead.
+                    // TODO: move all of this to C, as Rust gains virtually nothing and does
+                    // limit the ability of third-party reviewers to understand the code.
+                    if hdr.ty() == 0 {
+                        protocol_error(agent);
+                        return;
+                    }
                     assert_eq!(hdr.len(), body.len());
                     let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
                     if let Some(nz) = hdr.untrusted_window().window {
@@ -134,16 +142,23 @@ impl QubesData {
                 }
                 Poll::Pending => {
                     if agent.reconnected() {
+                        let xconf = agent.xconf();
                         *enabled = true;
                         let hdr = qubes_gui::UntrustedHeader {
                             ty: 0,
                             window: qubes_gui::WindowID {
-                                window: qubes_castable::cast!(agent.xconf().version),
+                                window: qubes_castable::cast!(xconf.version),
                             },
                             untrusted_len: 2,
                         };
                         let delta = (std::time::Instant::now() - self.start).as_millis() as u32;
-                        callback(global_userdata, ptr::null_mut(), delta, hdr, ptr::null());
+                        callback(
+                            global_userdata,
+                            ptr::null_mut(),
+                            delta,
+                            hdr,
+                            &xconf as *const _ as *const _,
+                        );
                     }
                     break;
                 }

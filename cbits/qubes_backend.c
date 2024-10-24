@@ -1,7 +1,6 @@
 // wlr_backend implementation
 
 #include "qubes_backend.h"
-#include "common.h"
 
 #include <stdlib.h>
 
@@ -81,7 +80,6 @@ static bool qubes_backend_start(struct wlr_backend *raw_backend)
 	assert(backend);
 	assert(backend->keyboard);
 	assert(backend->pointer);
-	wl_signal_emit(&raw_backend->events.new_output, backend->output);
 	wl_signal_emit(&raw_backend->events.new_input, &backend->keyboard->base);
 	wl_signal_emit(&raw_backend->events.new_input, &backend->pointer->base);
 	wlr_log(WLR_DEBUG, "Qubes backend started successfully");
@@ -112,7 +110,6 @@ static void qubes_backend_destroy(struct qubes_backend *backend)
 	if (backend->source)
 		wl_event_source_remove(backend->source);
 	qubes_rust_backend_free(backend->rust_backend);
-	wlr_output_destroy(backend->output);
 	if (backend->display_destroy.link.next)
 		wl_list_remove(&backend->display_destroy.link);
 	free(backend);
@@ -145,11 +142,11 @@ static const struct wlr_output_impl qubes_backend_output_impl = {
 
 struct qubes_backend *qubes_backend_create(struct wl_display *display,
                                            uint16_t domid,
-                                           struct wl_list *views)
+                                           struct wl_list *views,
+                                           struct wlr_output *output)
 {
 	struct qubes_backend *backend = calloc(1, sizeof(*backend));
 	struct wlr_keyboard *keyboard = calloc(1, sizeof(*keyboard));
-	struct wlr_output *output = calloc(1, sizeof(*output));
 	struct wlr_pointer *pointer = calloc(1, sizeof(*pointer));
 
 	if (backend == NULL || keyboard == NULL || output == NULL || pointer == NULL)

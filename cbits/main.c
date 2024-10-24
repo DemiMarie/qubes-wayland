@@ -52,6 +52,7 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
+#include <wlr/backend/headless.h>
 
 #include <xkbcommon/xkbcommon.h>
 
@@ -733,12 +734,30 @@ int main(int argc, char *argv[])
 
 	wlr_log_init(loglevel, NULL);
 
+	struct wl_event_loop *const loop =
+	   wl_display_get_event_loop(server->wl_display);
+	assert(loop);
+
+	struct wlr_backend *const headless = wlr_headless_backend_create(loop);
+	if (headless == NULL) {
+		wlr_log(WLR_ERROR, "Cannot create headless backend");
+		return 1;
+	}
+
+	// FIXME: get this from MSG_XCONF
+	server->headless_output = wlr_headless_add_output(headless, 1920, 1080);
+	if (server->headless_output == NULL) {
+		wlr_log(WLR_ERROR, "Cannot create headless output");
+		return 1;
+	}
+
 	/* The backend is a wlroots feature which abstracts the underlying input and
 	 * output hardware. The autocreate option will choose the most suitable
 	 * backend based on the current environment, such as opening an X11 window
 	 * if an X11 server is running. */
 	if (!(server->backend =
-	         qubes_backend_create(server->wl_display, domid, &server->views))) {
+	         qubes_backend_create(server->wl_display, domid, &server->views,
+	                              server->headless_output))) {
 		wlr_log(WLR_ERROR, "Cannot create wlr_backend");
 		return 1;
 	}
@@ -805,6 +824,11 @@ int main(int argc, char *argv[])
 	 * arrangement of screens in a physical layout. */
 	if (!(server->output_layout = wlr_output_layout_create(server->wl_display))) {
 		wlr_log(WLR_ERROR, "Cannot create output layout");
+		return 1;
+	}
+	if (wlr_output_layout_add_auto(server->output_layout,
+	                               server->headless_output) == NULL) {
+		wlr_log(WLR_ERROR, "Cannot add output to layout");
 		return 1;
 	}
 
@@ -878,8 +902,6 @@ int main(int argc, char *argv[])
 			      &server->new_xwayland_surface);
 	}
 
-	struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
-	assert(loop);
 	assert(qdb);
 
 	if (!(server->qubesdb_watcher =
@@ -919,6 +941,7 @@ int main(int argc, char *argv[])
 	struct wl_event_source *sighup =
 	   wl_event_loop_add_signal(loop, SIGHUP, qubes_clean_exit, server);
 	if (!sigterm || (handle_sigint && !sigint) || !sighup) {
+		// FIXME: reimplement sd_notify from scratch
 #ifdef QUBES_HAS_SYSTEMD
 		sd_notifyf(0, "ERRNO=%d", errno);
 #endif

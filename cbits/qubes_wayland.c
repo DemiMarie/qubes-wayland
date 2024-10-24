@@ -310,6 +310,7 @@ void qubes_new_xdg_popup(struct wl_listener *listener, void *data)
 	struct tinywl_server *server =
 	   wl_container_of(listener, server, new_xdg_popup);
 	struct wlr_xdg_popup *popup = data;
+	wlr_log(WLR_DEBUG, "Creating popup");
 	qubes_new_xdg_surface(server, popup->base, WLR_XDG_SURFACE_ROLE_POPUP);
 }
 

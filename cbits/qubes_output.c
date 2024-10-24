@@ -255,7 +255,7 @@ static bool qubes_output_commit(struct wlr_output *raw_output,
 }
 
 static const uint64_t modifiers[2] = { DRM_FORMAT_MOD_INVALID,
-	                                    DRM_FORMAT_MOD_LINEAR };
+                                       DRM_FORMAT_MOD_LINEAR };
 
 static const struct wlr_drm_format global_pointer_array[2] = {
 	{
@@ -585,13 +585,18 @@ void qubes_output_map(struct qubes_output *output,
 bool qubes_output_configure(struct qubes_output *output, struct wlr_box box)
 {
 	if ((box.width > 0) && (box.height > 0)) {
+		bool send_configure =
+		   !((box.x == output->guest.x) && (box.y == output->guest.y) &&
+		     ((unsigned int)box.width == output->guest.width) &&
+		     ((unsigned int)box.height == output->guest.height));
 		output->guest.x = box.x;
 		output->guest.y = box.y;
 		output->guest.width = (unsigned)box.width;
 		output->guest.height = (unsigned)box.height;
 		if (!qubes_output_ensure_created(output))
 			return false;
-		qubes_send_configure(output);
+		if (send_configure)
+			qubes_send_configure(output);
 		wlr_output_send_frame(&output->output);
 		return true;
 	}

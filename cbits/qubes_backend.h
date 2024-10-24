@@ -2,7 +2,6 @@
 #define QUBES_WAYLAND_COMPOSITOR_BACKEND_H                                     \
 	_Pragma("GCC error \"double-include guard referenced\"")
 
-#include "common.h"
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/types/wlr_output.h>
@@ -15,6 +14,7 @@ struct qubes_rust_backend;
  * Qubes OS backend.  Owned by the wl_display.
  */
 struct qubes_backend {
+	struct msg_xconf xconf;
 	struct wlr_backend backend;
 	struct wl_display *display;
 	struct wlr_output_mode mode;
@@ -32,7 +32,8 @@ struct qubes_backend {
 extern int qubes_rust_backend_fd(struct qubes_rust_backend *backend);
 
 struct qubes_backend *qubes_backend_create(struct wl_display *, uint16_t,
-                                           struct wl_list *);
+                                           struct wl_list *,
+                                           struct wlr_output *headless_output);
 typedef void (*qubes_parse_event_callback)(void *raw_view, void *raw_backend,
                                            uint32_t timestamp,
                                            struct msg_hdr hdr,

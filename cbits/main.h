@@ -1,7 +1,7 @@
+#include "wlroots-subproject/include/backend/headless.h"
 #ifndef QUBES_WAYLAND_COMPOSITOR_MAIN_H
 #define QUBES_WAYLAND_COMPOSITOR_MAIN_H                                        \
 	_Pragma("GCC error \"double-include guard referenced\"")
-#include "common.h"
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/util/box.h>
 
@@ -69,6 +69,7 @@ struct tinywl_server {
 	struct wlr_subcompositor *subcompositor;
 	struct wlr_data_device_manager *data_device;
 	struct wlr_xwayland *xwayland;
+	struct wlr_output *headless_output;
 	struct tinywl_keyboard keyboard;
 	qdb_handle_t qubesdb_connection;
 	uint32_t magic;
